@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct SurveyListView: View {
     @StateObject private var viewModel = SurveyViewModel()
