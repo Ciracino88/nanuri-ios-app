@@ -3,6 +3,8 @@ import SwiftUI
 struct SurveyListView: View {
     @StateObject private var viewModel = SurveyViewModel()
     @State private var selectedTab = 0
+    @State private var avatarUrl: String?
+    @State private var showProfileEdit = false
 
     var activeSurveys: [Survey] { viewModel.surveys.filter { $0.isActive } }
     var closedSurveys: [Survey] { viewModel.surveys.filter { !$0.isActive } }
@@ -10,25 +12,12 @@ struct SurveyListView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // 커스텀 헤더
-                HStack(alignment: .center) {
-                    Text("설문 현황")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    Spacer()
-                    Button {
-                        Task { await viewModel.fetchSurveys() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 36, height: 36)
-                    }
-                    .background(Color(.systemGray6))
-                    .clipShape(Capsule())
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
+                AdminHeaderView(
+                    title: "설문 현황",
+                    avatarUrl: avatarUrl,
+                    onRefresh: { Task { await viewModel.fetchSurveys() } },
+                    onProfileTap: { showProfileEdit = true }
+                )
 
                 PillPicker(
                     tabs: [
@@ -63,11 +52,33 @@ struct SurveyListView: View {
                 }
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $showProfileEdit, onDismiss: {
+                Task { await loadAvatar() }
+            }) {
+                ProfileEditView()
+            }
         }
         .task {
             await viewModel.fetchSurveys()
+            await loadAvatar()
             await viewModel.subscribeToRealtime()
         }
+    }
+
+    private func loadAvatar() async {
+        guard let user = try? await supabase.auth.user() else { return }
+        struct AvatarRow: Decodable {
+            let avatarUrl: String?
+            enum CodingKeys: String, CodingKey { case avatarUrl = "avatar_url" }
+        }
+        let row = try? await supabase
+            .from("user_profiles")
+            .select("avatar_url")
+            .eq("id", value: user.id)
+            .single()
+            .execute()
+            .value as AvatarRow
+        avatarUrl = row?.avatarUrl
     }
 }
 
