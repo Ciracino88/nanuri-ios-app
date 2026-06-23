@@ -10,6 +10,26 @@ struct SurveyListView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // 커스텀 헤더
+                HStack(alignment: .center) {
+                    Text("설문 현황")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    Spacer()
+                    Button {
+                        Task { await viewModel.fetchSurveys() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(width: 36, height: 36)
+                    }
+                    .background(Color(.systemGray6))
+                    .clipShape(Capsule())
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
                 PillPicker(
                     tabs: [
                         ("진행 중", activeSurveys.count),
@@ -42,20 +62,7 @@ struct SurveyListView: View {
                     }
                 }
             }
-            .navigationTitle("설문 현황")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task { await viewModel.fetchSurveys() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 36, height: 36)
-                    }
-                    .background(Color(.systemGray6))
-                    .clipShape(Capsule())
-                }
-            }
+            .navigationBarHidden(true)
         }
         .task {
             await viewModel.fetchSurveys()
