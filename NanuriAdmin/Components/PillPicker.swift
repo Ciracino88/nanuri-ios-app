@@ -3,6 +3,7 @@ import SwiftUI
 struct PillPicker: View {
     let tabs: [(label: String, count: Int)]
     @Binding var selection: Int
+    @Namespace private var pillNamespace
 
     var body: some View {
         HStack(spacing: 6) {
@@ -19,7 +20,7 @@ struct PillPicker: View {
                         Text("\(tabs[index].count)")
                             .font(.caption2)
                             .fontWeight(.medium)
-                            .foregroundColor(selection == index ? .secondary : .secondary)
+                            .foregroundColor(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color(.systemGray5))
@@ -27,11 +28,14 @@ struct PillPicker: View {
                     }
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(selection == index ? Color(.systemBackground) : Color.clear)
-                            .shadow(color: .black.opacity(selection == index ? 0.07 : 0), radius: 4, x: 0, y: 2)
-                    )
+                    .background {
+                        if selection == index {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(.systemBackground))
+                                .shadow(color: .black.opacity(0.07), radius: 4, x: 0, y: 2)
+                                .matchedGeometryEffect(id: "pill", in: pillNamespace)
+                        }
+                    }
                     .foregroundColor(selection == index ? .primary : .secondary)
                 }
                 .buttonStyle(.plain)
