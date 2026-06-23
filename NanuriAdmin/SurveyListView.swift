@@ -10,11 +10,13 @@ struct SurveyListView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                Picker("", selection: $selectedTab) {
-                    Text("진행 중 (\(activeSurveys.count))").tag(0)
-                    Text("종료 (\(closedSurveys.count))").tag(1)
-                }
-                .pickerStyle(.segmented)
+                PillPicker(
+                    tabs: [
+                        ("진행 중", activeSurveys.count),
+                        ("종료", closedSurveys.count)
+                    ],
+                    selection: $selectedTab
+                )
                 .padding()
 
                 Group {
