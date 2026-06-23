@@ -13,10 +13,8 @@ struct BillListView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showProfileEdit = false
     @State private var pendingBill: Bill? = nil
-    @State private var showConfirmSheet = false
     @State private var selectedTab = 0
     @State private var avatarUrl: String?
-    @Environment(\.scenePhase) var scenePhase
 
     var pendingBills: [Bill] {
         viewModel.bills
@@ -31,8 +29,7 @@ struct BillListView: View {
     }
 
     var body: some View {
-        ZStack {
-            NavigationView {
+        NavigationView {
                 VStack(spacing: 0) {
                     AdminHeaderView(
                         title: "청구서 목록",
@@ -68,9 +65,14 @@ struct BillListView: View {
                                         .listRowInsets(EdgeInsets())
                                         .listRowBackground(Color.clear)
                                         .listRowSeparator(.hidden)
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .top).combined(with: .opacity),
+                                            removal: .opacity
+                                        ))
                                 }
                                 .listStyle(.plain)
                                 .background(Color(.systemGroupedBackground))
+                                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: bills)
                             }
                         }
                     }
@@ -81,33 +83,27 @@ struct BillListView: View {
                 }) {
                     ProfileEditView()
                 }
-            }
-
-            if let bill = pendingBill, showConfirmSheet {
-                TossResultView(
-                    bill: bill,
-                    onApprove: {
-                        Task {
-                            await viewModel.updateStatus(billId: bill.id, status: "approved")
+                .sheet(item: $pendingBill) { bill in
+                    TossResultView(
+                        bill: bill,
+                        onApprove: {
+                            Task {
+                                await viewModel.updateStatus(billId: bill.id, status: "approved")
+                                pendingBill = nil
+                            }
+                        },
+                        onCancel: {
                             pendingBill = nil
-                            showConfirmSheet = false
                         }
-                    },
-                    onCancel: {
-                        pendingBill = nil
-                        showConfirmSheet = false
-                    }
-                )
-            }
+                    )
+                    .presentationDetents([.height(420)])
+                    .presentationDragIndicator(.hidden)
+                }
         }
         .task {
             await viewModel.fetchBills()
             await loadAvatar()
-        }
-        .onChange(of: scenePhase) { newPhase in
-            if newPhase == .active && pendingBill != nil {
-                showConfirmSheet = true
-            }
+            await viewModel.subscribeToRealtime()
         }
     }
 
