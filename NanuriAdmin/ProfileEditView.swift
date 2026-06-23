@@ -182,7 +182,7 @@ struct ProfileEditView: View {
                 let path = "\(user.id)/avatar.jpg"
                 try await supabase.storage
                     .from("avatars")
-                    .upload(path: path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
+                    .upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
                 finalAvatarUrl = try supabase.storage
                     .from("avatars")
                     .getPublicURL(path: path)
