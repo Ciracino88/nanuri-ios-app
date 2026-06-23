@@ -10,8 +10,30 @@ class BillViewModel: ObservableObject {
     
     let cfWorkerUrl = "https://nanuri-bill.church-worker.workers.dev"
 
-    func fetchBills() async {
-        isLoading = true
+    func subscribeToRealtime() async {
+        let channel = supabase.channel("bills-realtime")
+
+        let inserts = channel.postgresChange(InsertAction.self, schema: "public", table: "bills")
+        let updates = channel.postgresChange(UpdateAction.self, schema: "public", table: "bills")
+        let deletes = channel.postgresChange(DeleteAction.self, schema: "public", table: "bills")
+
+        await channel.subscribe()
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await _ in inserts { await self.fetchBills(showLoading: false) }
+            }
+            group.addTask {
+                for await _ in updates { await self.fetchBills(showLoading: false) }
+            }
+            group.addTask {
+                for await _ in deletes { await self.fetchBills(showLoading: false) }
+            }
+        }
+    }
+
+    func fetchBills(showLoading: Bool = true) async {
+        if showLoading { isLoading = true }
         do {
             let user = try await supabase.auth.user()
             print("현재 유저 ID: \(user.id)")
@@ -60,7 +82,7 @@ class BillViewModel: ObservableObject {
                 .eq("id", value: billId.uuidString)
                 .execute()
             print("상태 변경 성공")
-            await fetchBills()
+            await fetchBills(showLoading: false)
         } catch {
             self.error = error.localizedDescription
             print("상태 변경 실패: \(error)")
@@ -85,7 +107,7 @@ class BillViewModel: ObservableObject {
                 .eq("id", value: billId.uuidString)
                 .execute()
 
-            await fetchBills()
+            await fetchBills(showLoading: false)
             print("청구서 삭제 성공")
         } catch {
             self.error = error.localizedDescription

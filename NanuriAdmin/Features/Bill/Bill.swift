@@ -1,6 +1,6 @@
 import Foundation
 
-struct Bill: Identifiable, Decodable {
+struct Bill: Identifiable, Decodable, Equatable {
     let id: UUID
     let userId: UUID
     let title: String
@@ -27,7 +27,7 @@ struct Bill: Identifiable, Decodable {
     }
 }
 
-struct UserProfile: Decodable {
+struct UserProfile: Decodable, Equatable {
     let name: String
     let accountNumber: String
     let bankName: String

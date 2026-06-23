@@ -32,6 +32,19 @@ struct BillRowView: View {
         return "\(bank) \(account)".trimmingCharacters(in: .whitespaces)
     }
 
+    @ViewBuilder
+    private func billButton(_ icon: String, bg: Color, fg: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 36, height: 36)
+                .background(bg)
+                .foregroundColor(fg)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 상단: 제목 + 날짜 + 상태 뱃지
@@ -78,67 +91,22 @@ struct BillRowView: View {
                     .fontWeight(.bold)
                 Spacer()
                 HStack(spacing: 6) {
-                    // 영수증
-                    Button {
+                    billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
                         showReceiptSheet = true
-                    } label: {
-                        Label("영수증", systemImage: "receipt")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(.systemGray6))
-                            .foregroundColor(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .buttonStyle(.plain)
 
                     if bill.status == "pending" {
-                        // 송금
-                        Button {
+                        billButton("paperplane.fill", bg: .blue, fg: .white) {
                             pendingBill = bill
                             viewModel.openToss(bill: bill)
-                        } label: {
-                            Label("송금", systemImage: "paperplane.fill")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .buttonStyle(.plain)
-
-                        // 거절
-                        Button {
+                        billButton("xmark", bg: Color.red.opacity(0.1), fg: .red) {
                             Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
-                        } label: {
-                            Label("거절", systemImage: "xmark")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.red.opacity(0.1))
-                                .foregroundColor(.red)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .buttonStyle(.plain)
                     } else {
-                        // 삭제
-                        Button {
+                        billButton("trash", bg: Color.red.opacity(0.1), fg: .red) {
                             Task { await viewModel.deleteBill(billId: bill.id, receiptUrl: bill.receiptUrl) }
-                        } label: {
-                            Label("삭제", systemImage: "trash")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color.red.opacity(0.1))
-                                .foregroundColor(.red)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
