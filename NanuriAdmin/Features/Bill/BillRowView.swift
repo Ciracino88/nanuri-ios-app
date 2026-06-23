@@ -22,129 +22,130 @@ struct BillRowView: View {
         }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    var name: String {
+        bill.userProfile?.name ?? bill.submitterName ?? "이름 없음"
+    }
 
-            // 상단: 제목 + 상태
+    var bankInfo: String {
+        let bank = bill.userProfile?.bankName ?? bill.bankName ?? ""
+        let account = bill.userProfile?.accountNumber ?? bill.accountNumber ?? ""
+        return "\(bank) \(account)".trimmingCharacters(in: .whitespaces)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 상단: 제목 + 날짜 + 상태 뱃지
             HStack {
                 Text(bill.title)
-                    .font(.headline)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
                     .foregroundColor(.primary)
                 Spacer()
-                Text(statusLabel)
+                HStack(spacing: 6) {
+                    Text(bill.createdAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(statusLabel)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(statusColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(statusColor.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.bottom, 8)
+
+            // 이름 + 계좌
+            Text(name)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+            if !bankInfo.isEmpty {
+                Text(bankInfo)
                     .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(statusColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.1))
-                    .cornerRadius(8)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 1)
             }
 
-            Divider()
+            Divider().padding(.vertical, 12)
 
-            // 중단: 이름 + 계좌
-            if let profile = bill.userProfile {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(profile.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Text("\(profile.bankName) \(profile.accountNumber)")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(bill.submitterName ?? "이름 없음")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Text("\(bill.bankName ?? "") \(bill.accountNumber ?? "")")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-            }
-
-            // 하단: 금액 + 날짜
+            // 하단: 금액 + 버튼 그룹
             HStack {
                 Text("\(bill.amount.formatted())원")
                     .font(.title3)
                     .fontWeight(.bold)
                 Spacer()
-                Text(bill.createdAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
-
-            Divider()
-
-            // 영수증 확인 버튼
-            Button {
-                showReceiptSheet = true
-            } label: {
-                Label("영수증 확인", systemImage: "doc.text.magnifyingglass")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.gray.opacity(0.08))
-                    .foregroundColor(.primary)
-                    .cornerRadius(10)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            .buttonStyle(.plain)
-
-            // 대기중: 송금/거절 버튼
-            if bill.status == "pending" {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    // 영수증
                     Button {
-                        pendingBill = bill
-                        viewModel.openToss(bill: bill)
+                        showReceiptSheet = true
                     } label: {
-                        Label("토스로 송금", systemImage: "paperplane.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .font(.subheadline)
+                        Label("영수증", systemImage: "receipt")
+                            .font(.caption)
                             .fontWeight(.medium)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray6))
+                            .foregroundColor(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
+                    .buttonStyle(.plain)
 
-                    Button {
-                        Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
-                    } label: {
-                        Label("거절", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.1))
-                            .foregroundColor(.red)
-                            .cornerRadius(10)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                    if bill.status == "pending" {
+                        // 송금
+                        Button {
+                            pendingBill = bill
+                            viewModel.openToss(bill: bill)
+                        } label: {
+                            Label("송금", systemImage: "paperplane.fill")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+
+                        // 거절
+                        Button {
+                            Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
+                        } label: {
+                            Label("거절", systemImage: "xmark")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.1))
+                                .foregroundColor(.red)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // 삭제
+                        Button {
+                            Task { await viewModel.deleteBill(billId: bill.id, receiptUrl: bill.receiptUrl) }
+                        } label: {
+                            Label("삭제", systemImage: "trash")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.1))
+                                .foregroundColor(.red)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .buttonStyle(.plain)
-            }
-
-            // 처리완료: 삭제 버튼
-            if bill.status != "pending" {
-                Button(role: .destructive) {
-                    Task { await viewModel.deleteBill(billId: bill.id, receiptUrl: bill.receiptUrl) }
-                } label: {
-                    Label("삭제", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.1))
-                        .foregroundColor(.red)
-                        .cornerRadius(10)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding(16)
         .background(Color(.systemBackground))
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
