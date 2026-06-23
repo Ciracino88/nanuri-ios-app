@@ -49,7 +49,11 @@ struct SurveyListView: View {
                         Task { await viewModel.fetchSurveys() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(width: 36, height: 36)
                     }
+                    .background(Color(.systemGray6))
+                    .clipShape(Capsule())
                 }
             }
         }
