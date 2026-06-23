@@ -18,16 +18,16 @@ struct AdminHeaderView: View {
                 HStack(spacing: 0) {
                     Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 36, height: 36)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 44, height: 44)
                     }
                     Divider().frame(height: 16)
                     Button {
                         showLogoutAlert = true
                     } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 36, height: 36)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 44, height: 44)
                     }
                     .alert("로그아웃", isPresented: $showLogoutAlert) {
                         Button("로그아웃", role: .destructive) {
@@ -42,7 +42,7 @@ struct AdminHeaderView: View {
                 .clipShape(Capsule())
 
                 Button(action: onProfileTap) {
-                    AvatarView(url: avatarUrl, size: 36)
+                    AvatarView(url: avatarUrl, size: 44)
                 }
             }
         }
