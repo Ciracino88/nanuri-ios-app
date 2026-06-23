@@ -62,20 +62,38 @@ struct BillListView: View {
                 .navigationTitle("청구서 목록")
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Menu {
-                            Button("프로필 수정") { showProfileEdit = true }
-                            Button("로그아웃", role: .destructive) {
-                                Task { await authViewModel.signOut() }
+                        HStack(spacing: 8) {
+                            HStack(spacing: 0) {
+                                Button {
+                                    Task { await viewModel.fetchBills() }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .frame(width: 36, height: 36)
+                                }
+
+                                Divider()
+                                    .frame(height: 16)
+
+                                Menu {
+                                    Button("프로필 수정") { showProfileEdit = true }
+                                    Button("로그아웃", role: .destructive) {
+                                        Task { await authViewModel.signOut() }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .frame(width: 36, height: 36)
+                                }
                             }
-                        } label: {
-                            Image(systemName: "person.circle")
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button {
-                            Task { await viewModel.fetchBills() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
+                            .background(Color(.systemGray6))
+                            .clipShape(Capsule())
+
+                            Button { showProfileEdit = true } label: {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
