@@ -1,5 +1,12 @@
 import SwiftUI
 
+private struct AvatarRow: Decodable {
+    let avatarUrl: String?
+    enum CodingKeys: String, CodingKey {
+        case avatarUrl = "avatar_url"
+    }
+}
+
 struct BillListView: View {
     @StateObject private var viewModel = BillViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -7,6 +14,7 @@ struct BillListView: View {
     @State private var pendingBill: Bill? = nil
     @State private var showConfirmSheet = false
     @State private var selectedTab = 0
+    @State private var avatarUrl: String?
     @Environment(\.scenePhase) var scenePhase
 
     var pendingBills: [Bill] {
@@ -56,9 +64,7 @@ struct BillListView: View {
                             .clipShape(Capsule())
 
                             Button { showProfileEdit = true } label: {
-                                Image(systemName: "person.circle.fill")
-                                    .font(.system(size: 36))
-                                    .foregroundColor(.secondary)
+                                AvatarView(url: avatarUrl, size: 36)
                             }
                         }
                     }
@@ -101,7 +107,9 @@ struct BillListView: View {
                     }
                 }
                 .navigationBarHidden(true)
-                .sheet(isPresented: $showProfileEdit) {
+                .sheet(isPresented: $showProfileEdit, onDismiss: {
+                    Task { await loadAvatar() }
+                }) {
                     ProfileEditView()
                 }
             }
@@ -125,11 +133,55 @@ struct BillListView: View {
         }
         .task {
             await viewModel.fetchBills()
+            await loadAvatar()
         }
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active && pendingBill != nil {
                 showConfirmSheet = true
             }
         }
+    }
+
+    private func loadAvatar() async {
+        guard let user = try? await supabase.auth.user() else { return }
+        let row = try? await supabase
+            .from("user_profiles")
+            .select("avatar_url")
+            .eq("id", value: user.id)
+            .single()
+            .execute()
+            .value as AvatarRow
+        avatarUrl = row?.avatarUrl
+    }
+}
+
+// MARK: - 공용 아바타 뷰
+
+struct AvatarView: View {
+    let url: String?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let url, let parsed = URL(string: url) {
+                AsyncImage(url: parsed) { phase in
+                    if case .success(let img) = phase {
+                        img.resizable().scaledToFill()
+                    } else {
+                        defaultIcon
+                    }
+                }
+            } else {
+                defaultIcon
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var defaultIcon: some View {
+        Image(systemName: "person.circle.fill")
+            .resizable()
+            .foregroundColor(Color(.systemGray3))
     }
 }
