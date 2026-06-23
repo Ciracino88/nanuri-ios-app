@@ -6,6 +6,7 @@ struct AdminHeaderView: View {
     let onRefresh: () -> Void
     let onProfileTap: () -> Void
     @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var showLogoutAlert = false
 
     var body: some View {
         HStack(alignment: .center) {
@@ -22,11 +23,19 @@ struct AdminHeaderView: View {
                     }
                     Divider().frame(height: 16)
                     Button {
-                        Task { await authViewModel.signOut() }
+                        showLogoutAlert = true
                     } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.system(size: 15, weight: .medium))
                             .frame(width: 36, height: 36)
+                    }
+                    .alert("로그아웃", isPresented: $showLogoutAlert) {
+                        Button("로그아웃", role: .destructive) {
+                            Task { await authViewModel.signOut() }
+                        }
+                        Button("취소", role: .cancel) {}
+                    } message: {
+                        Text("정말 로그아웃 하시겠어요?")
                     }
                 }
                 .background(Color(.systemGray6))
