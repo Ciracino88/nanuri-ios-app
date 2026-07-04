@@ -73,15 +73,17 @@ struct ProfileEditView: View {
 
                 // 포지션
                 Section("포지션") {
-                    FlowLayout(items: worshipPositions) { position in
-                        PositionChip(
-                            label: position,
-                            isSelected: selectedPositions.contains(position)
-                        ) {
-                            if selectedPositions.contains(position) {
-                                selectedPositions.remove(position)
-                            } else {
-                                selectedPositions.insert(position)
+                    ChipFlowLayout(spacing: 8) {
+                        ForEach(worshipPositions, id: \.self) { position in
+                            PositionChip(
+                                label: position,
+                                isSelected: selectedPositions.contains(position)
+                            ) {
+                                if selectedPositions.contains(position) {
+                                    selectedPositions.remove(position)
+                                } else {
+                                    selectedPositions.insert(position)
+                                }
                             }
                         }
                     }
@@ -230,51 +232,3 @@ private struct PositionChip: View {
     }
 }
 
-// MARK: - 플로우 레이아웃
-
-private struct FlowLayout<Item: Hashable, Content: View>: View {
-    let items: [Item]
-    let content: (Item) -> Content
-
-    init(items: [Item], @ViewBuilder content: @escaping (Item) -> Content) {
-        self.items = items
-        self.content = content
-    }
-
-    var body: some View {
-        var width: CGFloat = 0
-        var rows: [[Item]] = [[]]
-
-        GeometryReader { geo in
-            let maxWidth = geo.size.width
-            let _ = items.forEach { item in
-                let itemWidth = estimatedWidth(for: "\(item)")
-                if width + itemWidth > maxWidth {
-                    rows.append([item])
-                    width = itemWidth
-                } else {
-                    rows[rows.count - 1].append(item)
-                    width += itemWidth
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(rows.indices, id: \.self) { rowIndex in
-                    HStack(spacing: 8) {
-                        ForEach(rows[rowIndex], id: \.self) { item in
-                            content(item)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(height: CGFloat(estimatedRowCount()) * 40)
-    }
-
-    private func estimatedWidth(for text: String) -> CGFloat {
-        CGFloat(text.count) * 13 + 36
-    }
-
-    private func estimatedRowCount() -> Int {
-        max(1, Int(ceil(Double(items.count) / 3.0)))
-    }
-}

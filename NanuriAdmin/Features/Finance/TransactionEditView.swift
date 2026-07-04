@@ -47,28 +47,7 @@ struct TransactionEditView: View {
                 }
                 Section("분류") {
                     TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
-                    if !suggestions.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestions, id: \.self) { suggestion in
-                                    Button {
-                                        category = suggestion
-                                    } label: {
-                                        Text(suggestion)
-                                            .font(.caption)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(category == suggestion ? Color.blue : Color(.systemGray6))
-                                            .foregroundColor(category == suggestion ? .white : .primary)
-                                            .clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    }
+                    CategorySuggestionChips(suggestions: suggestions, selected: $category)
                     TextField("메모", text: $memo, axis: .vertical)
                         .lineLimit(3...6)
                 }
@@ -360,28 +339,7 @@ struct SplitEditSheet: View {
             Form {
                 Section("카테고리") {
                     TextField("예: 회비, 식대, 시상품", text: $category)
-                    if !suggestions.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestions, id: \.self) { suggestion in
-                                    Button {
-                                        category = suggestion
-                                    } label: {
-                                        Text(suggestion)
-                                            .font(.caption)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(category == suggestion ? Color.blue : Color(.systemGray6))
-                                            .foregroundColor(category == suggestion ? .white : .primary)
-                                            .clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    }
+                    CategorySuggestionChips(suggestions: suggestions, selected: $category)
                 }
                 Section("금액") {
                     TextField("금액", value: $amount, format: .number)
