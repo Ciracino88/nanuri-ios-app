@@ -12,6 +12,9 @@ struct ContentView: View {
             FinanceView(viewModel: financeViewModel)
                 .tabItem { Label("재정", systemImage: "wonsign.circle") }
                 .tag(1)
+            GuideView()
+                .tabItem { Label("안내", systemImage: "info.circle") }
+                .tag(2)
         }
         .onOpenURL { url in
             guard url.pathExtension.lowercased() == "pdf" else { return }
