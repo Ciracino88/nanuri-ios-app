@@ -305,12 +305,6 @@ struct TransactionRowView: View {
     }
 
     private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(Color.blue.opacity(0.1))
-            .foregroundColor(.blue)
-            .clipShape(Capsule())
+        Text(text).tagChip(color: .blue)
     }
 }
