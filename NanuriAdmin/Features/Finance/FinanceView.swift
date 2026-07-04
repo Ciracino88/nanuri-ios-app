@@ -1,5 +1,4 @@
 import SwiftUI
-import PDFKit
 
 struct FinanceView: View {
     @ObservedObject var viewModel: FinanceViewModel
@@ -7,9 +6,21 @@ struct FinanceView: View {
     @State private var showDateFilter = false
     @State private var editingTransaction: BankTransaction?
     @State private var showStatements = false
+    @State private var exportFile: ExportFile?
+    @State private var isExporting = false
+    @State private var exportMessage = "내보내는 중…"
 
     var body: some View {
-        NavigationView {
+        if let ledger = viewModel.currentLedger {
+            content(ledger: ledger)
+        } else {
+            FinanceLedgerGateView(viewModel: viewModel)
+        }
+    }
+
+    private func content(ledger: Ledger) -> some View {
+        let mode = ledger.mode
+        return NavigationView {
             VStack(spacing: 0) {
                 if viewModel.isLoading {
                     Spacer()
@@ -18,7 +29,7 @@ struct FinanceView: View {
                 } else if viewModel.transactions.isEmpty {
                     emptyView
                 } else {
-                    dateFilterBar
+                    if mode == .monthly { dateFilterBar }
                     summaryCard
                     PillPicker(
                         tabs: [
@@ -33,15 +44,73 @@ struct FinanceView: View {
                     transactionList
                 }
             }
-            .navigationTitle("재정 관리")
+            .navigationTitle(ledger.name)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        viewModel.loadSavedStatements()
-                        showStatements = true
+                        viewModel.currentLedger = nil
                     } label: {
-                        Image(systemName: "folder")
+                        Image(systemName: "rectangle.2.swap")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 20) {
+                        Menu {
+                            Button {
+                                exportMessage = "보고서 만드는 중…"
+                                isExporting = true
+                                Task {
+                                    // 오버레이가 먼저 그려지도록 한 틱 양보한 뒤 생성
+                                    try? await Task.sleep(nanoseconds: 30_000_000)
+                                    let url = viewModel.exportReportPDF()
+                                    isExporting = false
+                                    if let url { exportFile = ExportFile(url: url) }
+                                }
+                            } label: {
+                                Label("\(mode.title) (PDF)", systemImage: "doc.text")
+                            }
+                            Button {
+                                exportMessage = "영수증 내보내는 중…"
+                                isExporting = true
+                                Task {
+                                    let url = await viewModel.exportReceiptsPDF()
+                                    isExporting = false
+                                    if let url { exportFile = ExportFile(url: url) }
+                                }
+                            } label: {
+                                Label("영수증 부록 (PDF)", systemImage: "paperclip")
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 18, weight: .medium))
+                        }
+                        .disabled(viewModel.filtered.isEmpty)
+
+                        Button {
+                            viewModel.loadSavedStatements()
+                            showStatements = true
+                        } label: {
+                            Image(systemName: "folder")
+                                .font(.system(size: 18, weight: .medium))
+                        }
+                    }
+                }
+            }
+            .overlay {
+                if isExporting {
+                    ZStack {
+                        Color.black.opacity(0.25).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text(exportMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(24)
+                        .background(Color(.systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                 }
             }
@@ -51,12 +120,13 @@ struct FinanceView: View {
                 Text(viewModel.error ?? "")
             }
             .sheet(item: $editingTransaction) { tx in
-                TransactionEditView(transaction: tx, suggestions: viewModel.usedCategories) { category, memo in
-                    Task { await viewModel.updateTransaction(id: tx.id, category: category, memo: memo) }
-                }
+                TransactionEditView(transaction: tx, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
             .sheet(isPresented: $showStatements) {
                 StatementsListView(viewModel: viewModel)
+            }
+            .sheet(item: $exportFile) { file in
+                ShareSheet(items: [file.url])
             }
         }
         .task {
@@ -101,7 +171,7 @@ struct FinanceView: View {
             Divider().frame(height: 40)
             summaryItem(label: "총 출금", amount: viewModel.totalWithdrawal, color: .red)
             Divider().frame(height: 40)
-            summaryItem(label: "순수익", amount: viewModel.totalDeposit - viewModel.totalWithdrawal, color: .primary)
+            summaryItem(label: "잔액", amount: viewModel.totalDeposit - viewModel.totalWithdrawal, color: .primary)
         }
         .padding(16)
         .background(Color(.systemBackground))
@@ -134,7 +204,7 @@ struct FinanceView: View {
 
     private var transactionList: some View {
         List(currentItems) { tx in
-            TransactionRowView(transaction: tx)
+            TransactionRowView(transaction: tx, splits: viewModel.splits(for: tx.id))
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -154,7 +224,7 @@ struct FinanceView: View {
             Text("거래내역이 없어요")
                 .font(.title3)
                 .fontWeight(.medium)
-            Text("토스뱅크 앱에서 거래내역서를\n공유하기로 이 앱에 전달해주세요")
+            Text("토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 폴더에서 열어 '거래내역 불러오기'를 눌러주세요")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -165,22 +235,23 @@ struct FinanceView: View {
 
 struct TransactionRowView: View {
     let transaction: BankTransaction
+    var splits: [TransactionSplit] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(transaction.description ?? "-")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    if let category = transaction.category, !category.isEmpty {
-                        Text(category)
-                            .font(.caption2)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.1))
-                            .foregroundColor(.blue)
-                            .clipShape(Capsule())
+                    if !splits.isEmpty {
+                        ChipFlowLayout(spacing: 6) {
+                            ForEach(distinctCategories, id: \.self) { category in
+                                chip(category)
+                            }
+                        }
+                    } else if let category = transaction.category, !category.isEmpty {
+                        chip(category)
                     }
                 }
                 Spacer()
@@ -193,6 +264,14 @@ struct TransactionRowView: View {
                 Text(transaction.datetime.koreanDateTimeString)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                if !transaction.receipts.isEmpty {
+                    HStack(spacing: 2) {
+                        Image(systemName: "paperclip")
+                        Text("\(transaction.receipts.count)")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                }
                 Spacer()
                 Text("잔액 \(transaction.balance.formatted())원")
                     .font(.caption)
@@ -212,218 +291,26 @@ struct TransactionRowView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
     }
-}
 
-struct DateFilterView: View {
-    @Binding var startDate: Date
-    @Binding var endDate: Date
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        NavigationView {
-            Form {
-                DatePicker("시작일", selection: $startDate, displayedComponents: .date)
-                DatePicker("종료일", selection: $endDate, in: startDate..., displayedComponents: .date)
-            }
-            .navigationTitle("기간 설정")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("완료") { dismiss() }
-                }
-            }
+    /// 분할 항목들의 카테고리를 중복 제거해 순서대로 반환 (같은 선물비 여러 개는 하나로).
+    private var distinctCategories: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for split in splits {
+            let c = split.category?.trimmingCharacters(in: .whitespaces) ?? ""
+            let label = c.isEmpty ? "미분류" : c
+            if seen.insert(label).inserted { result.append(label) }
         }
-    }
-}
-
-struct StatementsListView: View {
-    @ObservedObject var viewModel: FinanceViewModel
-    @Environment(\.dismiss) var dismiss
-    @State private var previewStatement: StatementFile?
-
-    var body: some View {
-        NavigationView {
-            Group {
-                if viewModel.savedStatements.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 44))
-                            .foregroundColor(.secondary)
-                        Text("보관된 거래내역서가 없어요")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(viewModel.savedStatements) { statement in
-                            Button {
-                                previewStatement = statement
-                            } label: {
-                                HStack {
-                                    Image(systemName: "doc.richtext")
-                                        .foregroundColor(.red)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(statement.importedAt.koreanDateString)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        Text(statement.importedAt.koreanTimeString + " 가져옴")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    ShareLink(item: statement.url) {
-                                        Image(systemName: "square.and.arrow.up")
-                                    }
-                                    .buttonStyle(.plain)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .onDelete { indexSet in
-                            indexSet.map { viewModel.savedStatements[$0] }
-                                .forEach { viewModel.deleteStatement($0) }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("저장된 거래내역서")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("완료") { dismiss() }
-                }
-            }
-            .sheet(item: $previewStatement) { statement in
-                StatementDetailView(statement: statement, viewModel: viewModel)
-            }
-        }
-    }
-}
-
-/// 보관된 거래내역서 원본을 앱 안에서 미리보고, 다시 파싱할 수 있는 화면.
-struct StatementDetailView: View {
-    let statement: StatementFile
-    @ObservedObject var viewModel: FinanceViewModel
-    @Environment(\.dismiss) var dismiss
-    @State private var showReparseResult = false
-
-    var body: some View {
-        NavigationView {
-            PDFKitView(url: statement.url)
-                .ignoresSafeArea(edges: .bottom)
-                .navigationTitle(statement.importedAt.koreanDateString)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("닫기") { dismiss() }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            viewModel.reparseStatement(statement)
-                            showReparseResult = true
-                        } label: {
-                            Label("다시 불러오기", systemImage: "arrow.clockwise")
-                        }
-                    }
-                }
-                .alert("다시 불러오기", isPresented: $showReparseResult) {
-                    Button("확인") { dismiss() }
-                } message: {
-                    Text("이 거래내역서를 다시 파싱해 거래내역을 갱신했어요.")
-                }
-        }
-    }
-}
-
-/// PDFKit 기반 PDF 뷰어 래퍼.
-struct PDFKitView: UIViewRepresentable {
-    let url: URL
-
-    func makeUIView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.document = PDFDocument(url: url)
-        view.autoScales = true
-        return view
+        return result
     }
 
-    func updateUIView(_ uiView: PDFView, context: Context) {
-        if uiView.document?.documentURL != url {
-            uiView.document = PDFDocument(url: url)
-        }
-    }
-}
-
-struct TransactionEditView: View {
-    let transaction: BankTransaction
-    let suggestions: [String]
-    let onSave: (String?, String?) -> Void
-
-    @State private var category: String
-    @State private var memo: String
-    @Environment(\.dismiss) var dismiss
-
-    init(transaction: BankTransaction, suggestions: [String], onSave: @escaping (String?, String?) -> Void) {
-        self.transaction = transaction
-        self.suggestions = suggestions
-        self.onSave = onSave
-        _category = State(initialValue: transaction.category ?? "")
-        _memo = State(initialValue: transaction.memo ?? "")
-    }
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("거래 정보") {
-                    LabeledContent("내용", value: transaction.description ?? "-")
-                    LabeledContent("금액", value: "\(transaction.amount.formatted())원")
-                    LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
-                }
-                Section("분류") {
-                    TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
-                    if !suggestions.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestions, id: \.self) { suggestion in
-                                    Button {
-                                        category = suggestion
-                                    } label: {
-                                        Text(suggestion)
-                                            .font(.caption)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(category == suggestion ? Color.blue : Color(.systemGray6))
-                                            .foregroundColor(category == suggestion ? .white : .primary)
-                                            .clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    }
-                    TextField("메모", text: $memo, axis: .vertical)
-                        .lineLimit(3...6)
-                }
-            }
-            .navigationTitle("거래 편집")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("취소") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("저장") {
-                        onSave(category.isEmpty ? nil : category, memo.isEmpty ? nil : memo)
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
-        }
+    private func chip(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Color.blue.opacity(0.1))
+            .foregroundColor(.blue)
+            .clipShape(Capsule())
     }
 }

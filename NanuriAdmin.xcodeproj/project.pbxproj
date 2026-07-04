@@ -298,6 +298,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NanuriAdmin/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "나누리 회계";
+				INFOPLIST_KEY_NSCameraUsageDescription = "영수증을 촬영하려면 카메라 접근 권한이 필요합니다.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "관리자 인증을 위해 Face ID 를 사용합니다.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -332,6 +334,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NanuriAdmin/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "나누리 회계";
+				INFOPLIST_KEY_NSCameraUsageDescription = "영수증을 촬영하려면 카메라 접근 권한이 필요합니다.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "관리자 인증을 위해 Face ID 를 사용합니다.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
