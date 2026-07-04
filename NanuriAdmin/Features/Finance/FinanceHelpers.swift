@@ -55,11 +55,7 @@ struct CategorySuggestionChips: View {
                         } label: {
                             Text(suggestion)
                                 .font(.caption)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(selected == suggestion ? Color.blue : Color(.systemGray6))
-                                .foregroundColor(selected == suggestion ? .white : .primary)
-                                .clipShape(Capsule())
+                                .selectableChip(isSelected: selected == suggestion)
                         }
                         .buttonStyle(.plain)
                     }

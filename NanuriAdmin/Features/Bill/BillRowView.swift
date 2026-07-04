@@ -59,13 +59,8 @@ struct BillRowView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                     Text(statusLabel)
-                        .font(.caption2)
                         .fontWeight(.medium)
-                        .foregroundColor(statusColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(statusColor.opacity(0.1))
-                        .clipShape(Capsule())
+                        .tagChip(color: statusColor)
                 }
             }
             .padding(.bottom, 8)

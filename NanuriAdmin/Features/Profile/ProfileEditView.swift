@@ -222,11 +222,7 @@ private struct PositionChip: View {
         Button(action: onTap) {
             Text(label)
                 .font(.subheadline)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(isSelected ? Color.accentColor : Color(.systemGray6))
-                .foregroundColor(isSelected ? .white : .primary)
-                .clipShape(Capsule())
+                .selectableChip(isSelected: isSelected, tint: .accentColor)
         }
         .buttonStyle(.plain)
     }
