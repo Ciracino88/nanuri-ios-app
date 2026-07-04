@@ -1,11 +1,2 @@
-
-[functions.parse-toss-excel]
-enabled = true
-verify_jwt = false
-import_map = "./functions/parse-toss-excel/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/parse-toss-excel/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/parse-toss-excel/*.html" ]
+# Supabase CLI 설정 파일
+# 현재 배포된 Edge Function 없음 (거래내역서는 앱에서 온디바이스로 처리)
