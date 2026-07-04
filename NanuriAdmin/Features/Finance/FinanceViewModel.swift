@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import PDFKit
+import UIKit
 import Supabase
 
 @MainActor
@@ -11,9 +12,14 @@ class FinanceViewModel: ObservableObject {
     @Published var startDate = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @Published var endDate = Date()
     @Published var savedStatements: [StatementFile] = []
+    @Published var splitsByTransaction: [UUID: [TransactionSplit]] = [:]
+    @Published var ledgers: [Ledger] = []
+    @Published var currentLedger: Ledger?
 
+    /// 행사 장부는 통장 전체가 한 행사이므로 날짜 필터를 적용하지 않는다.
     var filtered: [BankTransaction] {
-        transactions.filter {
+        guard currentLedger?.mode != .event else { return transactions }
+        return transactions.filter {
             $0.datetime >= startDate && $0.datetime <= endDate
         }
     }
@@ -21,9 +27,40 @@ class FinanceViewModel: ObservableObject {
     var deposits: [BankTransaction] { filtered.filter { $0.isDeposit } }
     var withdrawals: [BankTransaction] { filtered.filter { !$0.isDeposit } }
 
-    /// 지금까지 입력된 카테고리를 사용 빈도순으로 반환 (편집 시 추천용).
+    /// 특정 거래의 분할 항목 (없으면 빈 배열).
+    func splits(for transactionId: UUID) -> [TransactionSplit] {
+        (splitsByTransaction[transactionId] ?? []).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// 보고서용 항목: 분할이 있으면 분할들, 없으면 거래 자체.
+    var reportItems: [ReportLineItem] {
+        filtered.flatMap { tx -> [ReportLineItem] in
+            let splits = splits(for: tx.id)
+            guard !splits.isEmpty else {
+                return [ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
+                                       magnitude: abs(tx.amount), category: tx.category,
+                                       memo: tx.memo, sourceDescription: tx.description)]
+            }
+            return splits.map {
+                ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
+                               magnitude: $0.amount, category: $0.category,
+                               memo: $0.memo, sourceDescription: tx.description)
+            }
+        }
+    }
+
+    /// 기간 첫 거래 직전 잔액 (월별 보고서 전월이월).
+    var openingBalance: Int {
+        let sorted = filtered.sorted { $0.datetime < $1.datetime }
+        return sorted.first.map { $0.balance - $0.amount } ?? 0
+    }
+
+    /// 지금까지 입력된 카테고리를 사용 빈도순으로 반환 (편집 시 추천용). 분할 카테고리도 포함.
     var usedCategories: [String] {
-        let all = transactions
+        var all = transactions
+            .compactMap { $0.category?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        all += splitsByTransaction.values.flatMap { $0 }
             .compactMap { $0.category?.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let counts = Dictionary(grouping: all, by: { $0 }).mapValues { $0.count }
@@ -32,35 +69,141 @@ class FinanceViewModel: ObservableObject {
     var totalDeposit: Int { deposits.reduce(0) { $0 + $1.amount } }
     var totalWithdrawal: Int { withdrawals.reduce(0) { $0 + abs($1.amount) } }
 
+    // MARK: - 장부
+
+    func fetchLedgers() async {
+        do {
+            ledgers = try await supabase
+                .from("finance_ledgers")
+                .select()
+                .order("created_at", ascending: false)
+                .execute()
+                .value
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func createLedger(name: String, mode: FinanceReportMode) async -> Ledger? {
+        do {
+            let created: Ledger = try await supabase
+                .from("finance_ledgers")
+                .insert(LedgerInsert(name: name, type: mode.rawValue))
+                .select()
+                .single()
+                .execute()
+                .value
+            ledgers.insert(created, at: 0)
+            return created
+        } catch {
+            self.error = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteLedger(_ ledger: Ledger) async {
+        do {
+            try await supabase.from("finance_ledgers").delete().eq("id", value: ledger.id).execute()
+            ledgers.removeAll { $0.id == ledger.id }
+            if currentLedger?.id == ledger.id { currentLedger = nil }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// 장부를 선택하고 그 장부의 거래를 불러온다.
+    func selectLedger(_ ledger: Ledger) async {
+        currentLedger = ledger
+        await fetchTransactions()
+    }
+
+    // MARK: - 내보내기
+
+    /// 현재 기간의 거래내역을 선택한 모드에 맞는 PDF 보고서로 만든다 (영수증 미포함).
+    func exportReportPDF() -> URL? {
+        guard let ledger = currentLedger else {
+            error = "장부를 먼저 선택해주세요."
+            return nil
+        }
+        let mode = ledger.mode
+        // 행사 장부는 날짜 필터가 없으므로 실제 거래 기간을 보고서 기간으로 쓴다.
+        let start: Date
+        let end: Date
+        if mode == .event {
+            let dates = filtered.map { $0.datetime }
+            start = dates.min() ?? startDate
+            end = dates.max() ?? endDate
+        } else {
+            start = startDate
+            end = endDate
+        }
+        guard let url = FinanceReportExporter.makeReportPDF(
+            mode: mode, items: reportItems, opening: openingBalance,
+            startDate: start, endDate: end, ledgerName: ledger.name
+        ) else {
+            error = "보고서 생성에 실패했어요."
+            return nil
+        }
+        return url
+    }
+
+    /// 현재 기간의 영수증 이미지를 모은 부록 PDF를 만든다.
+    func exportReceiptsPDF() async -> URL? {
+        guard let url = await FinanceReportExporter.makeReceiptsPDF(
+            transactions: filtered, startDate: startDate, endDate: endDate
+        ) else {
+            error = "이 기간에 첨부된 영수증이 없거나 내보내기에 실패했어요."
+            return nil
+        }
+        return url
+    }
+
     func fetchTransactions() async {
+        guard let ledgerId = currentLedger?.id else {
+            transactions = []
+            splitsByTransaction = [:]
+            return
+        }
         isLoading = true
         error = nil
         do {
             let result: [BankTransaction] = try await supabase
                 .from("finance_transactions")
                 .select()
+                .eq("ledger_id", value: ledgerId)
                 .order("datetime", ascending: false)
                 .execute()
                 .value
             transactions = result
+
+            let ids = result.map { $0.id.uuidString }
+            if ids.isEmpty {
+                splitsByTransaction = [:]
+            } else {
+                let splitRows: [TransactionSplit] = try await supabase
+                    .from("finance_splits")
+                    .select()
+                    .in("transaction_id", values: ids)
+                    .execute()
+                    .value
+                splitsByTransaction = Dictionary(grouping: splitRows, by: { $0.transactionId })
+            }
         } catch {
             self.error = error.localizedDescription
         }
         isLoading = false
     }
 
+    /// 공유로 들어온 토스뱅크 PDF는 로컬(저장된 거래내역서)에 보관만 한다.
+    /// 파싱·거래 반영은 사용자가 보고서 모드를 고른 뒤 '저장된 거래내역서'에서 직접 불러온다.
+    /// (가져오기는 월별/행사 모드와 무관하므로 게이트와 분리)
     func handleIncomingPDF(url: URL) {
-        isLoading = true
         error = nil
-
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-
-        // 파싱과 별개로 원본 PDF를 앱에 먼저 보관한다 (파싱 누락 대비 안전장치).
-        let savedURL = persistOriginalPDF(from: url)
+        _ = persistOriginalPDF(from: url)
         loadSavedStatements()
-
-        processPDF(at: savedURL ?? url)
     }
 
     /// 보관된 거래내역서를 다시 파싱해 거래내역을 갱신한다 (원본은 이미 로컬에 있으므로 재보관하지 않음).
@@ -84,7 +227,7 @@ class FinanceViewModel: ObservableObject {
             fullText += (page.string ?? "") + "\n"
         }
 
-        let parsed = parsePdfText(fullText)
+        let parsed = TossPdfParser.parse(fullText)
         if parsed.isEmpty {
             error = "거래내역을 파싱할 수 없습니다."
             isLoading = false
@@ -97,10 +240,20 @@ class FinanceViewModel: ObservableObject {
     }
 
     private func saveTransactions(_ items: [BankTransactionInsert]) async {
+        guard let ledgerId = currentLedger?.id else {
+            error = "장부를 먼저 선택해주세요."
+            isLoading = false
+            return
+        }
+        let scoped = items.map { item -> BankTransactionInsert in
+            var copy = item
+            copy.ledgerId = ledgerId
+            return copy
+        }
         do {
             try await supabase
                 .from("finance_transactions")
-                .upsert(items, onConflict: "datetime,amount")
+                .upsert(scoped, onConflict: "ledger_id,datetime,amount")
                 .execute()
             await fetchTransactions()
         } catch {
@@ -110,16 +263,76 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    func updateTransaction(id: UUID, category: String?, memo: String?) async {
+    // MARK: - 거래 편집 저장 (영수증 R2는 청구서와 동일한 저장소 재사용)
+
+    /// 거래 편집을 한 번에 커밋한다.
+    /// 저장 시점에만 R2 업로드/삭제와 DB 반영이 일어난다 (취소하면 아무 일도 없음).
+    /// - Parameters:
+    ///   - keptUrls: 유지할 기존 영수증 URL 목록
+    ///   - newImages: 새로 추가한 이미지 (여기서 업로드)
+    ///   - originalUrls: 편집 시작 시점의 영수증 목록 (제거분 계산용)
+    func saveTransactionEdits(
+        id: UUID,
+        category: String?,
+        memo: String?,
+        keptUrls: [String],
+        newImages: [UIImage],
+        originalUrls: [String],
+        splits: [(category: String?, amount: Int, memo: String?)] = []
+    ) async {
+        // 1. 새 이미지 업로드 (해상도 축소 후)
+        var newlyUploaded: [String] = []
+        for image in newImages {
+            guard let jpeg = image.resized(maxDimension: 2000).jpegData(compressionQuality: 0.7) else { continue }
+            if let uploaded = try? await ReceiptStorage.upload(
+                imageData: jpeg,
+                filename: "receipt.jpg",
+                folder: "finance"
+            ) {
+                newlyUploaded.append(uploaded)
+            }
+        }
+
+        let finalUrls = keptUrls + newlyUploaded
+
+        // 2. DB 반영 (카테고리·메모·영수증 한 번에)
         do {
             try await supabase
                 .from("finance_transactions")
-                .update(BankTransactionUpdate(category: category, memo: memo))
+                .update(TransactionEditUpdate(category: category, memo: memo, receiptUrls: finalUrls))
                 .eq("id", value: id)
                 .execute()
             if let idx = transactions.firstIndex(where: { $0.id == id }) {
                 transactions[idx].category = category
                 transactions[idx].memo = memo
+                transactions[idx].receiptUrls = finalUrls
+            }
+        } catch {
+            self.error = error.localizedDescription
+            // DB 반영 실패 시 방금 올린 이미지는 롤백(R2에서 삭제)
+            for url in newlyUploaded { await ReceiptStorage.delete(receiptUrl: url) }
+            return
+        }
+
+        // 3. DB 반영 성공 후, 제거된 기존 영수증을 R2에서 삭제
+        let removed = originalUrls.filter { !keptUrls.contains($0) }
+        for url in removed { await ReceiptStorage.delete(receiptUrl: url) }
+
+        // 4. 분할 항목 교체 (기존 삭제 후 새로 삽입)
+        do {
+            try await supabase.from("finance_splits").delete().eq("transaction_id", value: id).execute()
+            if splits.isEmpty {
+                splitsByTransaction[id] = nil
+            } else {
+                let inserts = splits.enumerated().map { index, s in
+                    TransactionSplitInsert(transactionId: id, amount: s.amount,
+                                           category: s.category, memo: s.memo, sortOrder: index)
+                }
+                try await supabase.from("finance_splits").insert(inserts).execute()
+                splitsByTransaction[id] = splits.enumerated().map { index, s in
+                    TransactionSplit(id: UUID(), transactionId: id, amount: s.amount,
+                                     category: s.category, memo: s.memo, sortOrder: index)
+                }
             }
         } catch {
             self.error = error.localizedDescription
@@ -179,71 +392,4 @@ class FinanceViewModel: ObservableObject {
         loadSavedStatements()
     }
 
-    private func parsePdfText(_ text: String) -> [BankTransactionInsert] {
-        // 물리적 줄 단위로 처리한다.
-        // - 날짜로 시작하는 줄 = 새 거래 (줄 안의 공백은 정당한 공백이므로 보존)
-        // - 날짜로 시작하지 않는 줄 = 앞 거래 description의 줄바꿈 연속 → 공백 없이 이어붙임
-        let lines = text.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        // 한 줄 = [날짜][구분][금액][잔액] (그 뒤 description은 줄 끝까지 또는 다음 줄로 이어짐)
-        // 구분값은 특정 단어로 열거하지 않고 "한글/영문 글자 토큰"이면 무엇이든 받는다.
-        // (입금/출금/이자입금 외에 처음 보는 유형도 누락 없이 잡기 위함)
-        let headerPattern = #"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+([가-힣A-Za-z]+)\s+(-?[\d,]+)\s+([\d,]+)\s*(.*)$"#
-        guard let headerRegex = try? NSRegularExpression(pattern: headerPattern) else { return [] }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "ko_KR")
-
-        // 거래 사이에 끼는 표 머리글/발급 정보 등은 description으로 붙이지 않는다.
-        let footerPrefixes = ["거래일자", "발급일자", "페이지", "토스뱅크", "계좌번호"]
-
-        var result: [BankTransactionInsert] = []
-        var pending: (datetime: Date, type: String, amount: Int, balance: Int, desc: String)?
-
-        func flush() {
-            guard let p = pending else { return }
-            let cleaned = p.desc.trimmingCharacters(in: .whitespaces)
-            result.append(BankTransactionInsert(
-                datetime: p.datetime,
-                type: p.type,
-                amount: p.amount,
-                balance: p.balance,
-                description: cleaned.isEmpty ? nil : cleaned
-            ))
-            pending = nil
-        }
-
-        for line in lines {
-            let range = NSRange(line.startIndex..., in: line)
-
-            if let m = headerRegex.firstMatch(in: line, range: range),
-               let dtR = Range(m.range(at: 1), in: line),
-               let tyR = Range(m.range(at: 2), in: line),
-               let amR = Range(m.range(at: 3), in: line),
-               let baR = Range(m.range(at: 4), in: line),
-               let datetime = formatter.date(from: String(line[dtR])) {
-                // 새 거래 시작 → 이전 거래 확정
-                flush()
-
-                let amount = Int(String(line[amR]).replacingOccurrences(of: ",", with: "")) ?? 0
-                let balance = Int(String(line[baR]).replacingOccurrences(of: ",", with: "")) ?? 0
-                var inlineDesc = ""
-                if let dR = Range(m.range(at: 5), in: line) {
-                    inlineDesc = String(line[dR])
-                }
-                pending = (datetime, String(line[tyR]), amount, balance, inlineDesc)
-            } else if footerPrefixes.contains(where: { line.hasPrefix($0) }) {
-                // 표 머리글·발급 정보 등 → 현재 거래를 확정하고 무시
-                flush()
-            } else if pending != nil {
-                // description 줄바꿈 연속 → 공백 없이 이어붙임 (예: "후원" + "금" = "후원금")
-                pending!.desc += line
-            }
-        }
-        flush()
-        return result
-    }
 }

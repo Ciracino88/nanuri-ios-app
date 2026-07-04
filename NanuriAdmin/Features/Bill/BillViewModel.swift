@@ -7,8 +7,6 @@ class BillViewModel: ObservableObject {
     @Published var bills: [Bill] = []
     @Published var isLoading = false
     @Published var error: String?
-    
-    let cfWorkerUrl = "https://nanuri-bill.church-worker.workers.dev"
 
     func subscribeToRealtime() async {
         let channel = supabase.channel("bills-realtime")
@@ -91,14 +89,8 @@ class BillViewModel: ObservableObject {
     
     func deleteBill(billId: UUID, receiptUrl: String) async {
         do {
-            // 1. Cloudflare R2 이미지 삭제
-            if let workerUrl = URL(string: "\(cfWorkerUrl)/delete") {
-                var request = URLRequest(url: workerUrl)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try? JSONEncoder().encode(["receiptUrl": receiptUrl])
-                _ = try? await URLSession.shared.data(for: request)
-            }
+            // 1. Cloudflare R2 이미지 삭제 (공용 서비스 재사용)
+            await ReceiptStorage.delete(receiptUrl: receiptUrl)
 
             // 2. Supabase DB 삭제
             try await supabase

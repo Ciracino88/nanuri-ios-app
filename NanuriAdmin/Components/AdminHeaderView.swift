@@ -14,20 +14,21 @@ struct AdminHeaderView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             Spacer()
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
                 HStack(spacing: 0) {
                     Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 18, weight: .medium))
-                            .frame(width: 44, height: 44)
+                            .frame(width: 52, height: 44)
                     }
-                    Divider().frame(height: 16)
+                    Divider().frame(height: 18)
                     Button {
                         showLogoutAlert = true
                     } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.system(size: 18, weight: .medium))
-                            .frame(width: 44, height: 44)
+                            .foregroundColor(.red)
+                            .frame(width: 52, height: 44)
                     }
                     .alert("로그아웃", isPresented: $showLogoutAlert) {
                         Button("로그아웃", role: .destructive) {
