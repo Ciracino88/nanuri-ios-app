@@ -148,20 +148,3 @@ struct StatementFile: Identifiable {
 
     var id: String { url.lastPathComponent }
 }
-
-struct FinanceReport: Identifiable, Codable {
-    var id: UUID
-    let name: String
-    let type: String
-    let startDate: Date
-    let endDate: Date
-    var memo: String?
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, type, memo
-        case startDate = "start_date"
-        case endDate = "end_date"
-        case createdAt = "created_at"
-    }
-}

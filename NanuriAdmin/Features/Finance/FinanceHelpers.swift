@@ -39,6 +39,38 @@ struct ChipFlowLayout: Layout {
     }
 }
 
+/// 카테고리 입력 시 기존 카테고리를 가로 스크롤 칩으로 추천 (탭하면 채워짐).
+/// 거래 편집·분할 편집 등에서 공용으로 사용.
+struct CategorySuggestionChips: View {
+    let suggestions: [String]
+    @Binding var selected: String
+
+    var body: some View {
+        if !suggestions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button {
+                            selected = suggestion
+                        } label: {
+                            Text(suggestion)
+                                .font(.caption)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selected == suggestion ? Color.blue : Color(.systemGray6))
+                                .foregroundColor(selected == suggestion ? .white : .primary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        }
+    }
+}
+
 /// 재정 탭 진입 시 어느 장부(통장)를 열지 고르는 게이트 화면.
 struct FinanceLedgerGateView: View {
     @ObservedObject var viewModel: FinanceViewModel
