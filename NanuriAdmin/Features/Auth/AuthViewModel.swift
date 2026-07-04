@@ -110,7 +110,11 @@ class AuthViewModel: ObservableObject {
             guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                   let rootViewController = windowScene.windows.first?.rootViewController else { return }
 
-            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
+            let result = try await GIDSignIn.sharedInstance.signIn(
+                withPresenting: rootViewController,
+                hint: nil,
+                additionalScopes: ["https://www.googleapis.com/auth/gmail.readonly"]
+            )
 
             guard let idToken = result.user.idToken?.tokenString else {
                 throw NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "ID Token 없음"])
