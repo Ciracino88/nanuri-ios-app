@@ -5,10 +5,6 @@ struct TossResultView: View {
     let onApprove: () -> Void
     let onCancel: () -> Void
 
-    var name: String {
-        bill.userProfile?.name ?? bill.submitterName ?? "이름 없음"
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -35,7 +31,7 @@ struct TossResultView: View {
             VStack(spacing: 0) {
                 infoRow(label: "청구 항목", value: bill.title)
                 Divider().padding(.vertical, 10)
-                infoRow(label: "수령인", value: name)
+                infoRow(label: "수령인", value: bill.submitterName)
                 Divider().padding(.vertical, 10)
                 HStack {
                     Text("금액")

@@ -33,37 +33,12 @@ class BillViewModel: ObservableObject {
     func fetchBills(showLoading: Bool = true) async {
         if showLoading { isLoading = true }
         do {
-            let user = try await supabase.auth.user()
-            print("현재 유저 ID: \(user.id)")
-            print("현재 유저 이메일: \(user.email ?? "없음")")
-            
-            var bills: [Bill] = try await supabase
+            bills = try await supabase
                 .from("bills")
                 .select()
                 .order("created_at", ascending: false)
                 .execute()
                 .value
-
-            // user_profiles 따로 조회
-            let userIds = bills.map { $0.userId.uuidString }
-            let profiles: [ProfileRow] = try await supabase
-                .from("user_profiles")
-                .select("id, name, account_number, bank_name")
-                .in("id", values: userIds)
-                .execute()
-                .value
-
-            // bills에 profile 매핑
-            let profileMap = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
-            self.bills = bills.map { bill in
-                var b = bill
-                if let p = profileMap[bill.userId] {
-                    b.userProfile = UserProfile(name: p.name, accountNumber: p.accountNumber ?? "", bankName: p.bankName ?? "")
-                }
-                return b
-            }
-
-            print("청구서 조회 성공: \(self.bills.count)개")
         } catch {
             self.error = error.localizedDescription
             print("청구서 조회 실패: \(error)")
@@ -73,24 +48,24 @@ class BillViewModel: ObservableObject {
 
     func updateStatus(billId: UUID, status: String) async {
         do {
-            print("상태 변경 시도: \(billId) → \(status)")
             try await supabase
                 .from("bills")
                 .update(["status": status])
                 .eq("id", value: billId.uuidString)
                 .execute()
-            print("상태 변경 성공")
             await fetchBills(showLoading: false)
         } catch {
             self.error = error.localizedDescription
             print("상태 변경 실패: \(error)")
         }
     }
-    
-    func deleteBill(billId: UUID, receiptUrl: String) async {
+
+    func deleteBill(billId: UUID, receiptUrl: String?) async {
         do {
             // 1. Cloudflare R2 이미지 삭제 (공용 서비스 재사용)
-            await ReceiptStorage.delete(receiptUrl: receiptUrl)
+            if let receiptUrl, !receiptUrl.isEmpty {
+                await ReceiptStorage.delete(receiptUrl: receiptUrl)
+            }
 
             // 2. Supabase DB 삭제
             try await supabase
@@ -100,7 +75,6 @@ class BillViewModel: ObservableObject {
                 .execute()
 
             await fetchBills(showLoading: false)
-            print("청구서 삭제 성공")
         } catch {
             self.error = error.localizedDescription
             print("청구서 삭제 실패: \(error)")
@@ -108,9 +82,9 @@ class BillViewModel: ObservableObject {
     }
 
     func openToss(bill: Bill) {
-        let accountNumber = (bill.accountNumber ?? bill.userProfile?.accountNumber ?? "").replacingOccurrences(of: "-", with: "")
-        let bankName = bill.bankName ?? bill.userProfile?.bankName ?? ""
-        
+        let accountNumber = bill.accountNumber.replacingOccurrences(of: "-", with: "")
+        let bankName = bill.bankName
+
         guard !accountNumber.isEmpty, !bankName.isEmpty else {
             print("계좌 정보 없음")
             return

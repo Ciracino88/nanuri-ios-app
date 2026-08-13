@@ -22,14 +22,8 @@ struct BillRowView: View {
         }
     }
 
-    var name: String {
-        bill.userProfile?.name ?? bill.submitterName ?? "이름 없음"
-    }
-
     var bankInfo: String {
-        let bank = bill.userProfile?.bankName ?? bill.bankName ?? ""
-        let account = bill.userProfile?.accountNumber ?? bill.accountNumber ?? ""
-        return "\(bank) \(account)".trimmingCharacters(in: .whitespaces)
+        "\(bill.bankName) \(bill.accountNumber)".trimmingCharacters(in: .whitespaces)
     }
 
     @ViewBuilder
@@ -66,7 +60,7 @@ struct BillRowView: View {
             .padding(.bottom, 8)
 
             // 이름 + 계좌
-            Text(name)
+            Text(bill.submitterName)
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.primary)
@@ -86,8 +80,11 @@ struct BillRowView: View {
                     .fontWeight(.bold)
                 Spacer()
                 HStack(spacing: 6) {
-                    billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
-                        showReceiptSheet = true
+                    // 카카오 챗봇 경로에선 영수증이 없을 수 있다.
+                    if bill.hasReceipt {
+                        billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
+                            showReceiptSheet = true
+                        }
                     }
 
                     if bill.status == "pending" {
@@ -113,7 +110,9 @@ struct BillRowView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .sheet(isPresented: $showReceiptSheet) {
-            ReceiptSheetView(receiptUrl: bill.receiptUrl)
+            if let receiptUrl = bill.receiptUrl {
+                ReceiptSheetView(receiptUrl: receiptUrl)
+            }
         }
     }
 }

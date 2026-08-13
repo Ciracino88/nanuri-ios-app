@@ -110,7 +110,7 @@ struct BillListView: View {
     private func loadAvatar() async {
         guard let user = try? await supabase.auth.user() else { return }
         let row = try? await supabase
-            .from("user_profiles")
+            .from("profiles")
             .select("avatar_url")
             .eq("id", value: user.id)
             .single()

@@ -156,7 +156,7 @@ struct ProfileEditView: View {
         do {
             let user = try await supabase.auth.user()
             let profile: ProfileRow = try await supabase
-                .from("user_profiles")
+                .from("profiles")
                 .select()
                 .eq("id", value: user.id)
                 .single()
@@ -199,7 +199,7 @@ struct ProfileEditView: View {
                 avatarUrl: finalAvatarUrl
             )
             try await supabase
-                .from("user_profiles")
+                .from("profiles")
                 .update(update)
                 .eq("id", value: user.id)
                 .execute()
