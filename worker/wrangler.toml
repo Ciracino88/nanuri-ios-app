@@ -1,0 +1,24 @@
+name = "nanuri-bill-kakao"
+main = "src/index.js"
+compatibility_date = "2026-08-13"
+
+[vars]
+# 이 워커 자신의 공개 주소. 폼 링크를 만들 때 쓴다.
+# 배포 후 실제 주소로 바꿔야 한다. (커스텀 도메인을 붙이면 그 주소)
+PUBLIC_BASE_URL = "https://nanuri-bill-kakao.church-worker.workers.dev"
+
+# 영수증 업로드를 위임할 기존 R2 워커
+RECEIPT_WORKER_URL = "https://nanuri-bill.church-worker.workers.dev"
+
+SUPABASE_URL = "https://ciszaukmnglepvqpulya.supabase.co"
+
+# APNs 토픽 = 앱 번들 ID
+APNS_TOPIC = "com.ciracino88.NanuriAdmin"
+
+# 시크릿은 여기 두지 않는다. wrangler secret put 으로 등록한다.
+#   SUPABASE_SERVICE_ROLE_KEY  RLS를 우회하는 키. 절대 앱에 넣지 말 것.
+#   TOKEN_SECRET               폼 링크 서명용 임의 문자열
+#   KAKAO_SKILL_SECRET         챗봇 블록에 넣어둘 공유 시크릿
+#   APNS_KEY_ID                APNs 인증 키 ID
+#   APNS_TEAM_ID               Apple Developer 팀 ID
+#   APNS_P8                    .p8 파일 내용 전체 (BEGIN/END 줄 포함)
