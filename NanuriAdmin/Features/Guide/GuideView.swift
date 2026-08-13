@@ -7,6 +7,8 @@ struct GuideView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     introCard
+                    improvementSection
+                    transparencySection
                     accountsSection
                     budgetFlowSection
                     eventFlowSection
@@ -36,6 +38,94 @@ struct GuideView: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+    }
+
+    // MARK: - 전환 이점 (농협 → 토스 모임통장 + 앱)
+
+    private var improvementSection: some View {
+        GuideCard(title: "이렇게 좋아져요", icon: "sparkles", color: .pink) {
+            VStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    improvementRow(
+                        icon: "wonsign.circle", color: .green, topic: "수수료",
+                        before: "현금 입출금 수수료", after: "어느 ATM이든 월 30회 무료")
+                    Text("현금 거래는 주로 헌금 입금이라 월 30회를 넘길 일이 거의 없어요. 사실상 무료예요.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 48)
+                }
+                Divider()
+                improvementRow(
+                    icon: "bolt.fill", color: .orange, topic: "입출금",
+                    before: "ONLY NH ATM", after: "즉시 송금")
+                Divider()
+                improvementRow(
+                    icon: "creditcard", color: .blue, topic: "통장 재발급",
+                    before: "약 6개월마다", after: "월 2건만 → 거의 없음")
+                Divider()
+                improvementRow(
+                    icon: "doc.text", color: .indigo, topic: "장부",
+                    before: "손으로 작성·제출", after: "내역서 넣으면 자동 생성")
+                Divider()
+                improvementRow(
+                    icon: "photo", color: .teal, topic: "영수증",
+                    before: "종이로 보관", after: "사진 첨부 · 클라우드 보관")
+            }
+        }
+    }
+
+    private func improvementRow(icon: String, color: Color, topic: String, before: String, after: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(color)
+                .frame(width: 36, height: 36)
+                .background(color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(topic)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                HStack(spacing: 6) {
+                    Text(before)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Image(systemName: "arrow.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(after)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(color)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - 투명성
+
+    private var transparencySection: some View {
+        GuideCard(title: "함께, 투명하게 관리해요", icon: "person.3", color: .purple) {
+            VStack(alignment: .leading, spacing: 12) {
+                bulletRow("모임통장에 임원진을 멤버로 초대하면, 모두가 모든 입출금을 실시간으로 직접 봐요.")
+                bulletRow("앱이 거래 분류·영수증·결산 보고서·클라우드 보관까지 더해요.")
+                bulletRow("담당이 바뀌어도 자료가 그대로 남아 인수인계가 쉬워요.")
+            }
+        }
+    }
+
+    private func bulletRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.footnote)
+                .foregroundColor(.purple)
+                .padding(.top, 1)
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.primary)
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: - 통장 구조
@@ -101,6 +191,11 @@ struct GuideView: View {
                 stepRow(index: 3, isLast: true,
                         title: "월말 — 잔액 반환",
                         detail: "남은 잔액을 교회 통장으로 돌려보내요.")
+
+                Text("농협 통장엔 이 예산·잔액 2건만 찍혀요. 그래서 통장이 훨씬 천천히 차고, 6개월마다 하던 재발급이 몇 년에 한 번으로 줄어들어요.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 14)
             }
         }
     }
