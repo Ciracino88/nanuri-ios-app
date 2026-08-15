@@ -2,15 +2,31 @@
 
 교회 청년부 회계용 **관리자 1인 전용** iOS 앱 + 청구 접수 워커.
 
+사람이 손으로 넣어야 하는 설정과 남은 할 일은 **`SETUP.md`** 에 있다.
+새 세션은 거기부터 볼 것.
+
 ## 구성
 
 | 위치 | 내용 |
 | --- | --- |
 | `NanuriAdmin/` | SwiftUI 앱 (iOS). Xcode 16 파일시스템 동기화 그룹 — **새 .swift 파일은 폴더에 넣으면 자동 인식**, pbxproj 수정 불필요 |
-| `worker/` | Cloudflare Worker. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
+| `worker/` | Cloudflare Worker `nanuri-form`. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
 | `supabase/migrations/` | DB 스키마. 최신 것이 진실이고 앞의 것은 이력 |
 
 앱 탭은 **청구서 / 재정 / 안내** 세 개다 (`App/ContentView.swift`).
+
+## 배포된 것들
+
+| | 주소 / 이름 |
+| --- | --- |
+| 청구 폼 (공개) | `https://nanuri-form.nanuri.workers.dev` |
+| 영수증 R2 워커 | 워커 이름 `nanuri-bill` |
+| Supabase | `ciszaukmnglepvqpulya` |
+
+계정 서브도메인은 `nanuri.workers.dev` 다. 이걸 바꾸면 계정의 **모든** 워커 주소가
+같이 바뀌고, 앱이 하드코딩한 R2 주소(`Components/ReceiptStorage.swift`)도 고쳐야
+한다. 안 고치면 영수증 업로드·삭제가 전부 깨진다.
+(저장된 이미지 URL은 `pub-*.r2.dev` 도메인이라 영향 없다)
 
 ## 데이터 흐름
 
@@ -22,8 +38,16 @@
 
 - 청구 폼이 받는 값은 **이름·항목·금액·영수증** 네 가지뿐이다. 계좌는 받지 않는다.
 - 계좌는 관리자가 앱의 **계좌부(`payees`)** 에 이름↔계좌로 등록해 둔다.
-- 영수증 이미지는 별도 R2 워커(`nanuri-bill`)의 `/upload` 에 위임한다.
-  앱과 워커가 같은 URL 형식을 공유하므로 여기를 바꾸면 양쪽이 깨진다.
+  계좌부에 없는 이름이면 목록에 "계좌 미등록"으로 뜨고 그 자리에서 등록할 수 있다.
+- `bills` 에 INSERT 정책은 **일부러 없다.** 삽입은 워커의 `service_role` 만 가능하다.
+  검증(금액 상한·영수증 필수)을 워커 한 곳에서만 하기 위해서다.
+
+### 영수증 업로드는 서비스 바인딩으로
+
+워커 → R2 워커 호출은 반드시 `env.RECEIPT_WORKER.fetch()` 를 쓴다.
+공개 URL로 `fetch` 하면 **요청이 자기 자신으로 되돌아와 404가 난다**
+(두 워커가 같은 workers.dev 서브도메인이라서). 실제로 모든 제출이 이걸로 실패했었다.
+서비스 바인딩은 DNS도 공용 인터넷도 안 타므로 서브도메인 변경에도 안전하다.
 
 ## 반드시 같이 고쳐야 하는 짝
 
@@ -35,6 +59,7 @@
   (PG의 `\s`는 U+00A0을 공백으로 안 본다. 그래서 저장 전에 통일한다.)
 - **은행 목록** — `Features/Profile/Profile.swift`의 `koreanBanks`.
   토스 송금 딥링크 `supertoss://send?bank=...` 가 이 문자열을 그대로 쓴다.
+- **R2 워커 주소** — `Components/ReceiptStorage.swift` ↔ 계정 서브도메인.
 - **`import Combine`** — `@Published`/`@StateObject`/`ObservableObject` 쓰는 파일엔 항상 넣는다.
 
 ## 인증 / 세션
@@ -52,6 +77,21 @@
 - 서버 쪽 Supabase Auth 설정의 세션 타임박스·비활성 만료가 켜져 있으면
   클라이언트 코드와 무관하게 끊긴다. 세션이 계속 풀리면 대시보드를 먼저 본다.
 
+## DB
+
+새 테이블을 `public` 에 만들면 **반드시 `enable row level security` 를 같이 쓴다.**
+anon 에 기본 권한이 열려 있어서(Supabase 기본값), RLS 없는 테이블은 앱 바이너리에
+들어 있는 anon key 만으로 읽힌다.
+
+`drop schema public cascade` 는 Supabase가 걸어둔 테이블 권한과
+`ALTER DEFAULT PRIVILEGES` 까지 지운다. 그러면 앱도 워커도 `42501 permission denied`
+를 받는다. **권한 검사는 RLS보다 먼저다** — 정책이 맞아도 소용없다.
+복구는 `20260815130000_restore_public_grants.sql` 참고.
+
+`supabase db push --linked` 는 그냥 실행하면 CLI가 임시 로그인 롤을 만들려다
+권한 오류로 실패한다. `SUPABASE_DB_PASSWORD` 를 넘겨 직접 접속해야 한다 (SETUP.md 1번).
+비밀번호는 사용자가 직접 입력하게 한다.
+
 ## 빌드 / 검증
 
 `xcode-select` 가 CommandLineTools 를 가리키고 있어 `xcodebuild` 가 그냥은 안 된다:
@@ -60,12 +100,30 @@
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project NanuriAdmin.xcodeproj -scheme NanuriAdmin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build
 ```
 
-마이그레이션 SQL 은 던져버릴 postgres 컨테이너에 `auth.users`·`supabase_realtime`·
-`is_admin()` 만 스텁으로 만들어 두고 적용해 보면 실제로 검증된다.
+`wrangler` 는 전역 설치돼 있지 않다. `npx wrangler ...` 로 쓴다.
+배포 전 `npx wrangler deploy --dry-run` 으로 설정만 검증할 수 있다.
+
+마이그레이션 SQL 은 던져버릴 postgres 컨테이너에 `auth.users`·`storage`·
+`supabase_realtime`·롤을 스텁으로 만들어 두고 적용해 보면 실제로 검증된다.
+RLS가 실제로 막는지는 `set role anon;` 으로 직접 찔러보면 된다.
+
+원격 스키마 형태는 anon key로 REST probe 하면 인증 없이 확인된다 —
+없는 테이블은 `PGRST205`, 없는 컬럼은 `42703`, 권한 없으면 `42501`.
+
+## 지금 상태 / 남은 일
+
+- 스키마 전환·계좌부·공개 폼은 **끝났고 실제로 동작 확인까지 됐다.**
+- 푸시는 **절반만 되어 있다.** 앱 코드(`App/PushManager.swift`)는 들어갔지만
+  Xcode의 Push Notifications capability 가 없고, APNs 키도 아직 없다.
+  Apple Developer 멤버십 갱신 반영을 기다리는 중이다. 자세한 건 `SETUP.md` 3~6번.
 
 ## 주의
 
-- `SUPABASE_SERVICE_ROLE_KEY` 는 RLS를 우회한다. 워커 시크릿에만 두고 앱·저장소에 넣지 않는다.
-- 청구 폼은 **공개 URL** 이다. 방어는 IP당 분당 5건 + 영수증 필수/10MB/`image/*`
-  + 금액 상한 1,000만 원이 전부다. 자세한 건 `worker/README.md`.
+- 진짜 비밀은 둘뿐이다 — `SUPABASE_SERVICE_ROLE_KEY`(RLS 우회), `APNS_P8`(푸시 서명 개인키).
+  `APNS_TEAM_ID`·`APNS_KEY_ID` 는 식별자라 `wrangler.toml` 에 그냥 적는다.
+- 청구 폼은 **공개 URL** 이고 **요청 횟수 제한이 없다.** `[[ratelimits]]` 를 걸어뒀지만
+  이 계정에서는 카운팅이 안 된다 (limit=1/10s 로 낮춰도 전부 통과). 실제 방어는
+  영수증 필수/10MB/`image/*` + 금액 상한 1,000만 원뿐이다. 자세한 건 `worker/README.md`.
+- 이름 사칭은 기술로 막지 않는다. 관리자가 승인 전에 당사자에게 직접 확인하는 것을
+  전제로 한 설계다. (사용자 결정)
 - 커밋 메시지는 제목·본문 모두 한국어로 쓴다.
