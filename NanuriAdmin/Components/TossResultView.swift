@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TossResultView: View {
     let bill: Bill
+    /// 계좌부에서 찾은 수취인. 송금 화면을 연 시점엔 항상 있다.
+    let payee: Payee?
     let onApprove: () -> Void
     let onCancel: () -> Void
 
@@ -33,6 +35,10 @@ struct TossResultView: View {
                 Divider().padding(.vertical, 10)
                 infoRow(label: "수령인", value: bill.submitterName)
                 Divider().padding(.vertical, 10)
+                if let payee {
+                    infoRow(label: "계좌", value: payee.accountLine)
+                    Divider().padding(.vertical, 10)
+                }
                 HStack {
                     Text("금액")
                         .font(.subheadline)

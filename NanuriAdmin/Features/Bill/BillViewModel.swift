@@ -81,9 +81,11 @@ class BillViewModel: ObservableObject {
         }
     }
 
-    func openToss(bill: Bill) {
-        let accountNumber = bill.accountNumber.replacingOccurrences(of: "-", with: "")
-        let bankName = bill.bankName
+    /// 계좌부에서 찾은 수취인으로 토스 송금 화면을 연다.
+    /// 이름이 계좌부에 없으면 호출되지 않는다 (UI에서 먼저 막는다).
+    func openToss(bill: Bill, payee: Payee) {
+        let accountNumber = payee.accountNumber.replacingOccurrences(of: "-", with: "")
+        let bankName = payee.bankName
 
         guard !accountNumber.isEmpty, !bankName.isEmpty else {
             print("계좌 정보 없음")
