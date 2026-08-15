@@ -59,6 +59,13 @@ async function providerToken(env) {
 export async function sendBillNotification(env, deviceTokens, bill) {
     if (deviceTokens.length === 0) return;
 
+    // 설정이 덜 됐으면 엉뚱한 JWT를 만들어 401을 받느니 여기서 분명하게 끊는다.
+    const missing = ['APNS_KEY_ID', 'APNS_TEAM_ID', 'APNS_P8'].filter((key) => !env[key]);
+    if (missing.length > 0) {
+        console.warn(`APNs 설정 없음: ${missing.join(', ')} — 푸시를 건너뛴다`);
+        return;
+    }
+
     let jwt;
     try {
         jwt = await providerToken(env);
