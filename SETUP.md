@@ -62,6 +62,18 @@ Keys 화면에 들어가 키를 만들 수 있으면 갱신된 것이다.
 
 로컬 인증서는 멤버십이 끊겨도 남아 있으므로 판단 근거가 되지 않는다.
 
+### 결제했는데 계정에는 아직 만료라고 나올 때
+
+정상이다. 주문 번호를 받았다는 건 결제 승인이지 멤버십 활성화가 아니다.
+Apple 은 둘을 따로 처리하고 **활성화까지 보통 24~48시간** 걸린다.
+그 사이 개발자 계정에는 계속 만료로 표시된다.
+
+- 결제 시점부터 48시간을 기다린다
+- Program License Agreement 동의 대기가 걸려 있는지 확인한다.
+  약관이 갱신되면 동의 전까지 계정이 제한 상태로 남는다
+- 48시간이 지나도 그대로면 주문 번호를 갖고
+  [Apple Developer Support](https://developer.apple.com/contact/) 에 문의한다
+
 ## 4. APNs 키 발급 → APNS_KEY_ID ⬜
 
 [developer.apple.com/account](https://developer.apple.com/account)
