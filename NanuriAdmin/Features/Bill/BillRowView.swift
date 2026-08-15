@@ -12,9 +12,9 @@ struct BillRowView: View {
 
     var statusColor: Color {
         switch bill.status {
-        case "approved": return .green
-        case "rejected": return .red
-        default: return .orange
+        case "approved": return DS.Palette.done
+        case "rejected": return DS.Palette.withdrawal
+        default: return DS.Palette.pending
         }
     }
 
@@ -30,11 +30,11 @@ struct BillRowView: View {
     private func billButton(_ icon: String, bg: Color, fg: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .medium))
-                .frame(width: 36, height: 36)
+                .font(.system(size: DS.Icon.inline, weight: .medium))
+                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
                 .background(bg)
                 .foregroundColor(fg)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
         }
         .buttonStyle(.plain)
     }
@@ -44,9 +44,7 @@ struct BillRowView: View {
             // 상단: 제목 + 날짜 + 상태 뱃지
             HStack {
                 Text(bill.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .rowTitle()
                 Spacer()
                 HStack(spacing: 6) {
                     Text(bill.createdAt.formatted(date: .abbreviated, time: .omitted))
@@ -67,8 +65,7 @@ struct BillRowView: View {
 
             if let payee {
                 Text(payee.accountLine)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .rowSubtext()
                     .padding(.top, 1)
             } else {
                 Button {
@@ -79,7 +76,7 @@ struct BillRowView: View {
                         Text("계좌 미등록 · 등록하기")
                     }
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .foregroundColor(DS.Palette.pending)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 1)
@@ -101,28 +98,23 @@ struct BillRowView: View {
                     if bill.status == "pending" {
                         // 계좌를 모르면 송금할 수 없다. 계좌부 등록이 먼저다.
                         if let payee {
-                            billButton("paperplane.fill", bg: .blue, fg: .white) {
+                            billButton("paperplane.fill", bg: DS.Palette.deposit, fg: .white) {
                                 pendingBill = bill
                                 viewModel.openToss(bill: bill, payee: payee)
                             }
                         }
-                        billButton("xmark", bg: Color.red.opacity(0.1), fg: .red) {
+                        billButton("xmark", bg: DS.Palette.withdrawal.opacity(0.1), fg: DS.Palette.withdrawal) {
                             Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
                         }
                     } else {
-                        billButton("trash", bg: Color.red.opacity(0.1), fg: .red) {
+                        billButton("trash", bg: DS.Palette.withdrawal.opacity(0.1), fg: DS.Palette.withdrawal) {
                             Task { await viewModel.deleteBill(billId: bill.id, receiptUrl: bill.receiptUrl) }
                         }
                     }
                 }
             }
         }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .cardStyle()
         .sheet(isPresented: $showReceiptSheet) {
             ReceiptSheetView(receiptUrl: bill.receiptUrl)
         }

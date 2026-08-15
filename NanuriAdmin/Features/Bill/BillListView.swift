@@ -8,22 +8,17 @@ private struct AvatarRow: Decodable {
     }
 }
 
-/// 계좌부 시트를 띄우는 트리거. name이 있으면 그 이름으로 등록 화면을 미리 연다.
-struct PayeeSheet: Identifiable {
-    let name: String?
-    var id: String { name ?? "__all__" }
-}
-
 struct BillListView: View {
     @StateObject private var viewModel = BillViewModel()
-    @StateObject private var payeeViewModel = PayeeViewModel()
+    /// 계좌부 탭과 같은 인스턴스. ContentView 가 갖고 있다.
+    @ObservedObject var payeeViewModel: PayeeViewModel
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showProfileEdit = false
     @State private var pendingBill: Bill? = nil
     @State private var selectedTab = 0
     @State private var avatarUrl: String?
-    /// 계좌부 시트. 미등록 청구서에서 넘어오면 이름이 담긴다.
-    @State private var payeeSheet: PayeeSheet?
+    /// 계좌 미등록 청구서에서 바로 띄우는 등록 시트. 목록을 거치지 않는다.
+    @State private var payeeEdit: PayeeEditTarget?
 
     var pendingBills: [Bill] {
         viewModel.bills
@@ -49,8 +44,7 @@ struct BillListView: View {
                                 await payeeViewModel.fetchPayees(showLoading: false)
                             }
                         },
-                        onProfileTap: { showProfileEdit = true },
-                        onPayeesTap: { payeeSheet = PayeeSheet(name: nil) }
+                        onProfileTap: { showProfileEdit = true }
                     )
 
                     PillPicker(
@@ -70,10 +64,9 @@ struct BillListView: View {
                         } else {
                             let bills = selectedTab == 0 ? pendingBills : processedBills
                             if bills.isEmpty {
-                                Spacer()
-                                Text(selectedTab == 0 ? "대기 중인 청구서가 없어요" : "처리된 청구서가 없어요")
-                                    .foregroundColor(.gray)
-                                Spacer()
+                                EmptyStateView(
+                                    title: selectedTab == 0 ? "대기 중인 청구서가 없어요" : "처리된 청구서가 없어요"
+                                )
                             } else {
                                 List(bills) { bill in
                                     BillRowView(
@@ -81,19 +74,17 @@ struct BillListView: View {
                                         payee: payeeViewModel.payee(for: bill.submitterName),
                                         viewModel: viewModel,
                                         pendingBill: $pendingBill,
-                                        onRegisterPayee: { name in payeeSheet = PayeeSheet(name: name) }
+                                        onRegisterPayee: { name in payeeEdit = .create(name) }
                                     )
-                                        .listRowInsets(EdgeInsets())
-                                        .listRowBackground(Color.clear)
-                                        .listRowSeparator(.hidden)
+                                        .cardRow()
                                         .transition(.asymmetric(
                                             insertion: .move(edge: .top).combined(with: .opacity),
                                             removal: .opacity
                                         ))
                                 }
                                 .listStyle(.plain)
-                                .background(Color(.systemGroupedBackground))
-                                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: bills)
+                                .screenBackground()
+                                .animation(DS.Motion.list, value: bills)
                             }
                         }
                     }
@@ -104,8 +95,8 @@ struct BillListView: View {
                 }) {
                     ProfileEditView()
                 }
-                .sheet(item: $payeeSheet) { sheet in
-                    PayeeListView(viewModel: payeeViewModel, prefilledName: sheet.name)
+                .sheet(item: $payeeEdit) { target in
+                    PayeeEditView(viewModel: payeeViewModel, target: target)
                 }
                 .sheet(item: $pendingBill) { bill in
                     TossResultView(

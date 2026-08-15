@@ -52,7 +52,7 @@ struct FinanceView: View {
                         viewModel.currentLedger = nil
                     } label: {
                         Image(systemName: "rectangle.2.swap")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.system(size: DS.Icon.action, weight: .medium))
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -84,7 +84,7 @@ struct FinanceView: View {
                             }
                         } label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 18, weight: .medium))
+                                .font(.system(size: DS.Icon.action, weight: .medium))
                         }
                         .disabled(viewModel.filtered.isEmpty)
 
@@ -93,7 +93,7 @@ struct FinanceView: View {
                             showStatements = true
                         } label: {
                             Image(systemName: "folder")
-                                .font(.system(size: 18, weight: .medium))
+                                .font(.system(size: DS.Icon.action, weight: .medium))
                         }
                     }
                 }
@@ -110,7 +110,7 @@ struct FinanceView: View {
                         }
                         .padding(24)
                         .background(Color(.systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card))
                     }
                 }
             }
@@ -161,24 +161,21 @@ struct FinanceView: View {
                 DateFilterView(startDate: $viewModel.startDate, endDate: $viewModel.endDate)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DS.Spacing.screen)
         .padding(.vertical, 10)
     }
 
     private var summaryCard: some View {
         HStack(spacing: 12) {
-            summaryItem(label: "총 입금", amount: viewModel.totalDeposit, color: .blue)
+            summaryItem(label: "총 입금", amount: viewModel.totalDeposit, color: DS.Palette.deposit)
             Divider().frame(height: 40)
-            summaryItem(label: "총 출금", amount: viewModel.totalWithdrawal, color: .red)
+            summaryItem(label: "총 출금", amount: viewModel.totalWithdrawal, color: DS.Palette.withdrawal)
             Divider().frame(height: 40)
             summaryItem(label: "잔액", amount: viewModel.totalDeposit - viewModel.totalWithdrawal, color: .primary)
         }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .cardStyle()
+        .padding(.horizontal, DS.Spacing.screen)
+        .padding(.vertical, DS.Spacing.small)
     }
 
     private func summaryItem(label: String, amount: Int, color: Color) -> some View {
@@ -205,31 +202,20 @@ struct FinanceView: View {
     private var transactionList: some View {
         List(currentItems) { tx in
             TransactionRowView(transaction: tx, splits: viewModel.splits(for: tx.id))
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                .cardRow()
                 .onTapGesture { editingTransaction = tx }
         }
         .listStyle(.plain)
-        .background(Color(.systemGroupedBackground))
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedTab)
+        .screenBackground()
+        .animation(DS.Motion.list, value: selectedTab)
     }
 
     private var emptyView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "doc.richtext")
-                .font(.system(size: 50))
-                .foregroundColor(.secondary)
-            Text("거래내역이 없어요")
-                .font(.title3)
-                .fontWeight(.medium)
-            Text("토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 폴더에서 열어 '거래내역 불러오기'를 눌러주세요")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            Spacer()
-        }
+        EmptyStateView(
+            title: "거래내역이 없어요",
+            icon: "doc.richtext",
+            message: "토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 폴더에서 열어 '거래내역 불러오기'를 눌러주세요"
+        )
     }
 }
 
@@ -258,7 +244,7 @@ struct TransactionRowView: View {
                 Text(transaction.isDeposit ? "+\(transaction.amount.formatted())원" : "\(transaction.amount.formatted())원")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(transaction.isDeposit ? .blue : .red)
+                    .foregroundColor(transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal)
             }
             HStack {
                 Text(transaction.datetime.koreanDateTimeString)
@@ -270,7 +256,7 @@ struct TransactionRowView: View {
                         Text("\(transaction.receipts.count)")
                     }
                     .font(.caption2)
-                    .foregroundColor(.blue)
+                    .foregroundColor(DS.Palette.deposit)
                 }
                 Spacer()
                 Text("잔액 \(transaction.balance.formatted())원")
@@ -284,12 +270,7 @@ struct TransactionRowView: View {
                     .padding(.top, 2)
             }
         }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .cardStyle()
     }
 
     /// 분할 항목들의 카테고리를 중복 제거해 순서대로 반환 (같은 선물비 여러 개는 하나로).
@@ -305,6 +286,6 @@ struct TransactionRowView: View {
     }
 
     private func chip(_ text: String) -> some View {
-        Text(text).tagChip(color: .blue)
+        Text(text).tagChip(color: DS.Palette.deposit)
     }
 }

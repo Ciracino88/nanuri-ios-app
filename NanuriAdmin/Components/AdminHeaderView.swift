@@ -5,8 +5,6 @@ struct AdminHeaderView: View {
     let avatarUrl: String?
     let onRefresh: () -> Void
     let onProfileTap: () -> Void
-    /// 계좌부가 있는 화면에서만 넘긴다.
-    var onPayeesTap: (() -> Void)? = nil
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showLogoutAlert = false
 
@@ -18,27 +16,19 @@ struct AdminHeaderView: View {
             Spacer()
             HStack(spacing: 12) {
                 HStack(spacing: 0) {
-                    if let onPayeesTap {
-                        Button(action: onPayeesTap) {
-                            Image(systemName: "person.text.rectangle")
-                                .font(.system(size: 18, weight: .medium))
-                                .frame(width: 52, height: 44)
-                        }
-                        Divider().frame(height: 18)
-                    }
                     Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 18, weight: .medium))
-                            .frame(width: 52, height: 44)
+                            .font(.system(size: DS.Icon.action, weight: .medium))
+                            .frame(width: 52, height: DS.Size.avatar)
                     }
                     Divider().frame(height: 18)
                     Button {
                         showLogoutAlert = true
                     } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.red)
-                            .frame(width: 52, height: 44)
+                            .font(.system(size: DS.Icon.action, weight: .medium))
+                            .foregroundColor(DS.Palette.withdrawal)
+                            .frame(width: 52, height: DS.Size.avatar)
                     }
                     .alert("로그아웃", isPresented: $showLogoutAlert) {
                         Button("로그아웃", role: .destructive) {
@@ -53,7 +43,7 @@ struct AdminHeaderView: View {
                 .clipShape(Capsule())
 
                 Button(action: onProfileTap) {
-                    AvatarView(url: avatarUrl, size: 44)
+                    AvatarView(url: avatarUrl, size: DS.Size.avatar)
                 }
             }
         }
