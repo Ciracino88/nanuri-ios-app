@@ -4,7 +4,11 @@ import Foundation
 /// 원래 청구서 영수증용으로 만든 R2 버킷을, 재정 관리 영수증에서도 공용으로 재사용한다.
 enum ReceiptStorage {
     /// 청구서 영수증과 동일한 R2 Worker.
-    static let workerBaseUrl = "https://nanuri-bill.church-worker.workers.dev"
+    ///
+    /// 주소가 `<워커이름>.<계정서브도메인>.workers.dev` 형태라, Cloudflare 대시보드에서
+    /// 계정 서브도메인을 바꾸면 여기도 같이 고쳐야 한다. 안 고치면 업로드·삭제가 전부 깨진다.
+    /// (이미 저장된 이미지 URL은 pub-*.r2.dev 도메인이라 영향받지 않는다)
+    static let workerBaseUrl = "https://nanuri-bill.nanuri.workers.dev"
 
     enum StorageError: LocalizedError {
         case invalidEndpoint

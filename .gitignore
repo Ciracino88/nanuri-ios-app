@@ -60,3 +60,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Cloudflare Worker 로컬 빌드 캐시
+worker/.wrangler/
