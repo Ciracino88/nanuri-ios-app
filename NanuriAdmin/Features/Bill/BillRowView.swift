@@ -2,8 +2,12 @@ import SwiftUI
 
 struct BillRowView: View {
     let bill: Bill
+    /// 이름으로 찾은 계좌. 계좌부에 없으면 nil이고, 이때는 송금 대신 등록을 유도한다.
+    let payee: Payee?
     @ObservedObject var viewModel: BillViewModel
     @Binding var pendingBill: Bill?
+    /// 계좌 미등록 청구서에서 계좌부로 넘어갈 때 쓴다.
+    let onRegisterPayee: (String) -> Void
     @State private var showReceiptSheet = false
 
     var statusColor: Color {
@@ -20,10 +24,6 @@ struct BillRowView: View {
         case "rejected": return "거절"
         default: return "대기중"
         }
-    }
-
-    var bankInfo: String {
-        "\(bill.bankName) \(bill.accountNumber)".trimmingCharacters(in: .whitespaces)
     }
 
     @ViewBuilder
@@ -59,16 +59,30 @@ struct BillRowView: View {
             }
             .padding(.bottom, 8)
 
-            // 이름 + 계좌
+            // 이름 + 계좌부에서 찾은 계좌
             Text(bill.submitterName)
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.primary)
-            if !bankInfo.isEmpty {
-                Text(bankInfo)
+
+            if let payee {
+                Text(payee.accountLine)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.top, 1)
+            } else {
+                Button {
+                    onRegisterPayee(bill.submitterName)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text("계좌 미등록 · 등록하기")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 1)
             }
 
             Divider().padding(.vertical, 12)
@@ -80,17 +94,17 @@ struct BillRowView: View {
                     .fontWeight(.bold)
                 Spacer()
                 HStack(spacing: 6) {
-                    // 카카오 챗봇 경로에선 영수증이 없을 수 있다.
-                    if bill.hasReceipt {
-                        billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
-                            showReceiptSheet = true
-                        }
+                    billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
+                        showReceiptSheet = true
                     }
 
                     if bill.status == "pending" {
-                        billButton("paperplane.fill", bg: .blue, fg: .white) {
-                            pendingBill = bill
-                            viewModel.openToss(bill: bill)
+                        // 계좌를 모르면 송금할 수 없다. 계좌부 등록이 먼저다.
+                        if let payee {
+                            billButton("paperplane.fill", bg: .blue, fg: .white) {
+                                pendingBill = bill
+                                viewModel.openToss(bill: bill, payee: payee)
+                            }
                         }
                         billButton("xmark", bg: Color.red.opacity(0.1), fg: .red) {
                             Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
@@ -110,9 +124,7 @@ struct BillRowView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .sheet(isPresented: $showReceiptSheet) {
-            if let receiptUrl = bill.receiptUrl {
-                ReceiptSheetView(receiptUrl: receiptUrl)
-            }
+            ReceiptSheetView(receiptUrl: bill.receiptUrl)
         }
     }
 }

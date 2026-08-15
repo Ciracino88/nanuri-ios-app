@@ -5,6 +5,8 @@ struct AdminHeaderView: View {
     let avatarUrl: String?
     let onRefresh: () -> Void
     let onProfileTap: () -> Void
+    /// 계좌부가 있는 화면에서만 넘긴다.
+    var onPayeesTap: (() -> Void)? = nil
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showLogoutAlert = false
 
@@ -16,6 +18,14 @@ struct AdminHeaderView: View {
             Spacer()
             HStack(spacing: 12) {
                 HStack(spacing: 0) {
+                    if let onPayeesTap {
+                        Button(action: onPayeesTap) {
+                            Image(systemName: "person.text.rectangle")
+                                .font(.system(size: 18, weight: .medium))
+                                .frame(width: 52, height: 44)
+                        }
+                        Divider().frame(height: 18)
+                    }
                     Button(action: onRefresh) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 18, weight: .medium))

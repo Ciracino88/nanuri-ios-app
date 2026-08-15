@@ -8,13 +8,22 @@ private struct AvatarRow: Decodable {
     }
 }
 
+/// 계좌부 시트를 띄우는 트리거. name이 있으면 그 이름으로 등록 화면을 미리 연다.
+struct PayeeSheet: Identifiable {
+    let name: String?
+    var id: String { name ?? "__all__" }
+}
+
 struct BillListView: View {
     @StateObject private var viewModel = BillViewModel()
+    @StateObject private var payeeViewModel = PayeeViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showProfileEdit = false
     @State private var pendingBill: Bill? = nil
     @State private var selectedTab = 0
     @State private var avatarUrl: String?
+    /// 계좌부 시트. 미등록 청구서에서 넘어오면 이름이 담긴다.
+    @State private var payeeSheet: PayeeSheet?
 
     var pendingBills: [Bill] {
         viewModel.bills
@@ -34,8 +43,14 @@ struct BillListView: View {
                     AdminHeaderView(
                         title: "청구서 목록",
                         avatarUrl: avatarUrl,
-                        onRefresh: { Task { await viewModel.fetchBills() } },
-                        onProfileTap: { showProfileEdit = true }
+                        onRefresh: {
+                            Task {
+                                await viewModel.fetchBills()
+                                await payeeViewModel.fetchPayees(showLoading: false)
+                            }
+                        },
+                        onProfileTap: { showProfileEdit = true },
+                        onPayeesTap: { payeeSheet = PayeeSheet(name: nil) }
                     )
 
                     PillPicker(
@@ -61,7 +76,13 @@ struct BillListView: View {
                                 Spacer()
                             } else {
                                 List(bills) { bill in
-                                    BillRowView(bill: bill, viewModel: viewModel, pendingBill: $pendingBill)
+                                    BillRowView(
+                                        bill: bill,
+                                        payee: payeeViewModel.payee(for: bill.submitterName),
+                                        viewModel: viewModel,
+                                        pendingBill: $pendingBill,
+                                        onRegisterPayee: { name in payeeSheet = PayeeSheet(name: name) }
+                                    )
                                         .listRowInsets(EdgeInsets())
                                         .listRowBackground(Color.clear)
                                         .listRowSeparator(.hidden)
@@ -83,9 +104,13 @@ struct BillListView: View {
                 }) {
                     ProfileEditView()
                 }
+                .sheet(item: $payeeSheet) { sheet in
+                    PayeeListView(viewModel: payeeViewModel, prefilledName: sheet.name)
+                }
                 .sheet(item: $pendingBill) { bill in
                     TossResultView(
                         bill: bill,
+                        payee: payeeViewModel.payee(for: bill.submitterName),
                         onApprove: {
                             Task {
                                 await viewModel.updateStatus(billId: bill.id, status: "approved")
@@ -102,6 +127,7 @@ struct BillListView: View {
         }
         .task {
             await viewModel.fetchBills()
+            await payeeViewModel.fetchPayees()
             await loadAvatar()
             await viewModel.subscribeToRealtime()
         }
