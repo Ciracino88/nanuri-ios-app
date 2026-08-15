@@ -19,7 +19,7 @@
 | 3 | Apple Developer 갱신 | ⬜ 확인 필요 |
 | 4 | APNs 키 발급 → `APNS_KEY_ID` 파일에 기입 | ⬜ |
 | 5 | `APNS_P8` 시크릿 등록 | ⬜ |
-| 6 | 앱에 푸시 기능 구현 | ⬜ **코드 작업 (입력 아님)** |
+| 6 | Xcode 에서 Push Notifications capability 체크 | ⬜ **계정 활성화 후에** |
 
 3~6을 다 해야 푸시가 온다. **하나라도 빠지면 알림은 오지 않는다.**
 청구서 접수·저장 자체는 이미 동작하므로 급한 일은 아니다.
@@ -116,25 +116,35 @@ cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler 
 
 명령 뒤에 값을 직접 붙이지 말 것. 셸 히스토리에 남는다.
 
-## 6. 앱에 푸시 기능 구현 ⬜ (코드 작업)
+## 6. 앱 푸시 — Xcode 에서 capability 체크 ⬜
 
-**입력할 값이 아니라 아직 만들지 않은 기능이다.**
+코드는 들어가 있다 (`App/PushManager.swift`). 알림 권한 요청, APNs 등록,
+받은 토큰을 `device_tokens` 에 upsert 하는 것까지 되어 있다.
 
-현재 앱에는 푸시가 전혀 구현돼 있지 않다 — 알림 권한 요청도, `registerForRemote‐
-Notifications` 도, Push Notifications capability 도, 받은 디바이스 토큰을
-`device_tokens` 테이블에 넣는 코드도 없다.
+**남은 건 Xcode 에서 체크 하나다.**
 
-워커 쪽(`apns.js`, `device_tokens` 테이블, 시크릿 자리)만 미리 만들어져 있어서
-절반만 있는 상태다. 워커는 청구가 들어올 때마다 빈 토큰 목록을 받고 조용히
-아무것도 하지 않는다.
+Xcode > 프로젝트 선택 > TARGETS: NanuriAdmin > **Signing & Capabilities**
+→ 좌상단 **＋ Capability** → **Push Notifications** 추가
 
-즉 **3~5번을 다 해도 앱 작업 없이는 푸시가 오지 않는다.**
+이걸 해야 프로비저닝 프로파일에 `aps-environment` 가 들어간다. 없으면
+`registerForRemoteNotifications()` 가 `didFailToRegisterForRemoteNotifications`
+로 떨어진다. (앱은 그대로 동작하고 알림만 오지 않는다)
 
-필요한 작업:
-- Xcode > Signing & Capabilities 에서 Push Notifications 추가
-- 알림 권한 요청 + `registerForRemoteNotifications`
-- 받은 토큰을 `device_tokens` 에 upsert (`environment` 는 debug 빌드면 `sandbox`)
-- 시뮬레이터에서는 실제 APNs 토큰이 나오지 않으므로 실기기로 확인
+> ⚠️ **Apple 계정이 활성화된 뒤에 할 것.** 멤버십이 만료된 상태에서 capability 를
+> 추가하면 프로파일을 다시 만들지 못해 **코드 서명이 깨지고 빌드가 안 된다.**
+> 그래서 코드만 먼저 넣고 capability 는 남겨뒀다.
+
+확인은 실기기로 해야 한다. 시뮬레이터에서는 실제 APNs 토큰이 나오지 않는다.
+기기에서 앱을 켜고 알림 권한을 허용한 뒤, 청구 폼으로 한 건 넣어보면 된다.
+
+잘 안 되면 워커 로그를 본다:
+
+```bash
+cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler tail
+```
+
+`APNs 설정 없음: ...` 이 찍히면 4·5번이 덜 된 것이고,
+아무 로그도 없으면 `device_tokens` 가 비어 있는 것이다 (앱에서 토큰 등록 실패).
 
 ---
 

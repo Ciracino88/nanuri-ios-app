@@ -21,5 +21,9 @@ struct ContentView: View {
             selectedTab = 1
             financeViewModel.handleIncomingPDF(url: url)
         }
+        // 로그인한 뒤에 부른다. 토큰을 저장하려면 auth.uid() 가 필요하다.
+        .task {
+            await PushManager.shared.requestAuthorizationAndRegister()
+        }
     }
 }

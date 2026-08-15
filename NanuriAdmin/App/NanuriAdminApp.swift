@@ -5,6 +5,8 @@ import Combine
 @main
 struct NanuriAdminApp: App {
     @StateObject private var authViewModel = AuthViewModel()
+    // APNs 콜백은 UIKit 델리게이트로만 온다.
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
 
     var body: some Scene {
         WindowGroup {
