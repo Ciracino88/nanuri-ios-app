@@ -10,15 +10,7 @@ struct StatementsListView: View {
         NavigationView {
             Group {
                 if viewModel.savedStatements.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 44))
-                            .foregroundColor(.secondary)
-                        Text("보관된 거래내역서가 없어요")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    EmptyStateView(title: "보관된 거래내역서가 없어요", icon: "folder")
                 } else {
                     List {
                         ForEach(viewModel.savedStatements) { statement in

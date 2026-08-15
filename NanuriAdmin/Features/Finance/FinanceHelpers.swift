@@ -76,30 +76,23 @@ struct FinanceLedgerGateView: View {
         NavigationView {
             Group {
                 if viewModel.ledgers.isEmpty {
-                    VStack(spacing: 14) {
-                        Image(systemName: "books.vertical")
-                            .font(.system(size: 46))
-                            .foregroundColor(.secondary)
-                        Text("장부가 없어요")
-                            .font(.headline)
-                        Text("통장별로 장부를 만들어 관리해요.\n상시 계좌는 '월별 회계', 행사 통장은 '행사 결산'.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+                    EmptyStateView(
+                        title: "장부가 없어요",
+                        icon: "books.vertical",
+                        message: "통장별로 장부를 만들어 관리해요.\n상시 계좌는 '월별 회계', 행사 통장은 '행사 결산'."
+                    ) {
                         Button {
                             showNewLedger = true
                         } label: {
                             Label("새 장부 만들기", systemImage: "plus")
                                 .fontWeight(.medium)
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, DS.Spacing.screen)
                                 .padding(.vertical, 10)
-                                .background(Color.blue)
+                                .background(DS.Palette.deposit)
                                 .foregroundColor(.white)
                                 .clipShape(Capsule())
                         }
-                        .padding(.top, 8)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
                         ForEach(viewModel.ledgers) { ledger in
@@ -108,10 +101,10 @@ struct FinanceLedgerGateView: View {
                             } label: {
                                 HStack(spacing: 14) {
                                     Image(systemName: ledger.mode.icon)
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.blue)
+                                        .font(.system(size: DS.Icon.feature))
+                                        .foregroundColor(DS.Palette.deposit)
                                         .frame(width: 42, height: 42)
-                                        .background(Color.blue.opacity(0.1))
+                                        .background(DS.Palette.deposit.opacity(0.1))
                                         .clipShape(RoundedRectangle(cornerRadius: 11))
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(ledger.name)
@@ -142,7 +135,7 @@ struct FinanceLedgerGateView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showNewLedger = true } label: {
-                        Image(systemName: "plus").font(.system(size: 18, weight: .medium))
+                        Image(systemName: "plus").font(.system(size: DS.Icon.action, weight: .medium))
                     }
                 }
             }

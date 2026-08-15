@@ -9,7 +9,7 @@ struct PillPicker: View {
         HStack(spacing: 6) {
             ForEach(tabs.indices, id: \.self) { index in
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DS.Motion.control) {
                         selection = index
                     }
                 } label: {
@@ -30,7 +30,7 @@ struct PillPicker: View {
                     .frame(maxWidth: .infinity)
                     .background {
                         if selection == index {
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: DS.Radius.button)
                                 .fill(Color(.systemBackground))
                                 .shadow(color: .black.opacity(0.07), radius: 4, x: 0, y: 2)
                                 .matchedGeometryEffect(id: "pill", in: pillNamespace)
@@ -41,8 +41,8 @@ struct PillPicker: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(DS.Spacing.tight)
         .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.control))
     }
 }
