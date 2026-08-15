@@ -20,7 +20,21 @@ struct FinanceView: View {
 
     private func content(ledger: Ledger) -> some View {
         let mode = ledger.mode
-        return NavigationView {
+        return VStack(spacing: 0) {
+            // 가운데는 탭 이름이고, 누르면 장부 게이트로 돌아간다 (장부 전환).
+            AdminHeaderView(
+                title: "재정",
+                titleAction: { viewModel.currentLedger = nil },
+                onRefresh: {
+                    Task {
+                        await viewModel.fetchTransactions()
+                        viewModel.loadSavedStatements()
+                    }
+                }
+            ) {
+                actionMenu(mode: mode)
+            }
+
             VStack(spacing: 0) {
                 if viewModel.isLoading {
                     Spacer()
@@ -30,7 +44,7 @@ struct FinanceView: View {
                     emptyView
                 } else {
                     if mode == .monthly { dateFilterBar }
-                    summaryCard
+                    summaryCard(ledger: ledger)
                     PillPicker(
                         tabs: [
                             ("전체", viewModel.filtered.count),
@@ -42,60 +56,6 @@ struct FinanceView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
                     transactionList
-                }
-            }
-            .navigationTitle(ledger.name)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        viewModel.currentLedger = nil
-                    } label: {
-                        Image(systemName: "rectangle.2.swap")
-                            .font(.system(size: DS.Icon.action, weight: .medium))
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 20) {
-                        Menu {
-                            Button {
-                                exportMessage = "보고서 만드는 중…"
-                                isExporting = true
-                                Task {
-                                    // 오버레이가 먼저 그려지도록 한 틱 양보한 뒤 생성
-                                    try? await Task.sleep(nanoseconds: 30_000_000)
-                                    let url = viewModel.exportReportPDF()
-                                    isExporting = false
-                                    if let url { exportFile = ExportFile(url: url) }
-                                }
-                            } label: {
-                                Label("\(mode.title) (PDF)", systemImage: "doc.text")
-                            }
-                            Button {
-                                exportMessage = "영수증 내보내는 중…"
-                                isExporting = true
-                                Task {
-                                    let url = await viewModel.exportReceiptsPDF()
-                                    isExporting = false
-                                    if let url { exportFile = ExportFile(url: url) }
-                                }
-                            } label: {
-                                Label("영수증 부록 (PDF)", systemImage: "paperclip")
-                            }
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: DS.Icon.action, weight: .medium))
-                        }
-                        .disabled(viewModel.filtered.isEmpty)
-
-                        Button {
-                            viewModel.loadSavedStatements()
-                            showStatements = true
-                        } label: {
-                            Image(systemName: "folder")
-                                .font(.system(size: DS.Icon.action, weight: .medium))
-                        }
-                    }
                 }
             }
             .overlay {
@@ -129,6 +89,7 @@ struct FinanceView: View {
                 ShareSheet(items: [file.url])
             }
         }
+        .screenBackground()
         .task {
             await viewModel.fetchTransactions()
             viewModel.loadSavedStatements()
@@ -165,13 +126,25 @@ struct FinanceView: View {
         .padding(.vertical, 10)
     }
 
-    private var summaryCard: some View {
-        HStack(spacing: 12) {
-            summaryItem(label: "총 입금", amount: viewModel.totalDeposit, color: DS.Palette.deposit)
-            Divider().frame(height: 40)
-            summaryItem(label: "총 출금", amount: viewModel.totalWithdrawal, color: DS.Palette.withdrawal)
-            Divider().frame(height: 40)
-            summaryItem(label: "잔액", amount: viewModel.totalDeposit - viewModel.totalWithdrawal, color: .primary)
+    /// 헤더 가운데가 탭 이름("재정")이 되면서 지금 보고 있는 장부 이름이 갈 곳이
+    /// 없어졌다. 요약 카드 첫 줄이 그 자리다 — 금액을 볼 때 어느 통장인지 같이 보인다.
+    private func summaryCard(ledger: Ledger) -> some View {
+        VStack(spacing: DS.Spacing.medium) {
+            HStack(spacing: DS.Spacing.small) {
+                Image(systemName: ledger.mode.icon)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(ledger.name)
+                    .rowSubtext()
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 12) {
+                summaryItem(label: "총 입금", amount: viewModel.totalDeposit, color: DS.Palette.deposit)
+                Divider().frame(height: 40)
+                summaryItem(label: "총 출금", amount: viewModel.totalWithdrawal, color: DS.Palette.withdrawal)
+                Divider().frame(height: 40)
+                summaryItem(label: "잔액", amount: viewModel.totalDeposit - viewModel.totalWithdrawal, color: .primary)
+            }
         }
         .cardStyle()
         .padding(.horizontal, DS.Spacing.screen)
@@ -185,7 +158,7 @@ struct FinanceView: View {
                 .foregroundColor(.secondary)
             Text("\(abs(amount).formatted())원")
                 .font(.subheadline)
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
                 .foregroundColor(color)
         }
         .frame(maxWidth: .infinity)
@@ -214,8 +187,53 @@ struct FinanceView: View {
         EmptyStateView(
             title: "거래내역이 없어요",
             icon: "doc.richtext",
-            message: "토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 폴더에서 열어 '거래내역 불러오기'를 눌러주세요"
+            message: "토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 ⋯ 에서 '저장된 거래내역서'를 열어\n'거래내역 불러오기'를 눌러주세요"
         )
+    }
+
+    /// 헤더의 화면별 동작 자리는 하나뿐이라 내보내기·거래내역서를 한 메뉴로 묶는다.
+    private func actionMenu(mode: FinanceReportMode) -> some View {
+        Menu {
+            Button {
+                exportMessage = "보고서 만드는 중…"
+                isExporting = true
+                Task {
+                    // 오버레이가 먼저 그려지도록 한 틱 양보한 뒤 생성
+                    try? await Task.sleep(nanoseconds: 30_000_000)
+                    let url = viewModel.exportReportPDF()
+                    isExporting = false
+                    if let url { exportFile = ExportFile(url: url) }
+                }
+            } label: {
+                Label("\(mode.title) (PDF)", systemImage: "doc.text")
+            }
+            .disabled(viewModel.filtered.isEmpty)
+
+            Button {
+                exportMessage = "영수증 내보내는 중…"
+                isExporting = true
+                Task {
+                    let url = await viewModel.exportReceiptsPDF()
+                    isExporting = false
+                    if let url { exportFile = ExportFile(url: url) }
+                }
+            } label: {
+                Label("영수증 부록 (PDF)", systemImage: "paperclip")
+            }
+            .disabled(viewModel.filtered.isEmpty)
+
+            Divider()
+
+            Button {
+                viewModel.loadSavedStatements()
+                showStatements = true
+            } label: {
+                Label("저장된 거래내역서", systemImage: "folder")
+            }
+        } label: {
+            HeaderIcon(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("더 보기")
     }
 }
 
@@ -243,7 +261,7 @@ struct TransactionRowView: View {
                 Spacer()
                 Text(transaction.isDeposit ? "+\(transaction.amount.formatted())원" : "\(transaction.amount.formatted())원")
                     .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
                     .foregroundColor(transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal)
             }
             HStack {
@@ -255,7 +273,7 @@ struct TransactionRowView: View {
                         Image(systemName: "paperclip")
                         Text("\(transaction.receipts.count)")
                     }
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundColor(DS.Palette.deposit)
                 }
                 Spacer()

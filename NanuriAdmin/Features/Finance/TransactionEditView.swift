@@ -64,7 +64,7 @@ struct TransactionEditView: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button("저장") { save() }.fontWeight(.semibold)
+                        Button("저장") { save() }.fontWeight(.medium)
                     }
                 }
             }
@@ -278,7 +278,7 @@ struct TransactionEditView: View {
 
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: DS.Icon.action))
                     .foregroundStyle(.white, .black.opacity(0.55))
             }
             .buttonStyle(.plain)
@@ -379,7 +379,7 @@ struct SplitEditSheet: View {
                         onSave(SplitDraft(id: initial.id, category: category, amount: amount, memo: memo))
                         dismiss()
                     }
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
                 }
             }
             .presentationDetents([.medium, .large])
@@ -452,7 +452,7 @@ struct ReceiptViewerView: View {
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 30))
+                        .font(.system(size: DS.Icon.feature))
                         .foregroundStyle(.white, .white.opacity(0.3))
                 }
                 .padding()

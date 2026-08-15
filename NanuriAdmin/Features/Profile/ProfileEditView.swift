@@ -45,11 +45,11 @@ struct ProfileEditView: View {
                                         defaultAvatarIcon
                                     }
                                 }
-                                .frame(width: 90, height: 90)
+                                .frame(width: DS.Size.avatar, height: DS.Size.avatar)
                                 .clipShape(Circle())
 
                                 Image(systemName: "camera.circle.fill")
-                                    .font(.system(size: 26))
+                                    .font(.system(size: DS.Icon.feature))
                                     .foregroundColor(.accentColor)
                                     .background(Color(.systemBackground).clipShape(Circle()))
                                     .offset(x: 4, y: 4)

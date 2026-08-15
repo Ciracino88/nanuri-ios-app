@@ -15,7 +15,8 @@
 | `worker/` | Cloudflare Worker `nanuri-form`. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
 | `supabase/migrations/` | DB 스키마. 최신 것이 진실이고 앞의 것은 이력 |
 
-앱 탭은 **청구서 / 재정 / 계좌부** 세 개다 (`App/ContentView.swift`).
+앱 탭은 **청구서 / 재정 / 계좌부 / 프로필** 네 개다 (`App/ContentView.swift`).
+모든 탭은 `AdminHeaderView` 를 쓰고 내비게이션 바는 없다. 헤더 규칙은 `DESIGN.md` 1번.
 
 `PayeeViewModel` 은 **`ContentView` 가 하나만 만들어** 청구서 탭과 계좌부 탭에
 넘긴다. 탭마다 따로 만들면 한쪽에서 등록한 계좌가 다른 쪽에 안 보인다.
@@ -123,7 +124,18 @@ RLS가 실제로 막는지는 `set role anon;` 으로 직접 찔러보면 된다
   - 워커는 `device_tokens.environment` 로 APNs 호스트를 고르고, 앱은 `#if DEBUG`
     로 그 값을 정한다. **이 둘이 한 세트다.** Release 구성을 development 프로파일로
     기기에 올리면 `BadDeviceToken` 이 나고 화면에는 아무 것도 안 뜬다.
-- **다음 작업은 디자인 개선이다.** 무엇을 손볼지는 `DESIGN.md` 맨 아래에 있다.
+- 헤더 통일 · 프로필 탭 · 알림함은 2026-08-16 에 넣었고 **빌드만 확인했다.**
+  아직 화면으로 못 봤다 (`DESIGN.md` 맨 아래 5번).
+- **다음 작업은 계속 디자인 개선이다.** 무엇을 손볼지는 `DESIGN.md` 맨 아래에 있다.
+
+### 알림함은 기기에만 있다
+
+헤더 종 버튼이 여는 목록(`Features/Notification/`)은 **DB 를 안 본다.** 이 기기가
+실제로 받은 푸시가 전부다 — 앱이 켜져 있을 때 온 것(`PushAppDelegate`)과 꺼져
+있는 동안 와서 알림 센터에 남아 있는 것(`syncFromNotificationCenter`)을 합쳐
+`UserDefaults` 에 100개까지 쌓는다.
+사용자가 알림 센터에서 지운 알림은 못 줍고, 기기를 바꾸면 비어 있다.
+기록이 남아야 한다면 그건 알림 테이블이 필요한 별개의 일이다.
 
 ## 주의
 

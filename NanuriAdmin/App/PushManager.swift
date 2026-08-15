@@ -110,10 +110,21 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     }
 
     /// 앱을 보고 있는 중에도 알림을 띄운다. 관리자 1인 전용이라 놓치면 곤란하다.
+    /// 배너는 금방 사라지므로 헤더 알림함에도 같이 넣어 둔다.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .badge]
+        await NotificationStore.shared.record(notification)
+        return [.banner, .sound, .badge]
+    }
+
+    /// 알림을 눌러서 앱이 열린 경우. 이때는 iOS 가 알림 센터에서 그 알림을 지우므로
+    /// `syncFromNotificationCenter()` 로는 못 줍는다. 여기서 직접 넣는다.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        await NotificationStore.shared.record(response.notification)
     }
 }

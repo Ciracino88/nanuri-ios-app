@@ -23,7 +23,21 @@ struct PayeeListView: View {
     }
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            AdminHeaderView(title: "계좌부") {
+                Task { await viewModel.fetchPayees(showLoading: false) }
+            } trailing: {
+                HeaderIconButton(systemName: "plus", label: "계좌 추가") {
+                    editing = .create("")
+                }
+            }
+
+            if !viewModel.payees.isEmpty {
+                SearchField(prompt: "이름 · 은행 · 계좌번호", text: $query)
+                    .padding(.horizontal, DS.Spacing.screen)
+                    .padding(.vertical, DS.Spacing.medium)
+            }
+
             Group {
                 if viewModel.isLoading && viewModel.payees.isEmpty {
                     ProgressView()
@@ -44,35 +58,23 @@ struct PayeeListView: View {
                     list
                 }
             }
-            .screenBackground()
-            .navigationTitle("계좌부")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        editing = .create("")
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: DS.Icon.action, weight: .medium))
-                    }
-                }
+        }
+        .screenBackground()
+        .sheet(item: $editing) { target in
+            PayeeEditView(viewModel: viewModel, target: target)
+        }
+        .alert("계좌를 삭제할까요?", isPresented: deleteAlertBinding, presenting: deleteTarget) { payee in
+            Button("삭제", role: .destructive) {
+                Task { await viewModel.delete(id: payee.id) }
             }
-            .searchable(text: $query, prompt: "이름 · 은행 · 계좌번호")
-            .sheet(item: $editing) { target in
-                PayeeEditView(viewModel: viewModel, target: target)
-            }
-            .alert("계좌를 삭제할까요?", isPresented: deleteAlertBinding, presenting: deleteTarget) { payee in
-                Button("삭제", role: .destructive) {
-                    Task { await viewModel.delete(id: payee.id) }
-                }
-                Button("취소", role: .cancel) {}
-            } message: { payee in
-                Text("\(payee.name) · \(payee.accountLine)\n청구서에서 이 이름은 다시 '계좌 미등록'으로 표시돼요.")
-            }
-            .alert("오류", isPresented: .constant(viewModel.error != nil)) {
-                Button("확인") { viewModel.error = nil }
-            } message: {
-                Text(viewModel.error ?? "")
-            }
+            Button("취소", role: .cancel) {}
+        } message: { payee in
+            Text("\(payee.name) · \(payee.accountLine)\n청구서에서 이 이름은 다시 '계좌 미등록'으로 표시돼요.")
+        }
+        .alert("오류", isPresented: .constant(viewModel.error != nil)) {
+            Button("확인") { viewModel.error = nil }
+        } message: {
+            Text(viewModel.error ?? "")
         }
         .task {
             await viewModel.fetchPayees()
@@ -123,7 +125,7 @@ struct PayeeListView: View {
                     .rowSubtext()
                 if let memo = payee.memo, !memo.isEmpty {
                     Text(memo)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
