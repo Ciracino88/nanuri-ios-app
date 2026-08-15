@@ -40,6 +40,13 @@ struct LoginView: View {
             .disabled(authViewModel.isLoading)
             .opacity(authViewModel.isLoading ? 0.5 : 1)
 
+            if let errorMessage = authViewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+            }
+
             Spacer()
         }
         .padding(.horizontal, 32)
