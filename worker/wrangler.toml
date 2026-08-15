@@ -18,6 +18,16 @@ SUPABASE_URL = "https://ciszaukmnglepvqpulya.supabase.co"
 # APNs 토픽 = 앱 번들 ID
 APNS_TOPIC = "com.ciracino88.NanuriAdmin"
 
+# Apple Developer 팀 ID.
+# 비밀이 아니다. 배포되는 앱 바이너리의 embedded.mobileprovision 안에 들어가고
+# Xcode Signing & Capabilities 탭에도 그대로 표시된다.
+APNS_TEAM_ID = "23ULXV7A5W"
+
+# APNs 인증 키 ID (10자리). 키를 가리키는 번호일 뿐 단독으로는 아무것도 못 한다.
+# developer.apple.com > Certificates, Identifiers & Profiles > Keys 에서
+# APNs 키를 만들면 나온다. 만든 뒤 여기에 채우고 배포할 것.
+APNS_KEY_ID = ""
+
 # 공개 폼이라 제출을 IP당 분당 5건으로 제한하려고 걸어둔 바인딩.
 #
 # ⚠️ 2026-08-15 현재 이 계정에서는 실제로 카운팅이 되지 않는다.
@@ -32,8 +42,9 @@ name = "SUBMIT_RATE_LIMIT"
 namespace_id = "2001"
 simple = { limit = 5, period = 60 }
 
-# 시크릿은 여기 두지 않는다. wrangler secret put 으로 등록한다.
-#   SUPABASE_SERVICE_ROLE_KEY  RLS를 우회하는 키. 절대 앱에 넣지 말 것.
-#   APNS_KEY_ID                APNs 인증 키 ID
-#   APNS_TEAM_ID               Apple Developer 팀 ID
-#   APNS_P8                    .p8 파일 내용 전체 (BEGIN/END 줄 포함)
+# 진짜 비밀만 시크릿으로 둔다. wrangler secret put 으로 등록한다.
+# (위 [vars] 에 있는 값들은 유출돼도 그 자체로는 아무것도 못 하는 식별자다)
+#
+#   SUPABASE_SERVICE_ROLE_KEY  RLS를 통째로 우회한다. 절대 앱에 넣지 말 것.
+#   APNS_P8                    푸시를 서명하는 개인키. .p8 파일 내용 전체
+#                              (-----BEGIN PRIVATE KEY----- 줄까지 포함)
