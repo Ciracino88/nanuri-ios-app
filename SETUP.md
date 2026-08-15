@@ -8,21 +8,20 @@
 
 ## 요약
 
-**앞으로 입력해야 하는 비밀은 딱 하나다 — `APNS_P8`.**
-
-나머지는 파일에 적거나(비밀이 아님), 이미 끝났거나, 코드 작업이다.
+**전부 끝났다.**
 
 | # | 할 일 | 상태 |
 |---|---|---|
 | 1 | Supabase 마이그레이션 적용 | ✅ 완료 |
 | 2 | `SUPABASE_SERVICE_ROLE_KEY` 등록 | ✅ 완료 |
-| 3 | Apple Developer 갱신 | ⬜ 확인 필요 |
-| 4 | APNs 키 발급 → `APNS_KEY_ID` 파일에 기입 | ⬜ |
-| 5 | `APNS_P8` 시크릿 등록 | ⬜ |
-| 6 | Xcode 에서 Push Notifications capability 체크 | ⬜ **계정 활성화 후에** |
+| 3 | Apple Developer 갱신 | ✅ 완료 (2026-08-15) |
+| 4 | APNs 키 발급 → `APNS_KEY_ID` 기입 | ✅ 완료 (`L7P845D626`, 배포됨) |
+| 5 | `APNS_P8` 시크릿 등록 | ✅ 완료 |
+| 6 | Xcode Push Notifications capability | ✅ 완료 (`NanuriAdmin.entitlements`) |
+| 7 | 실기기에서 푸시 수신 확인 | ✅ 완료 (2026-08-15) |
 
-3~6을 다 해야 푸시가 온다. **하나라도 빠지면 알림은 오지 않는다.**
-청구서 접수·저장 자체는 이미 동작하므로 급한 일은 아니다.
+**푸시까지 끝났다. 이 문서에서 지금 해야 할 일은 없다.**
+아래는 다시 설정해야 할 때를 위한 절차와, 안 될 때 볼 곳이다.
 
 ---
 
@@ -48,7 +47,13 @@ DB 비밀번호는 Supabase Dashboard > Project Settings > Database > Database p
 cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 ```
 
-## 3. Apple Developer 갱신 ⬜
+## 3. Apple Developer 갱신 ✅
+
+**2026-08-15 완료.** Keys 화면에서 키를 만들 수 있는 걸로 확인했다.
+아래는 다시 만료됐을 때를 위해 남겨둔다.
+
+<details>
+<summary>만료됐을 때</summary>
 
 멤버십이 만료되면 Certificates, Identifiers & Profiles 접근이 완전히 막힌다.
 그래서 4번(APNs 키 발급)이 불가능하다.
@@ -74,12 +79,22 @@ Apple 은 둘을 따로 처리하고 **활성화까지 보통 24~48시간** 걸�
 - 48시간이 지나도 그대로면 주문 번호를 갖고
   [Apple Developer Support](https://developer.apple.com/contact/) 에 문의한다
 
-## 4. APNs 키 발급 → APNS_KEY_ID ⬜
+</details>
+
+## 4. APNs 키 발급 → APNS_KEY_ID ✅
+
+**2026-08-15 완료.** 키 이름 `NanuriAdmin APNs`, Key ID `L7P845D626`.
+`wrangler.toml` 에 기입하고 배포까지 끝났다. 아래는 키를 다시 만들어야 할 때를 위한 절차다.
 
 [developer.apple.com/account](https://developer.apple.com/account)
 → **Certificates, Identifiers & Profiles** → **Keys** → **＋**
 → 이름 입력, **Apple Push Notifications service (APNs)** 체크
 → Continue → Register → **`.p8` 파일 다운로드**
+
+이름은 **`NanuriAdmin APNs`** 로 한다. 이름은 기능과 무관하고(워커는 Key ID 와
+`.p8` 만 쓴다) 목록에서 알아보는 용도다. 다만 **만든 뒤에는 못 바꾸고**, 입력창이
+영숫자와 공백만 받는다 (`-`, `_`, `.` 은 거부될 수 있다).
+APNs 키는 **팀당 최대 2개**라 아무렇게나 만들어 쌓지 않는다.
 
 > ⚠️ `.p8` 은 **딱 한 번만** 다운로드된다. 잃어버리면 키를 폐기하고 새로 만들어야 한다.
 > 받은 파일은 안전한 곳에 보관할 것.
@@ -102,7 +117,9 @@ Xcode 화면에도 그대로 보인다. Key ID 도 키를 가리키는 번호일
 cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler deploy
 ```
 
-## 5. APNS_P8 시크릿 등록 ⬜
+## 5. APNS_P8 시크릿 등록 ✅
+
+**2026-08-15 완료.** 아래는 키를 새로 발급했을 때를 위한 절차다.
 
 **이것만이 진짜 비밀이다.** 푸시를 서명하는 개인키라, 유출되면 남이 이 앱 이름으로
 알림을 보낼 수 있다.
@@ -114,27 +131,31 @@ cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler 
 물어보면 다운로드한 `.p8` 파일 내용을 **전체** 붙여넣는다.
 `-----BEGIN PRIVATE KEY-----` 줄과 `-----END PRIVATE KEY-----` 줄까지 포함이다.
 
+파일을 그대로 파이프하는 쪽이 확실하다. 줄바꿈이 깨질 일이 없다:
+
+```bash
+cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler secret put APNS_P8 < ~/경로/AuthKey_XXXXXXXXXX.p8
+```
+
 명령 뒤에 값을 직접 붙이지 말 것. 셸 히스토리에 남는다.
 
-## 6. 앱 푸시 — Xcode 에서 capability 체크 ⬜
+`.p8` 원본은 Downloads 같은 곳에 두지 않는다. 재발급이 안 되는 파일이라
+날리면 키를 폐기하고 새로 만들어야 한다 (APNs 키는 팀당 최대 2개).
 
-코드는 들어가 있다 (`App/PushManager.swift`). 알림 권한 요청, APNs 등록,
-받은 토큰을 `device_tokens` 에 upsert 하는 것까지 되어 있다.
+## 6. 앱 푸시 — Xcode capability ✅
 
-**남은 건 Xcode 에서 체크 하나다.**
+**2026-08-15 완료.** `NanuriAdmin/NanuriAdmin.entitlements` 에 `aps-environment`
+가 들어갔고 Debug·Release 양쪽 설정이 이 파일을 가리킨다.
 
-Xcode > 프로젝트 선택 > TARGETS: NanuriAdmin > **Signing & Capabilities**
-→ 좌상단 **＋ Capability** → **Push Notifications** 추가
+> **＋ Capability 목록에 Push Notifications 가 안 보이면** Xcode 가 만료된 멤버십
+> 상태를 캐시하고 있는 것이다. Xcode > Settings > Accounts > 팀 선택 >
+> **Download Manual Profiles** 후 Xcode 를 완전히 종료(⌘Q)했다 다시 연다.
 
-이걸 해야 프로비저닝 프로파일에 `aps-environment` 가 들어간다. 없으면
-`registerForRemoteNotifications()` 가 `didFailToRegisterForRemoteNotifications`
-로 떨어진다. (앱은 그대로 동작하고 알림만 오지 않는다)
+## 7. 실기기에서 푸시 수신 확인 ✅
 
-> ⚠️ **Apple 계정이 활성화된 뒤에 할 것.** 멤버십이 만료된 상태에서 capability 를
-> 추가하면 프로파일을 다시 만들지 못해 **코드 서명이 깨지고 빌드가 안 된다.**
-> 그래서 코드만 먼저 넣고 capability 는 남겨뒀다.
+**2026-08-15 완료.** 공개 폼으로 제출한 청구가 실기기 알림까지 도착하는 걸 확인했다.
 
-확인은 실기기로 해야 한다. 시뮬레이터에서는 실제 APNs 토큰이 나오지 않는다.
+다시 확인해야 하면 — 확인은 실기기로 해야 한다. 시뮬레이터에서는 실제 APNs 토큰이 나오지 않는다.
 기기에서 앱을 켜고 알림 권한을 허용한 뒤, 청구 폼으로 한 건 넣어보면 된다.
 
 잘 안 되면 워커 로그를 본다:
@@ -145,6 +166,17 @@ cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler 
 
 `APNs 설정 없음: ...` 이 찍히면 4·5번이 덜 된 것이고,
 아무 로그도 없으면 `device_tokens` 가 비어 있는 것이다 (앱에서 토큰 등록 실패).
+`BadDeviceToken` 이 찍히면 토큰의 환경과 보낸 서버가 어긋난 것이다 — 아래 참고.
+
+### 환경(sandbox/production)이 어긋나면 조용히 실패한다
+
+워커는 `device_tokens.environment` 값을 보고 보낼 서버를 고른다
+(`sandbox` → `api.sandbox.push.apple.com`, 아니면 `api.push.apple.com`).
+앱은 `PushManager.apnsEnvironment` 에서 **`#if DEBUG` 로** 그 값을 정한다.
+
+그래서 **Xcode 의 Run 은 Debug 여야 한다.** Release 구성으로 기기에 올리면서
+서명은 development 프로파일로 하면, 토큰은 sandbox 인데 앱은 `production` 이라고
+기록해서 APNs 가 `BadDeviceToken` 을 돌려준다. 화면에는 아무 것도 안 뜬다.
 
 ---
 
