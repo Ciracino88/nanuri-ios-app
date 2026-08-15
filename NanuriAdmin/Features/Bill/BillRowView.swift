@@ -48,10 +48,9 @@ struct BillRowView: View {
                 Spacer()
                 HStack(spacing: 6) {
                     Text(bill.createdAt.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     Text(statusLabel)
-                        .fontWeight(.medium)
                         .tagChip(color: statusColor)
                 }
             }
@@ -141,7 +140,7 @@ struct ReceiptSheetView: View {
                         case .failure:
                             VStack(spacing: 12) {
                                 Image(systemName: "exclamationmark.triangle")
-                                    .font(.largeTitle)
+                                    .font(.system(size: DS.Icon.placeholder))
                                     .foregroundColor(.gray)
                                 Text("이미지를 불러올 수 없어요")
                                     .foregroundColor(.gray)

@@ -13,8 +13,7 @@ struct LoginView: View {
                     .font(.caption)
                     .foregroundColor(.gray)
                 Text("관리자 페이지")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .headerTitle()
             }
 
             Spacer()
@@ -42,7 +41,7 @@ struct LoginView: View {
 
             if let errorMessage = authViewModel.errorMessage {
                 Text(errorMessage)
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundColor(.red)
                     .multilineTextAlignment(.center)
             }

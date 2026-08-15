@@ -4,7 +4,7 @@ extension View {
     /// 정적 태그 칩 (읽기 전용 라벨). 예: 카테고리 태그, 상태 배지.
     func tagChip(color: Color) -> some View {
         self
-            .font(.caption2)
+            .font(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(color.opacity(0.12))

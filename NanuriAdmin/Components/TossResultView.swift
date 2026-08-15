@@ -14,7 +14,7 @@ struct TossResultView: View {
                     .fill(Color.blue.opacity(0.12))
                     .frame(width: 56, height: 56)
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: DS.Icon.feature))
                     .foregroundColor(.blue)
             }
             .padding(.bottom, 16)
@@ -57,7 +57,7 @@ struct TossResultView: View {
             HStack(spacing: 10) {
                 Button(action: onCancel) {
                     Text("취소")
-                        .font(.body)
+                        .font(.subheadline)
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -69,7 +69,7 @@ struct TossResultView: View {
 
                 Button(action: onApprove) {
                     Text("송금 완료")
-                        .font(.body)
+                        .font(.subheadline)
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)

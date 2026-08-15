@@ -11,12 +11,45 @@
 
 ## 1. 화면의 뼈대
 
-모든 목록 화면은 같은 구조다.
+모든 탭은 같은 구조다.
 
 ```
-화면 배경 systemGroupedBackground
-└─ 카드 systemBackground · radius 16 · 그림자 6%
+화면 배경 systemGroupedBackground  (안전영역까지)
+├─ 헤더 AdminHeaderView   배경 없음 — 화면 배경 위에 그냥 얹힌다
+└─ 카드  systemBackground · radius 16 · 그림자 6%
 ```
+
+**헤더에 배경색도 구분선도 주지 않는다.** 목록이 헤더 아래로 지나가지 않으므로
+(같은 `VStack` 안이다) 경계를 그릴 이유가 없다. 상단에 색이 다른 띠가 하나 더
+생기면 화면이 그만큼 낮아 보인다. 그래서 `screenBackground()` 는 안전영역까지
+덮는다 — 안 그러면 상태바 자리에만 다른 색이 남는다.
+
+### 헤더 (`AdminHeaderView`)
+
+**모든 탭이 이 헤더를 쓴다.** 내비게이션 바는 전부 걷어냈다 — `NavigationView` +
+`.navigationTitle` 을 섞어 쓰던 시절엔 탭마다 상단 높이도 제목 크기도 달랐다.
+
+슬롯은 셋뿐이고 자리가 고정돼 있다.
+
+| 자리 | 내용 |
+| --- | --- |
+| 왼쪽 | 새로고침 (헤더가 직접 갖는다) |
+| 가운데 | **탭 이름** |
+| 오른쪽 | 알림 (헤더가 직접 갖는다) |
+
+- 새로고침과 알림은 어느 탭에서나 같은 자리에 있어야 해서 **화면이 넘기지 않는다.**
+  화면은 `onRefresh` 로 "무엇을 다시 불러올지"만 준다.
+- 화면마다 다른 동작은 **알림 왼쪽에 하나만** 둔다 (`trailing:`). 둘 이상이면
+  `Menu` 하나로 묶는다 — 재정 탭의 `ellipsis.circle` 이 그 예다. 아이콘을 늘리면
+  가운데 이름이 밀린다.
+- 가운데를 눌러야 하는 화면은 `titleAction` 을 준다. 그러면 이름 옆에
+  `chevron.down` 이 붙는다 (재정 탭 → 장부 게이트로 되돌아가기).
+  **장부 이름처럼 "지금 무엇을 보는 중인지"는 제목이 아니라 화면 안에 적는다**
+  (재정 탭은 요약 카드 첫 줄).
+- 안 읽은 알림은 **주황 점** 하나로만 알린다. 빨강이 아닌 이유는 5번에 있다.
+
+내비게이션 바가 없으므로 `.searchable` 도 못 쓴다. 검색은 헤더 바로 아래
+`SearchField` 를 놓는다 (계좌부 탭).
 
 - 목록은 `List` + `.listStyle(.plain)` + `.screenBackground()`
 - 행은 `BillRowView` 처럼 **카드 하나**다. `.cardStyle()` + `.cardRow()`
@@ -51,25 +84,45 @@ List(bills) { bill in
 
 ## 3. 글자
 
+**크기는 다섯 단계(22 · 20 · 17 · 15 · 12), 굵기는 세 단계뿐이다.**
+아래 표 밖의 조합은 쓰지 않는다.
+(pt 는 Dynamic Type 기본(Large) 기준이고 사용자가 키우면 같이 커진다)
+
+| 역할 | 폰트 | 굵기 | 모디파이어 |
+| --- | --- | --- | --- |
+| 화면 제목 | `.title2` 22 | bold | `.headerTitle()` |
+| 카드 제목 · 강조 금액 | `.title3` 20 | bold | `.cardTitle()` |
+| 빈 상태 제목 | `.title3` 20 | medium | `EmptyStateView` |
+| 큰 선택 행 제목 | `.headline` 17 | medium | 장부 게이트처럼 행이 크고 개수가 적은 목록 |
+| 행 제목 · 이름 · 금액 · 값 | `.subheadline` 15 | medium | `.rowTitle()` |
+| 본문 · 설명 · 날짜 · 계좌 줄 | `.caption` 12 | regular | `.rowSubtext()` |
+| 칩 · 상태 배지 | `.caption` 12 | regular | `.tagChip(color:)` |
+
+### 굵기는 regular · medium · bold 셋뿐
+
+- **bold** — 제목과 강조할 금액. 화면에 몇 개 없어야 한다.
+- **medium** — 행 제목 · 값 · 선택된 상태. 화면 대부분의 "읽어야 하는 것".
+- **regular** — 설명 · 날짜 · 비선택 상태.
+
+semibold 는 쓰지 않는다. medium 과 bold 사이에 하나가 더 있으면 화면마다 다른 걸
+집어 들게 되고, 눈에는 그 차이가 안 보이면서 코드만 갈라진다.
+
+`.headline` 은 시스템이 semibold 를 물고 있어서 **`.fontWeight(.medium)` 을 같이
+준다.** 이걸 빠뜨리면 네 번째 굵기가 조용히 생긴다.
+
+### 12pt 아래로 내려가지 않는다
+
+`.caption2`(11pt)는 쓰지 않는다. 칩·배지·개수처럼 작아도 되는 것들도 전부
+`.caption`(12pt)이다. 한 화면에 정보가 많다고 글자를 더 줄이면 읽으라고 넣은
+정보가 안 읽힌다.
+
+같은 이유로 `.largeTitle`(34) · `.title`(28) · `.body`(17) · `.callout`(16) ·
+`.footnote`(13)도 안 쓴다. `.subheadline`(15)·`.caption`(12)이 실질적인 본문
+크기다 — 정보 밀도가 높아서 그렇다.
+
 **텍스트에는 고정 pt 를 쓰지 않는다.** 시맨틱 폰트만 쓴다 (Dynamic Type 대응).
-고정 pt(`.font(.system(size:))`)는 **SF Symbol 아이콘 전용**이다. 지금 코드도 예외 없이 그렇다.
-
-| 역할 | 폰트 | 모디파이어 |
-| --- | --- | --- |
-| 화면 제목 | `.largeTitle` bold | `AdminHeaderView` 또는 `.navigationTitle` |
-| 카드 제목 | `.title3` bold | `.cardTitle()` |
-| 큰 선택 행 제목 | `.headline` | 장부 게이트처럼 행이 크고 개수가 적은 목록 |
-| 강조 금액 | `.title3` bold | — |
-| 행 제목 · 사람 이름 | `.subheadline` medium | `.rowTitle()` |
-| 보조 금액 · 값 | `.subheadline` semibold | — |
-| 설명 · 날짜 · 계좌 줄 | `.caption` + `.secondary` | `.rowSubtext()` |
-| 칩 · 상태 배지 | `.caption2` | `.tagChip(color:)` |
-
-`.body`(17pt)는 본문에 거의 쓰지 않는다. 한 화면에 들어가는 정보가 많아
-`.subheadline`(15pt)·`.caption`(12pt)이 실질적인 본문 크기다.
-
-`.footnote` / `.title2` 는 산발적으로 남아 있는 값이다. **새로 쓰지 말 것.**
-위 표의 역할 중 하나로 고른다.
+고정 pt(`.font(.system(size:))`)는 **SF Symbol 아이콘 전용**이고, 값은 `DS.Icon`
+네 개뿐이다 (4번).
 
 ## 4. 아이콘
 
@@ -109,8 +162,11 @@ List(bills) { bill in
 - **세그먼트 전환**은 항상 `PillPicker`. `Picker(.segmented)` 를 쓰지 않는다 —
   개수 배지를 같이 보여줘야 한다.
 - **카드 안 액션 버튼**은 36×36, radius 10(`DS.Radius.button`), 아이콘 15pt.
-- **헤더 액션 버튼**은 52×44 를 캡슐 하나로 묶고 사이에 `Divider` 를 넣는다
-  (`AdminHeaderView`).
+- **헤더 버튼**은 `HeaderIconButton` (44×44, 아이콘 18pt, 배경 없음). 버튼이 아닌
+  컨트롤(`Menu`)의 라벨은 `HeaderIcon` 을 쓴다 — 크기가 같아야 줄이 안 어긋난다.
+  배경 캡슐은 없앴다. 아이콘 셋이 각자 떨어져 있으면 묶는 배경이 오히려 시끄럽다.
+- **아이콘뿐인 버튼에는 `accessibilityLabel` 을 반드시 준다.** `HeaderIconButton`
+  은 `label` 을 필수 인자로 받아서 빠뜨릴 수 없게 해 뒀다.
 - 되돌릴 수 없는 동작(삭제·로그아웃)은 **확인을 한 번 받는다.** `alert` 또는
   `confirmationDialog`.
 
@@ -149,23 +205,10 @@ EmptyStateView(
 
 ## 다음에 할 것
 
-2026-08-15 기준. 위쪽 규칙은 **이미 코드에 반영돼 있고**, 아래는 아직 안 된 것들이다.
+2026-08-16 기준. 위쪽 규칙은 **이미 코드에 반영돼 있고**, 아래는 아직 안 된 것들이다.
 큰 것부터 적었다.
 
-### 1. 헤더를 하나로 (구조 결정이 필요함)
-
-청구서 탭만 `AdminHeaderView` + `navigationBarHidden` 이고, 재정 · 계좌부는
-`.navigationTitle` + 툴바다. 프로필 · 로그아웃 · 아바타가 청구서 탭에만 있어서
-생긴 차이다.
-
-**그냥 통일하면 프로필과 로그아웃이 갈 곳이 없어진다.** 먼저 정해야 할 것:
-
-- 네 번째 탭(설정)을 만들어 프로필 · 로그아웃을 거기로 옮기는가, 아니면
-- 모든 화면 툴바에 아바타 버튼을 두는가
-
-정하기 전에는 손대지 않는다. 새 화면은 그동안 `.navigationTitle` 쪽을 따른다.
-
-### 2. 다크 모드 점검 (한 번도 안 봤다)
+### 1. 다크 모드 점검 (한 번도 안 봤다)
 
 카드가 `systemBackground`, 배경이 `systemGroupedBackground` 인데 **다크 모드에서는
 이 둘의 명도 관계가 라이트와 반대**가 된다. 게다가 카드를 띄우는 수단이 6% 검정
@@ -173,26 +216,33 @@ EmptyStateView(
 → 다크에서 카드 경계가 흐려질 가능성이 높다. 실제로 켜 보고, 필요하면 다크에서만
 아주 옅은 테두리를 주는 식으로 보완한다.
 
-### 3. 아이콘 전용 버튼에 접근성 라벨이 하나도 없다
+### 2. `BillRowView` 의 아이콘 버튼에 접근성 라벨이 없다
 
-`accessibilityLabel` 사용처가 **0곳**이다. `BillRowView` 의 36×36 버튼들
-(영수증 · 송금 · 거절 · 삭제), `AdminHeaderView` 의 새로고침 · 로그아웃이 전부
-아이콘뿐이라 VoiceOver 가 심볼 이름을 읽거나 아무 것도 못 읽는다.
-**송금과 거절이 나란히 있는 화면**이라 이건 편의 문제가 아니라 사고 위험이다.
+헤더는 `HeaderIconButton` 이 라벨을 필수로 받게 해서 끝났다. 남은 건 `BillRowView`
+의 36×36 버튼들(영수증 · 송금 · 거절 · 삭제)이다. **송금과 거절이 나란히 있는
+화면**이라 이건 편의 문제가 아니라 사고 위험이다.
 
-### 4. 큰 글씨(Dynamic Type)에서 카드가 버티는지
+### 3. 큰 글씨(Dynamic Type)에서 카드가 버티는지
 
 `BillRowView` 아래쪽은 금액 + 버튼 4개가 한 `HStack` 이다. 글씨를 키우면 금액이
 줄바꿈되거나 버튼이 밀릴 수 있다. 접근성 텍스트 크기로 한 번 훑어본다.
+헤더 제목도 같이 본다 — 가운데 제목은 한 줄로 자르게 해 뒀다.
 
-### 5. 남은 값 정리 (기계적)
+### 4. 새 헤더와 새 글자 규칙을 아직 눈으로 못 봤다
 
-- `.footnote` / `.title2` / `.body` 가 한두 군데씩 남아 있다 (`ProfileEditView`,
-  `TossResultView`, `LoginView`).
-- 시트 안 아이콘 크기 20 · 24 · 26 · 30 (`TossResultView`, `ProfileEditView`,
-  `TransactionEditView`) → `DS.Icon` 으로.
+빌드만 확인했다. 이 맥은 `xcode-select` 가 CommandLineTools 를 가리켜서
+시뮬레이터를 띄우지 못했다 (CLAUDE.md 빌드 항목). 실제로 봐야 아는 것들:
 
-### 6. 계좌부 탭은 아직 눈으로 못 봤다
+- 헤더 · `SearchField` · 카드 목록의 세로 여백이 이어지는지 (계좌부 탭)
+- 가운데 제목이 양옆 버튼과 겹치지 않는지 (재정 탭은 오른쪽에 아이콘이 둘이다)
+- 알림 점의 위치
+- **칩이 11 → 12pt 로 커지면서 행 높이가 밀리지 않는지** (청구서 상태 배지,
+  재정 카테고리 칩). 칩 안쪽 여백은 안 건드렸다.
+- **semibold 를 medium 으로 낮춘 금액이 충분히 눈에 띄는지** (재정 요약 카드,
+  거래 금액). 금액은 색으로도 구분되므로 괜찮을 것 같지만 확인이 필요하다.
 
-빌드만 확인했다. `searchable` + 카드 행 + `swipeActions` 조합은 실제로 띄워 봐야
-여백이 맞는지 안다.
+### 5. PDF 보고서는 이 규칙 밖에 있다
+
+`FinanceReportExporter` 는 화면이 아니라 출력물이라 `UIFont` 로 직접 그린다
+(331행에 `ofSize: 12, weight: .semibold`). Dynamic Type 도 안 타고 종이 위에서만
+읽히므로 위 규칙을 적용하지 않았다. 손대려면 보고서 전체를 같이 봐야 한다.

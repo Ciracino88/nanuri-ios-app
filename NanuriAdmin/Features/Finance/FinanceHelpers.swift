@@ -73,7 +73,15 @@ struct FinanceLedgerGateView: View {
     @State private var showNewLedger = false
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            AdminHeaderView(title: "재정") {
+                Task { await viewModel.fetchLedgers() }
+            } trailing: {
+                HeaderIconButton(systemName: "plus", label: "새 장부") {
+                    showNewLedger = true
+                }
+            }
+
             Group {
                 if viewModel.ledgers.isEmpty {
                     EmptyStateView(
@@ -99,29 +107,10 @@ struct FinanceLedgerGateView: View {
                             Button {
                                 Task { await viewModel.selectLedger(ledger) }
                             } label: {
-                                HStack(spacing: 14) {
-                                    Image(systemName: ledger.mode.icon)
-                                        .font(.system(size: DS.Icon.feature))
-                                        .foregroundColor(DS.Palette.deposit)
-                                        .frame(width: 42, height: 42)
-                                        .background(DS.Palette.deposit.opacity(0.1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 11))
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(ledger.name)
-                                            .font(.headline)
-                                            .foregroundColor(.primary)
-                                        Text(ledger.mode.title)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 4)
+                                row(ledger)
                             }
                             .buttonStyle(.plain)
+                            .cardRow()
                         }
                         .onDelete { indexSet in
                             indexSet.map { viewModel.ledgers[$0] }.forEach { ledger in
@@ -129,21 +118,43 @@ struct FinanceLedgerGateView: View {
                             }
                         }
                     }
+                    .listStyle(.plain)
+                    .screenBackground()
                 }
-            }
-            .navigationTitle("재정 관리")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showNewLedger = true } label: {
-                        Image(systemName: "plus").font(.system(size: DS.Icon.action, weight: .medium))
-                    }
-                }
-            }
-            .sheet(isPresented: $showNewLedger) {
-                NewLedgerView(viewModel: viewModel)
             }
         }
+        .screenBackground()
+        .sheet(isPresented: $showNewLedger) {
+            NewLedgerView(viewModel: viewModel)
+        }
         .task { await viewModel.fetchLedgers() }
+    }
+
+    /// 행이 크고 개수가 적은 목록이라 제목만 `.headline` 이다 (DESIGN.md 3).
+    private func row(_ ledger: Ledger) -> some View {
+        HStack(spacing: DS.Spacing.medium) {
+            Image(systemName: ledger.mode.icon)
+                .font(.system(size: DS.Icon.feature))
+                .foregroundColor(DS.Palette.deposit)
+                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
+                .background(DS.Palette.deposit.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
+            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
+                Text(ledger.name)
+                    .font(.headline)
+                    // .headline 은 semibold 를 물고 있다. 굵기는 셋뿐이므로 눌러 준다.
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                Text(ledger.mode.title)
+                    .rowSubtext()
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .contentShape(Rectangle())
+        .cardStyle()
     }
 }
 
@@ -189,7 +200,7 @@ struct NewLedgerView: View {
                             creating = false
                         }
                     }
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || creating)
                 }
             }

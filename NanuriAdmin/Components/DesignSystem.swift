@@ -61,8 +61,10 @@ enum DS {
     enum Size {
         /// 카드 안 정사각 아이콘 버튼 한 변.
         static let iconButton: CGFloat = 36
-        /// 헤더 아바타 · 헤더 버튼 높이.
-        static let avatar: CGFloat = 44
+        /// 헤더 아이콘 버튼 한 변이자 헤더 바 높이. 손가락이 닿는 최소치(44)다.
+        static let headerButton: CGFloat = 44
+        /// 프로필 화면의 큰 아바타.
+        static let avatar: CGFloat = 88
     }
 
     // MARK: - 움직임
@@ -104,14 +106,25 @@ extension View {
     }
 
     /// 카드를 얹는 화면 바닥색. 카드(`systemBackground`)와 대비를 만든다.
+    ///
+    /// 안전영역까지 덮는다. 헤더가 자기 배경 없이 이 색 위에 얹히기 때문에,
+    /// 상태바 자리가 안 덮이면 헤더 위쪽에만 다른 색 띠가 남는다.
     func screenBackground() -> some View {
-        self.background(Color(.systemGroupedBackground))
+        self.background(Color(.systemGroupedBackground).ignoresSafeArea())
     }
 }
 
 // MARK: - 글자
 
 extension View {
+    /// 화면 이름. 헤더 가운데(`AdminHeaderView`)와 로그인 화면 제목이 이걸 쓴다.
+    ///
+    /// 제목이 가운데로 오면서 양옆 버튼과 높이를 나눠 쓴다. `.largeTitle` 은 그
+    /// 자리에 안 들어가고, 카드 제목(`.title3`)과 같으면 화면 이름으로 안 읽힌다.
+    func headerTitle() -> some View {
+        self.font(.title2).fontWeight(.bold)
+    }
+
     /// 목록 행·카드의 제목.
     func rowTitle() -> some View {
         self.font(.subheadline).fontWeight(.medium).foregroundColor(.primary)
