@@ -24,6 +24,8 @@ enum DS {
 
     enum Radius {
         static let card: CGFloat = 16
+        /// 시트 안에서 값 줄을 묶는 상자, 그리고 가로를 채우는 큰 버튼.
+        static let group: CGFloat = 14
         /// PillPicker 처럼 여러 버튼을 감싸는 컨트롤.
         static let control: CGFloat = 13
         /// 정사각형 아이콘 버튼.
@@ -61,6 +63,12 @@ enum DS {
     enum Size {
         /// 카드 안 정사각 아이콘 버튼 한 변.
         static let iconButton: CGFloat = 36
+        /// 시트 바닥에서 가로를 채우는 액션 버튼 높이.
+        static let actionButton: CGFloat = 50
+        /// 목록 행의 이니셜 원.
+        static let rowAvatar: CGFloat = 44
+        /// 시트 머리의 이니셜 원.
+        static let sheetAvatar: CGFloat = 52
         /// 헤더 아이콘 버튼 한 변이자 헤더 바 높이. 손가락이 닿는 최소치(44)다.
         static let headerButton: CGFloat = 44
         /// 프로필 화면의 큰 아바타.
@@ -105,6 +113,26 @@ extension View {
             .listRowSeparator(.hidden)
     }
 
+    /// 시트 안에서 라벨-값 줄을 묶는 상자.
+    ///
+    /// 카드와 배경색이 **반대**다. 시트 바닥이 `systemBackground` 라서 카드와 같은
+    /// 색으로 칠하면 상자가 안 보인다. 그래서 여기서만 화면 바닥색을 안쪽에 쓴다.
+    ///
+    /// 그래도 흰 바탕 위의 `systemGroupedBackground` 는 명도 차가 4% 남짓이라
+    /// 상자가 있는지 없는지 잘 안 보인다. **테두리 한 올이 실제로 경계를 만든다.**
+    /// 카드는 그림자로 뜨지만 시트 안에서는 그림자를 쓰지 않는다 — 시트가 이미
+    /// 떠 있는 면이라 그 위에 또 띄우면 층이 두 번 생긴다.
+    func groupBox(padding: CGFloat = DS.Spacing.screen) -> some View {
+        self
+            .padding(padding)
+            .background(Color(.systemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.group))
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.group)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+    }
+
     /// 카드를 얹는 화면 바닥색. 카드(`systemBackground`)와 대비를 만든다.
     ///
     /// 안전영역까지 덮는다. 헤더가 자기 배경 없이 이 색 위에 얹히기 때문에,
@@ -138,6 +166,30 @@ extension View {
     /// 카드 안 소제목.
     func cardTitle() -> some View {
         self.font(.title3).fontWeight(.bold)
+    }
+
+    /// 시트에서 한 계층 키운 제목·값 (17).
+    ///
+    /// 시트는 한 건만 들여다보는 자리라 목록 카드와 밀도가 다르다. 목록에서
+    /// 15pt 로 촘촘히 쌓던 걸 그대로 가져오면 화면이 넓은데 글자만 작아 보인다.
+    /// `.headline` 은 시스템이 semibold 를 물고 있어서 medium 을 같이 준다.
+    func sheetTitle() -> some View {
+        self.font(.headline).fontWeight(.medium)
+    }
+
+    /// 시트에서 한 계층 키운 설명 (15).
+    func sheetSubtext() -> some View {
+        self.font(.subheadline).foregroundColor(.secondary)
+    }
+
+    /// 상세 시트 머리의 금액. **앱에서 가장 큰 글자다.**
+    ///
+    /// 여섯 번째 단계를 이거 하나만 쓴다. 청구서 한 건을 열었을 때 제일 먼저
+    /// 읽어야 하는 건 금액이고, 그 자리는 화면에 하나뿐이라서 크기를 독점시킨다.
+    /// 목록 카드의 금액은 `cardTitle()`(20) 그대로다 — 거기선 여러 건이 나란히
+    /// 놓이므로 하나만 커지면 안 된다.
+    func heroAmount() -> some View {
+        self.font(.title).fontWeight(.bold)
     }
 }
 
