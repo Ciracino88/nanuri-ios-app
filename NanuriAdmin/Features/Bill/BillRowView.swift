@@ -1,163 +1,50 @@
 import SwiftUI
 
+/// 청구서 한 건의 목록 카드.
+///
+/// **카드는 정보만 보여준다.** 송금·거절·삭제·영수증은 전부 카드를 눌러서 여는
+/// 상세 시트(`BillDetailView`)에 있다. 예전에는 36×36 버튼 네 개가 금액 옆에
+/// 붙어 있었는데, 송금과 거절이 6pt 간격으로 나란히 있어서 잘못 누르기 쉬웠고
+/// 글씨를 키우면 그 줄이 먼저 무너졌다. 계좌부 탭(`PayeeListView`)도 같은
+/// 구조다 — 카드를 누르면 시트가 열린다.
+/// 담는 것은 다섯 가지뿐이다 — 이니셜 원 · 이름 · 항목 · 금액 · 상태 칩.
+/// 날짜와 계좌는 상세 시트로 내렸다. 목록에서 훑을 때 필요한 건 "누가 얼마를
+/// 무엇으로 청구했고 처리했는가" 이고, 나머지는 한 건을 들여다볼 때 본다.
 struct BillRowView: View {
     let bill: Bill
-    /// 이름으로 찾은 계좌. 계좌부에 없으면 nil이고, 이때는 송금 대신 등록을 유도한다.
-    let payee: Payee?
-    @ObservedObject var viewModel: BillViewModel
-    @Binding var pendingBill: Bill?
-    /// 계좌 미등록 청구서에서 계좌부로 넘어갈 때 쓴다.
-    let onRegisterPayee: (String) -> Void
-    @State private var showReceiptSheet = false
-
-    var statusColor: Color {
-        switch bill.status {
-        case "approved": return DS.Palette.done
-        case "rejected": return DS.Palette.withdrawal
-        default: return DS.Palette.pending
-        }
-    }
-
-    var statusLabel: String {
-        switch bill.status {
-        case "approved": return "송금완료"
-        case "rejected": return "거절"
-        default: return "대기중"
-        }
-    }
-
-    @ViewBuilder
-    private func billButton(_ icon: String, bg: Color, fg: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: DS.Icon.inline, weight: .medium))
-                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
-                .background(bg)
-                .foregroundColor(fg)
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
-        }
-        .buttonStyle(.plain)
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // 상단: 제목 + 날짜 + 상태 뱃지
-            HStack {
-                Text(bill.title)
-                    .rowTitle()
-                Spacer()
-                HStack(spacing: 6) {
-                    Text(bill.createdAt.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(statusLabel)
-                        .tagChip(color: statusColor)
+        HStack(spacing: DS.Spacing.medium) {
+            InitialAvatarView(name: bill.submitterName)
+
+            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(bill.submitterName)
+                        .rowTitle()
+                    Spacer(minLength: DS.Spacing.small)
+                    Text("\(bill.amount.formatted())원")
+                        .cardTitle()
+                }
+
+                HStack {
+                    Text(bill.title)
+                        .rowSubtext()
+                        .lineLimit(1)
+                    Spacer(minLength: DS.Spacing.small)
+                    Text(bill.statusLabel)
+                        .tagChip(color: bill.statusColor)
                 }
             }
-            .padding(.bottom, 8)
 
-            // 이름 + 계좌부에서 찾은 계좌
-            Text(bill.submitterName)
+            Image(systemName: "chevron.right")
                 .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.primary)
-
-            if let payee {
-                Text(payee.accountLine)
-                    .rowSubtext()
-                    .padding(.top, 1)
-            } else {
-                Button {
-                    onRegisterPayee(bill.submitterName)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text("계좌 미등록 · 등록하기")
-                    }
-                    .font(.caption)
-                    .foregroundColor(DS.Palette.pending)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 1)
-            }
-
-            Divider().padding(.vertical, 12)
-
-            // 하단: 금액 + 버튼 그룹
-            HStack {
-                Text("\(bill.amount.formatted())원")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                Spacer()
-                HStack(spacing: 6) {
-                    billButton("receipt", bg: Color(.systemGray6), fg: .primary) {
-                        showReceiptSheet = true
-                    }
-
-                    if bill.status == "pending" {
-                        // 계좌를 모르면 송금할 수 없다. 계좌부 등록이 먼저다.
-                        if let payee {
-                            billButton("paperplane.fill", bg: DS.Palette.deposit, fg: .white) {
-                                pendingBill = bill
-                                viewModel.openToss(bill: bill, payee: payee)
-                            }
-                        }
-                        billButton("xmark", bg: DS.Palette.withdrawal.opacity(0.1), fg: DS.Palette.withdrawal) {
-                            Task { await viewModel.updateStatus(billId: bill.id, status: "rejected") }
-                        }
-                    } else {
-                        billButton("trash", bg: DS.Palette.withdrawal.opacity(0.1), fg: DS.Palette.withdrawal) {
-                            Task { await viewModel.deleteBill(billId: bill.id, receiptUrl: bill.receiptUrl) }
-                        }
-                    }
-                }
-            }
+                .foregroundColor(.secondary)
         }
+        .contentShape(Rectangle())
         .cardStyle()
-        .sheet(isPresented: $showReceiptSheet) {
-            ReceiptSheetView(receiptUrl: bill.receiptUrl)
-        }
-    }
-}
-
-struct ReceiptSheetView: View {
-    let receiptUrl: String
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        NavigationView {
-            Group {
-                if let url = URL(string: receiptUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .padding()
-                        case .failure:
-                            VStack(spacing: 12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: DS.Icon.placeholder))
-                                    .foregroundColor(.gray)
-                                Text("이미지를 불러올 수 없어요")
-                                    .foregroundColor(.gray)
-                            }
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                }
-            }
-            .navigationTitle("영수증")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("닫기") { dismiss() }
-                }
-            }
-        }
+        // 카드 전체가 하나의 버튼이다. 줄마다 따로 읽히면 세 번 넘겨야 한 건을 안다.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("두 번 누르면 처리 화면이 열려요")
     }
 }

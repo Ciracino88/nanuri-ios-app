@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// 공개 청구 웹페이지로 접수된 청구서.
 ///
@@ -18,5 +19,55 @@ struct Bill: Identifiable, Decodable, Equatable {
         case submitterName = "submitter_name"
         case receiptUrl = "receipt_url"
         case createdAt = "created_at"
+    }
+}
+
+// MARK: - 상태
+
+/// 상태 하나를 카드와 상세 시트가 같이 쓴다. 두 곳에 따로 적으면 색이 갈라진다.
+extension Bill {
+    /// 아직 처리하지 않은 청구서. 송금·거절은 이때만 할 수 있다.
+    var isPending: Bool { status == "pending" }
+
+    var statusLabel: String {
+        switch status {
+        case "approved": return "송금완료"
+        case "rejected": return "거절"
+        default: return "대기중"
+        }
+    }
+
+    var statusColor: Color {
+        switch status {
+        case "approved": return DS.Palette.done
+        case "rejected": return DS.Palette.withdrawal
+        default: return DS.Palette.pending
+        }
+    }
+}
+
+// MARK: - 목록 거르개
+
+/// 청구서 탭 위의 칩 넷. `allCases` 순서가 곧 칩 순서다.
+/// 상태 문자열(`rawValue`)은 여기서만 다룬다.
+enum BillFilter: String, CaseIterable, Identifiable {
+    case all
+    case pending
+    case approved
+    case rejected
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .pending: return "대기중"
+        case .approved: return "완료"
+        case .rejected: return "거절"
+        case .all: return "전체"
+        }
+    }
+
+    func matches(_ bill: Bill) -> Bool {
+        self == .all || bill.status == rawValue
     }
 }

@@ -49,37 +49,14 @@ struct TossResultView: View {
                         .fontWeight(.medium)
                 }
             }
-            .padding(16)
-            .background(Color(.systemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .groupBox()
             .padding(.bottom, 24)
 
-            HStack(spacing: 10) {
-                Button(action: onCancel) {
-                    Text("취소")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color(.systemGray6))
-                        .foregroundColor(.secondary)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-
-                Button(action: onApprove) {
-                    Text("송금 완료")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
+            HStack(spacing: DS.Spacing.small) {
+                ActionButton(title: "취소", action: onCancel)
+                ActionButton(title: "송금 완료", kind: .primary, action: onApprove)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Spacing.small)
         }
         .padding(.horizontal, 24)
     }
