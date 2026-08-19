@@ -44,7 +44,7 @@ struct TossResultView: View {
 
             Text("송금하셨나요?")
                 .font(.title3)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
                 .padding(.bottom, 6)
 
             Text(transfer.isGrouped
@@ -79,7 +79,7 @@ struct TossResultView: View {
                         Spacer()
                         Text("\(transfer.total.formatted())원")
                             .font(.title3)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
                     }
                 }
                 .groupBox()
@@ -103,7 +103,7 @@ struct TossResultView: View {
             Spacer(minLength: DS.Spacing.medium)
             Text(value)
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
                 .multilineTextAlignment(.trailing)
         }
     }

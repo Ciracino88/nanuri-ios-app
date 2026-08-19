@@ -39,7 +39,7 @@ struct ChipSelector<Value: Hashable>: View {
             HStack(spacing: DS.Spacing.tight) {
                 Text(item.label)
                     .font(.subheadline)
-                    .fontWeight(isSelected ? .medium : .regular)
+                    .fontWeight(isSelected ? .semibold : .regular)
                 Text("\(item.count)")
                     .font(.caption)
                     .opacity(0.7)

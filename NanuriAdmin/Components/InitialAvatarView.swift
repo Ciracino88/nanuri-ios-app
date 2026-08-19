@@ -1,6 +1,9 @@
 import SwiftUI
 
-/// 이름 한 글자를 담은 원. 청구서 카드와 청구서 상세 시트가 쓴다.
+/// 이름 한 글자를 담은 원. 청구서 목록 카드가 쓴다.
+///
+/// 상세 시트에는 없다 — 이름이 상자의 한 줄로 내려가면서 머리의 프로필 영역이
+/// 통째로 빠졌다 (`BillDetailView`).
 ///
 /// 사진이 있는 관리자 프로필은 `AvatarView` 를 쓴다. 청구자는 사진이 없다 —
 /// 공개 폼이 이름만 받기 때문이다. 목록을 훑을 때 줄을 잡아 주는 표식일 뿐이라
@@ -8,37 +11,12 @@ import SwiftUI
 /// (DESIGN.md 5번). 상태는 옆의 상태 칩이 이미 말하고 있다.
 struct InitialAvatarView: View {
     let name: String
-    var placement: Placement = .row
-
-    enum Placement {
-        /// 목록 카드 안.
-        case row
-        /// 시트 머리.
-        case sheet
-
-        var diameter: CGFloat {
-            switch self {
-            case .row: return DS.Size.rowAvatar
-            case .sheet: return DS.Size.sheetAvatar
-            }
-        }
-    }
 
     var body: some View {
         Circle()
             .fill(Color(.systemGray5))
-            .frame(width: placement.diameter, height: placement.diameter)
-            .overlay(initialText)
-    }
-
-    @ViewBuilder
-    private var initialText: some View {
-        switch placement {
-        case .row:
-            Text(initial).rowTitle()
-        case .sheet:
-            Text(initial).cardTitle()
-        }
+            .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
+            .overlay(Text(initial).rowTitle())
     }
 
     /// 성을 뺀 첫 글자. "김민준" 이면 "민" 이다.

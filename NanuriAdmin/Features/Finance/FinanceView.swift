@@ -103,7 +103,7 @@ struct FinanceView: View {
             } label: {
                 Text("기간 변경")
                     .font(.caption)
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Color(.systemGray6))
@@ -151,7 +151,7 @@ struct FinanceView: View {
                 .foregroundColor(.secondary)
             Text("\(abs(amount).formatted())원")
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
                 .foregroundColor(color)
         }
         .frame(maxWidth: .infinity)
@@ -248,7 +248,7 @@ struct TransactionRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(transaction.description ?? "-")
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
                     if !splits.isEmpty {
                         ChipFlowLayout(spacing: 6) {
                             ForEach(distinctCategories, id: \.self) { category in
@@ -262,7 +262,7 @@ struct TransactionRowView: View {
                 Spacer()
                 Text(transaction.isDeposit ? "+\(transaction.amount.formatted())원" : "\(transaction.amount.formatted())원")
                     .font(.subheadline)
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                     .foregroundColor(transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal)
             }
             HStack {

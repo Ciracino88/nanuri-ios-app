@@ -28,7 +28,7 @@ struct ActionButton: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
                 .frame(height: DS.Size.actionButton)
                 .background(background)

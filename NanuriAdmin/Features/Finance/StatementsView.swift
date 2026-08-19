@@ -23,7 +23,7 @@ struct StatementsListView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(statement.importedAt.koreanDateString)
                                             .font(.subheadline)
-                                            .fontWeight(.medium)
+                                            .fontWeight(.semibold)
                                         Text(statement.importedAt.koreanTimeString + " 가져옴")
                                             .font(.caption)
                                             .foregroundColor(.secondary)

@@ -93,7 +93,7 @@ struct FinanceLedgerGateView: View {
                             showNewLedger = true
                         } label: {
                             Label("새 장부 만들기", systemImage: "plus")
-                                .fontWeight(.medium)
+                                .fontWeight(.semibold)
                                 .padding(.horizontal, DS.Spacing.screen)
                                 .padding(.vertical, 10)
                                 .background(DS.Palette.deposit)
@@ -142,8 +142,8 @@ struct FinanceLedgerGateView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 Text(ledger.name)
                     .font(.headline)
-                    // .headline 은 semibold 를 물고 있다. 굵기는 셋뿐이므로 눌러 준다.
-                    .fontWeight(.medium)
+                    // .headline 이 물고 오는 굵기가 곧 우리 semibold 다. 명시해 둔다.
+                    .fontWeight(.semibold)
                     .foregroundColor(.primary)
                 Text(ledger.mode.title)
                     .rowSubtext()
@@ -200,7 +200,7 @@ struct NewLedgerView: View {
                             creating = false
                         }
                     }
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || creating)
                 }
             }

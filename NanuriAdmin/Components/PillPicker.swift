@@ -16,10 +16,9 @@ struct PillPicker: View {
                     HStack(spacing: 5) {
                         Text(tabs[index].label)
                             .font(.subheadline)
-                            .fontWeight(selection == index ? .medium : .regular)
+                            .fontWeight(selection == index ? .semibold : .regular)
                         Text("\(tabs[index].count)")
                             .font(.caption)
-                            .fontWeight(.medium)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)

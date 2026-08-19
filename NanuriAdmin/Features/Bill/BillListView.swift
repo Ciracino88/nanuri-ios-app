@@ -138,7 +138,7 @@ struct BillListView: View {
                     detailBill = nil
                 }
             )
-            .presentationDetents([.medium, .large])
+            // 높이는 시트가 자기 내용을 재서 정한다 (`BillDetailView.detents`).
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $payeeEdit) { target in
