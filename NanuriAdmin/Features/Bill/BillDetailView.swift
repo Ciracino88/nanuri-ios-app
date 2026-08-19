@@ -163,7 +163,9 @@ struct ReceiptSheetView: View {
         NavigationView {
             Group {
                 if let url = URL(string: receiptUrl) {
-                    AsyncImage(url: url) { phase in
+                    // 화면에 그릴 크기로 줄여서 디코드하고, 받은 건 캐시에 남는다.
+                    // 시트를 닫았다 열어도 다시 안 받는다 (`CachedAsyncImage`).
+                    CachedAsyncImage(url: url, maxDimension: DS.Size.fullPhoto) { phase in
                         switch phase {
                         case .empty:
                             ProgressView()
@@ -180,8 +182,6 @@ struct ReceiptSheetView: View {
                                 Text("이미지를 불러올 수 없어요")
                                     .foregroundColor(.gray)
                             }
-                        @unknown default:
-                            EmptyView()
                         }
                     }
                 }

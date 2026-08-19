@@ -214,11 +214,14 @@ struct TransactionEditView: View {
                                 onTap: { previewReceipt = ReceiptPreview(source: .remote(urlString)) },
                                 onDelete: { keptUrls.removeAll { $0 == urlString } }
                             ) {
-                                AsyncImage(url: URL(string: urlString)) { phase in
+                                CachedAsyncImage(
+                                    url: URL(string: urlString),
+                                    maxDimension: DS.Size.thumbnail
+                                ) { phase in
                                     switch phase {
                                     case .success(let img): img.resizable().scaledToFill()
                                     case .failure: fallbackTile
-                                    default: loadingTile
+                                    case .empty: loadingTile
                                     }
                                 }
                             }
@@ -268,7 +271,7 @@ struct TransactionEditView: View {
         onDelete: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        let size: CGFloat = 90
+        let size = DS.Size.thumbnail
         return ZStack(alignment: .topTrailing) {
             content()
                 .frame(width: size, height: size)
@@ -418,11 +421,12 @@ struct ReceiptViewerView: View {
     private var zoomableImage: some View {
         switch source {
         case .remote(let url):
-            AsyncImage(url: URL(string: url)) { phase in
+            // 손가락으로 확대하는 화면이라 줄이지 않는다 (`maxDimension: nil`).
+            CachedAsyncImage(url: URL(string: url)) { phase in
                 switch phase {
                 case .success(let img): zoomable(img)
                 case .failure: Text("영수증을 불러오지 못했어요").foregroundColor(.white)
-                default: ProgressView().tint(.white)
+                case .empty: ProgressView().tint(.white)
                 }
             }
         case .local(let image):

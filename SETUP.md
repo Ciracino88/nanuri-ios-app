@@ -19,8 +19,10 @@
 | 5 | `APNS_P8` 시크릿 등록 | ✅ 완료 |
 | 6 | Xcode Push Notifications capability | ✅ 완료 (`NanuriAdmin.entitlements`) |
 | 7 | 실기기에서 푸시 수신 확인 | ✅ 완료 (2026-08-15) |
+| 8 | R2 영수증에 `Cache-Control` 붙이기 | ⬜ 안 함 (급하지 않음) |
 
-**푸시까지 끝났다. 이 문서에서 지금 해야 할 일은 없다.**
+**푸시까지 끝났다.** 남은 건 8번 하나이고, 앱이 자체 디스크 캐시를 갖게 돼서
+(`TROUBLESHOOTING.md` 2026-08-19) 안 해도 동작에는 지장이 없다.
 아래는 다시 설정해야 할 때를 위한 절차와, 안 될 때 볼 곳이다.
 
 ---
@@ -193,3 +195,35 @@ cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler 
 | 앱의 Supabase anon key | 공개 전제. 보호는 RLS + `is_admin()` 화이트리스트가 한다 |
 
 진짜 비밀은 둘뿐이다 — `SUPABASE_SERVICE_ROLE_KEY`, `APNS_P8`.
+
+---
+
+## 8. R2 영수증에 Cache-Control 붙이기 ⬜
+
+**왜 여기 있나** — 고칠 코드가 `nanuri-bill` 워커에 있는데 **그 소스는 이 저장소에 없다.**
+(이 저장소의 `worker/` 는 청구 폼 워커다) Cloudflare 대시보드나 그 워커를 둔 곳에서 고쳐야 한다.
+
+영수증은 `pub-*.r2.dev` 에서 바로 나가므로, 응답 헤더는 **업로드할 때 오브젝트에
+저장한 메타데이터**가 그대로 쓰인다. 지금은 아무것도 안 넣고 있어서 캐시 지시가 없다.
+
+영수증은 한 번 올라가면 내용이 안 바뀌고 URL 도 매번 새로 생긴다. 그러니 이렇게 준다:
+
+```js
+await env.BUCKET.put(key, file.stream(), {
+    httpMetadata: {
+        contentType: file.type,
+        // 영수증은 URL 이 곧 그 파일이다. 절대 안 바뀌니 1년 + immutable.
+        cacheControl: 'public, max-age=31536000, immutable',
+    },
+});
+```
+
+이미 올라간 파일에는 소급 적용되지 않는다. 필요하면 같은 키로 다시 `put` 해야 한다.
+
+**지금 뭐가 오는지 보는 법:**
+
+```bash
+curl -sI "<영수증_URL>" | grep -i "cache-control\|etag\|age"
+```
+
+`cache-control` 줄이 안 나오면 아직 안 붙은 것이다.

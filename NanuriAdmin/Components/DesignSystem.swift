@@ -73,6 +73,11 @@ enum DS {
         static let headerButton: CGFloat = 44
         /// 프로필 화면의 큰 아바타.
         static let avatar: CGFloat = 88
+        /// 폼 안 영수증 썸네일 한 변.
+        static let thumbnail: CGFloat = 90
+        /// 화면 가득 보는 사진(영수증)의 최대 변. 어느 아이폰 폭보다 넉넉하다.
+        /// 실제 디코드 크기는 여기에 화면 배율(2x·3x)을 곱한 값이다.
+        static let fullPhoto: CGFloat = 512
     }
 
     // MARK: - 움직임

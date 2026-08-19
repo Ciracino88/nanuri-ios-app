@@ -4,6 +4,8 @@
 
 사람이 손으로 넣어야 하는 설정과 남은 할 일은 **`SETUP.md`** 에 있다.
 새 세션은 거기부터 볼 것.
+증상을 만났다면 **`TROUBLESHOOTING.md`** 를 먼저 본다 — 전에 겪은 것이면 원인과
+왜 그렇게 고쳤는지가 거기 있다.
 화면을 만들거나 고치기 전에는 **`DESIGN.md`** 를 본다. 값은 전부
 `Components/DesignSystem.swift` 의 `DS` 에 있고, **화면 코드에 숫자를 직접 적지 않는다.**
 
@@ -14,6 +16,10 @@
 | `NanuriAdmin/` | SwiftUI 앱 (iOS). Xcode 16 파일시스템 동기화 그룹 — **새 .swift 파일은 폴더에 넣으면 자동 인식**, pbxproj 수정 불필요 |
 | `worker/` | Cloudflare Worker `nanuri-form`. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
 | `supabase/migrations/` | DB 스키마. 최신 것이 진실이고 앞의 것은 이력 |
+
+원격 이미지는 전부 **`CachedAsyncImage`** 로 그린다 (`Components/RemoteImage.swift`).
+`AsyncImage` 를 직접 쓰지 않는다 — 캐시도 다운샘플링도 없어서 사진이 매번 다시
+받아지고 메모리를 크게 쓴다 (`TROUBLESHOOTING.md`).
 
 앱 탭은 **청구서 / 재정 / 계좌부 / 프로필** 네 개다 (`App/ContentView.swift`).
 모든 탭은 `AdminHeaderView` 를 쓰고 내비게이션 바는 없다. 헤더 규칙은 `DESIGN.md` 1번.

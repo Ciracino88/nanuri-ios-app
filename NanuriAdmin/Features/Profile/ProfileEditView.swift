@@ -34,7 +34,7 @@ struct ProfileEditView: View {
                                             .resizable()
                                             .scaledToFill()
                                     } else if let avatarUrl, let url = URL(string: avatarUrl) {
-                                        AsyncImage(url: url) { phase in
+                                        CachedAsyncImage(url: url, maxDimension: DS.Size.avatar) { phase in
                                             if case .success(let img) = phase {
                                                 img.resizable().scaledToFill()
                                             } else {
