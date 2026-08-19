@@ -50,8 +50,10 @@ Kingfisher 로 갈아탔다 — 남이 읽을 때 설명이 필요 없고, 디�
 **재발 방지** — 앱에서 `AsyncImage` 도 `KFImage` 도 직접 쓰지 않는다. 원격 이미지는 전부
 `RemoteImage` 다. 확대 화면이 아니면 `maxDimension` 을 반드시 준다.
 
-**남은 것** — R2 응답에 `Cache-Control` 이 없다 (`SETUP.md` 8번). Kingfisher 디스크 캐시가
-비워진 뒤의 첫 로딩에만 영향이 있어서 급하지는 않다.
+**`Cache-Control` 은 이제 앱과 무관하다** — R2 응답에 여전히 없지만(`SETUP.md` 8번),
+Kingfisher 다운로더는 기본이 `URLSessionConfiguration.ephemeral` 이라 **URLCache 를 안 쓴다.**
+헤더를 붙여도 앱이 요청을 아끼지 않는다. 자체 로더(`URLSession.shared`)를 쓰던 시절에는
+의미가 있었는데, 캐시를 옮기면서 전제가 사라졌다.
 
 ### 곁가지: `Phase` 를 제네릭 뷰 안에 중첩하면 컴파일이 안 된다
 
