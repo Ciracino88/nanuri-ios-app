@@ -47,11 +47,18 @@ class BillViewModel: ObservableObject {
     }
 
     func updateStatus(billId: UUID, status: String) async {
+        await updateStatus(billIds: [billId], status: status)
+    }
+
+    /// 묶어서 송금한 여러 건을 한 번에 처리한다.
+    /// 한 요청으로 보내야 중간에 끊겨도 일부만 완료로 남는 일이 없다.
+    func updateStatus(billIds: [UUID], status: String) async {
+        guard !billIds.isEmpty else { return }
         do {
             try await supabase
                 .from("bills")
                 .update(["status": status])
-                .eq("id", value: billId.uuidString)
+                .in("id", values: billIds.map(\.uuidString))
                 .execute()
             await fetchBills(showLoading: false)
         } catch {
@@ -81,18 +88,34 @@ class BillViewModel: ObservableObject {
         }
     }
 
+    /// 같은 사람이 낸 다른 **대기중** 청구서. 묶어서 한 번에 보낼 후보다.
+    ///
+    /// 이름 대조는 계좌부와 같은 규칙(`normalizedName`)을 쓴다. 여기만 다르게
+    /// 맞추면 계좌는 찾았는데 묶음에서는 빠지는 일이 생긴다.
+    func pendingSiblings(of bill: Bill) -> [Bill] {
+        guard bill.isPending else { return [] }
+        let key = bill.submitterName.normalizedName
+        return bills
+            .filter { $0.id != bill.id && $0.isPending && $0.submitterName.normalizedName == key }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     /// 계좌부에서 찾은 수취인으로 토스 송금 화면을 연다.
     /// 이름이 계좌부에 없으면 호출되지 않는다 (UI에서 먼저 막는다).
-    func openToss(bill: Bill, payee: Payee) {
+    ///
+    /// 여러 건을 넘기면 **금액을 합쳐 한 번만** 연다. 토스 딥링크는 수취인 한 명에
+    /// 금액 하나라서, 사람이 여럿이면 묶을 수 없다 (같은 사람만 묶는 이유다).
+    func openToss(bills: [Bill], payee: Payee) {
+        let amount = bills.reduce(0) { $0 + $1.amount }
         let accountNumber = payee.accountNumber.replacingOccurrences(of: "-", with: "")
         let bankName = payee.bankName
 
-        guard !accountNumber.isEmpty, !bankName.isEmpty else {
+        guard amount > 0, !accountNumber.isEmpty, !bankName.isEmpty else {
             print("계좌 정보 없음")
             return
         }
 
-        let urlString = "supertoss://send?bank=\(bankName)&accountNo=\(accountNumber)&amount=\(bill.amount)"
+        let urlString = "supertoss://send?bank=\(bankName)&accountNo=\(accountNumber)&amount=\(amount)"
         print("토스 URL: \(urlString)")
         guard let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: encoded) else {
