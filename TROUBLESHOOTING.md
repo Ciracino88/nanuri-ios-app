@@ -8,7 +8,7 @@
 
 ---
 
-## 2026-08-19 · 영수증 사진이 매번 다시 받아지고 메모리를 크게 썼다
+## 2026-08-19 · 영수증 사진이 매번 다시 받아지고 메모리를 크게 썼다 (→ Kingfisher)
 
 **증상**
 - 영수증 시트를 닫았다 다시 열면 사진을 처음부터 다시 받았다.
@@ -25,29 +25,40 @@
    300KB 남짓이지만, 비트맵으로 펴면 1600×1200×4byte ≈ 7.7MB 다. 90pt 썸네일에
    그 전부를 편다.
 
-**해결** — `Components/RemoteImage.swift` 의 `CachedAsyncImage` 로 전부 옮겼다.
-- **메모리 → 디스크 → 네트워크** 순으로 찾는다. 메모리 캐시는 뷰가 **동기로** 볼 수
-  있어야 해서 actor 밖의 `NSCache` 에 둔다. 그래야 다시 열 때 첫 프레임부터 그려진다.
-- **다운샘플링** — `CGImageSourceCreateThumbnailAtIndex` 로 그릴 크기만큼만 디코드한다.
-  `kCGImageSourceCreateThumbnailWithTransform` 을 켜야 세로로 찍은 영수증이 안 눕는다.
-- 디스크에는 **줄여 놓은 것**을 저장한다. 원본을 두면 앱을 켤 때마다 다시 줄여야 한다.
-- 영수증 URL 은 업로드마다 새로 생기고 **같은 URL 의 내용은 안 바뀐다.** 그래서 URL 을
-  키로 계속 캐시해도 안전하다. 서버가 `Cache-Control` 을 안 줘도 우리 쪽에서 다시 안 받는다.
-- 손가락으로 확대하는 화면(`TransactionEditView` 의 미리보기)만 `maxDimension: nil` 로
-  원본을 쓴다. 줄여 놓으면 확대했을 때 뭉갠 게 보인다.
+**해결** — **Kingfisher** 로 옮겼다. 화면은 `Components/RemoteImage.swift` 의
+`RemoteImage` 만 쓰고, 캐시(메모리·디스크)와 다운샘플링은 Kingfisher 가 한다.
 
-**재발 방지** — 앱에서 `AsyncImage` 를 직접 쓰지 않는다. 원격 이미지는 전부
-`CachedAsyncImage` 다. 크기 힌트(`maxDimension`)를 빼먹으면 다운샘플링이 안 되므로,
-확대 화면이 아니면 반드시 준다.
+- **다운샘플링** — `DownsamplingImageProcessor(size:)` + `.scaleFactor(displayScale)`.
+  **이 둘이 한 세트다.** 크기는 pt 로 주고 배율을 따로 알려주는 구조라, `scaleFactor` 를
+  빠뜨리면 3배 화면에서 뭉갠다. 그래서 호출부가 직접 `KFImage` 를 쓰지 않고 이 뷰를 거친다.
+- `RemoteImage` 가 얇게 감싸는 이유가 하나 더 있다 — Kingfisher 의
+  `onFailureImage(_:)` 는 `UIImage` 만 받아서 "아이콘 + 문구" 같은 실패 화면을 못 그린다.
+  `.onFailure` 로 상태를 받아 View 로 그린다.
+- 캐시 상한은 `RemoteImageCache.configure()` 에서 정하고 앱 시작 시 한 번 부른다.
+  Kingfisher 기본값이 **디스크 무제한 · 7일 만료**인데, 영수증은 URL 이 곧 그 파일이라
+  오래 들고 있어도 안전하다. 그래서 만료를 90일로 늘리고 대신 **용량(200MB)으로 끊는다.**
+  만료가 짧으면 지난달 청구서를 다시 볼 때마다 새로 받는다.
+- 손가락으로 확대하는 화면(`TransactionEditView` 의 미리보기)만 `maxDimension` 을 안 준다.
+  줄여 놓으면 확대했을 때 뭉갠 게 그대로 보인다.
 
-**남은 것** — R2 응답에 `Cache-Control` 이 없다 (`SETUP.md` 8번). 우리 디스크 캐시가
-지워진 뒤의 첫 로딩에만 영향이 있어서 급하지는 않지만, 붙여 두면 그 경우에도 안 받는다.
+**중간에 한 번 돌아갔다.** 처음에는 의존성 없이 직접 만들었다(`NSCache` + 디스크 +
+`CGImageSourceCreateThumbnailAtIndex`, 216줄). 동작은 같았지만 **유지보수**를 이유로
+Kingfisher 로 갈아탔다 — 남이 읽을 때 설명이 필요 없고, 디스크 용량 상한·요청 취소·
+프리페치처럼 우리가 안 만든 것들이 이미 들어 있다. 자체 로더는 지웠다. **캐시를 두
+갈래로 두지 않는다** — 어느 쪽이 그 사진을 들고 있는지 모르게 된다.
+
+**재발 방지** — 앱에서 `AsyncImage` 도 `KFImage` 도 직접 쓰지 않는다. 원격 이미지는 전부
+`RemoteImage` 다. 확대 화면이 아니면 `maxDimension` 을 반드시 준다.
+
+**남은 것** — R2 응답에 `Cache-Control` 이 없다 (`SETUP.md` 8번). Kingfisher 디스크 캐시가
+비워진 뒤의 첫 로딩에만 영향이 있어서 급하지는 않다.
 
 ### 곁가지: `Phase` 를 제네릭 뷰 안에 중첩하면 컴파일이 안 된다
 
-`CachedAsyncImage<Content>` 안에 `enum Phase` 를 두고 클로저에 넘겼더니
-`generic parameter 'Content' could not be inferred` 가 났다. 클로저 본문의 타입을
-`Content` 로 추론해야 하는데, 그 본문이 쓰는 `Phase` 가 `CachedAsyncImage<Content>.Phase`
+직접 만들던 시절에 겪은 것이라 코드는 이제 없지만, 어떤 제네릭 뷰에도 해당한다.
+`CachedAsyncImage<Content>` 안에 `enum Phase` 를 두고 클로저 인자로 넘겼더니
+`generic parameter 'Content' could not be inferred` 가 났다. 클로저 본문의 타입으로
+`Content` 를 추론해야 하는데 그 본문이 쓰는 `Phase` 가 `CachedAsyncImage<Content>.Phase`
 라서 순환이 생긴다. `Phase` 를 타입 밖으로 빼면 풀린다. SwiftUI 의 `AsyncImagePhase`
 가 `AsyncImage` 밖에 나와 있는 것도 같은 이유다.
 

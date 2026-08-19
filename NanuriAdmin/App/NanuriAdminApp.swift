@@ -8,6 +8,11 @@ struct NanuriAdminApp: App {
     // APNs 콜백은 UIKit 델리게이트로만 온다.
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
 
+    init() {
+        // 이미지 캐시 상한. 기본값은 디스크 무제한이라 우리가 정해 준다.
+        RemoteImageCache.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             // 모디파이어는 화면 전환과 무관한 고정 컨테이너에 붙인다.
