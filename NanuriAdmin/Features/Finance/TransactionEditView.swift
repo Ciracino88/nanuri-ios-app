@@ -64,7 +64,7 @@ struct TransactionEditView: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button("저장") { save() }.fontWeight(.medium)
+                        Button("저장") { save() }.fontWeight(.semibold)
                     }
                 }
             }
@@ -193,7 +193,7 @@ struct TransactionEditView: View {
                     Spacer()
                     Text(splitRemaining == 0 ? "일치 ✓" : "남은 \(splitRemaining.formatted())원")
                         .foregroundColor(splitRemaining == 0 ? .green : .red)
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
                 }
                 .font(.caption)
             }
@@ -381,7 +381,7 @@ struct SplitEditSheet: View {
                         onSave(SplitDraft(id: initial.id, category: category, amount: amount, memo: memo))
                         dismiss()
                     }
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                 }
             }
             .presentationDetents([.medium, .large])

@@ -16,6 +16,11 @@ enum DS {
         /// 화면 좌우 여백이자 카드 안쪽 여백. 이 둘이 같아야 카드가 화면에 정렬돼 보인다.
         static let screen: CGFloat = 16
         static let section: CGFloat = 20
+        /// 시트 안쪽 위아래 여백. 위로는 손잡이(드래그 인디케이터)와 금액 사이를,
+        /// 아래로는 **마지막 버튼과 바닥에 고정된 버튼 사이**를 벌린다.
+        /// `section`(20)으로는 위는 손잡이에 붙어 보이고, 아래는 두 버튼이 붙어
+        /// 보여서 누를 때 잘못 짚기 쉽다.
+        static let sheetEdge: CGFloat = 32
         /// 세로로 이어지는 카드 사이 간격 (위아래 각각).
         static let cardGap: CGFloat = 6
     }
@@ -67,8 +72,6 @@ enum DS {
         static let actionButton: CGFloat = 50
         /// 목록 행의 이니셜 원.
         static let rowAvatar: CGFloat = 44
-        /// 시트 머리의 이니셜 원.
-        static let sheetAvatar: CGFloat = 52
         /// 헤더 아이콘 버튼 한 변이자 헤더 바 높이. 손가락이 닿는 최소치(44)다.
         static let headerButton: CGFloat = 44
         /// 프로필 화면의 큰 아바타.
@@ -78,6 +81,23 @@ enum DS {
         /// 화면 가득 보는 사진(영수증)의 최대 변. 어느 아이폰 폭보다 넉넉하다.
         /// 실제 디코드 크기는 여기에 화면 배율(2x·3x)을 곱한 값이다.
         static let fullPhoto: CGFloat = 512
+    }
+
+    // MARK: - 시트
+
+    enum Sheet {
+        /// 청구서 상세 시트가 열리는 높이 (화면 높이 대비).
+        ///
+        /// 내용을 재서 딱 맞추던 시절이 있었는데 **열 때마다 높이가 달랐다** —
+        /// 첫 측정이 애니메이션 중 어느 순간에 걸리느냐를 탔다 (`TROUBLESHOOTING.md`).
+        /// 같은 청구서가 어떨 때는 길고 어떨 때는 짧은 것보다, 늘 같은 자리에서
+        /// 열리는 게 낫다.
+        ///
+        /// iPhone 15(852)에서 0.7 이면 내용에 531pt 가 돌아간다. 필요한 건
+        /// 495pt(스크롤 내용 413 + 바닥 바 82)라 35pt 남는다. **0.65 는 493pt 라
+        /// 딱 경계였다** — 항목 이름이 길어 두 줄이 되면 바로 잘렸다.
+        /// 남는 자리는 스크롤 안쪽 아래에 생기므로 잘리는 것보다 안전한 쪽으로 둔다.
+        static let billDetail: CGFloat = 0.7
     }
 
     // MARK: - 움직임
@@ -153,14 +173,19 @@ extension View {
     /// 화면 이름. 헤더 가운데(`AdminHeaderView`)와 로그인 화면 제목이 이걸 쓴다.
     ///
     /// 제목이 가운데로 오면서 양옆 버튼과 높이를 나눠 쓴다. `.largeTitle` 은 그
-    /// 자리에 안 들어가고, 카드 제목(`.title3`)과 같으면 화면 이름으로 안 읽힌다.
+    /// 자리에 아예 안 들어간다.
+    ///
+    /// **카드 제목과 크기는 같고 굵기만 다르다** (20 semibold ↔ 20 regular).
+    /// 헤더는 화면에 하나뿐이고 양옆이 비어 있어서 굵기를 안 줘도 화면 이름으로
+    /// 읽힌다. 22 bold 이던 시절에는 상단만 무거워서 아래 내용이 눌렸다.
+    /// **앱에서 굵기를 일부러 뺀 자리는 여기와 `amountUnit()` 둘뿐이다.**
     func headerTitle() -> some View {
-        self.font(.title2).fontWeight(.bold)
+        self.font(.title3).fontWeight(.regular)
     }
 
     /// 목록 행·카드의 제목.
     func rowTitle() -> some View {
-        self.font(.subheadline).fontWeight(.medium).foregroundColor(.primary)
+        self.font(.subheadline).fontWeight(.semibold).foregroundColor(.primary)
     }
 
     /// 제목 아래 딸린 설명 (계좌 줄, 날짜, 메모).
@@ -168,18 +193,21 @@ extension View {
         self.font(.caption).foregroundColor(.secondary)
     }
 
-    /// 카드 안 소제목.
+    /// 카드 안 소제목 · 카드의 강조 금액.
     func cardTitle() -> some View {
-        self.font(.title3).fontWeight(.bold)
+        self.font(.title3).fontWeight(.semibold)
     }
 
     /// 시트에서 한 계층 키운 제목·값 (17).
     ///
     /// 시트는 한 건만 들여다보는 자리라 목록 카드와 밀도가 다르다. 목록에서
     /// 15pt 로 촘촘히 쌓던 걸 그대로 가져오면 화면이 넓은데 글자만 작아 보인다.
-    /// `.headline` 은 시스템이 semibold 를 물고 있어서 medium 을 같이 준다.
+    /// **굵기는 주지 않는다.** 상자 안에서는 라벨(15 회색)과 값(17 검정)이 크기와
+    /// 색으로 이미 갈린다. 거기에 굵기까지 얹으면 값 네 줄이 한꺼번에 진해져서
+    /// 상자가 시트에서 제일 무거운 덩어리가 된다 — 그 자리는 금액 것이다.
+    /// `.headline` 은 시스템이 semibold 를 물고 오므로 **눌러 줘야 한다.**
     func sheetTitle() -> some View {
-        self.font(.headline).fontWeight(.medium)
+        self.font(.headline).fontWeight(.regular)
     }
 
     /// 시트에서 한 계층 키운 설명 (15).
@@ -187,14 +215,25 @@ extension View {
         self.font(.subheadline).foregroundColor(.secondary)
     }
 
-    /// 상세 시트 머리의 금액. **앱에서 가장 큰 글자다.**
+    /// 상세 시트 머리의 금액 (34). **앱에서 가장 큰 글자다.**
     ///
-    /// 여섯 번째 단계를 이거 하나만 쓴다. 청구서 한 건을 열었을 때 제일 먼저
-    /// 읽어야 하는 건 금액이고, 그 자리는 화면에 하나뿐이라서 크기를 독점시킨다.
+    /// 맨 윗단을 이거 하나만 쓴다. 청구서 한 건을 열었을 때 제일 먼저 읽어야 하는
+    /// 건 금액이고, 그 자리는 화면에 하나뿐이라서 크기를 독점시킨다. 시트 머리에서
+    /// 이름·계좌·상태가 상자로 내려가 **금액만 남으면서** 한 계층 올렸다 (28 → 34).
+    /// 화면 이름이 22 에서 20 으로 내려온 것과 같은 이유다 — 큰 자리는 하나면 된다.
     /// 목록 카드의 금액은 `cardTitle()`(20) 그대로다 — 거기선 여러 건이 나란히
     /// 놓이므로 하나만 커지면 안 된다.
     func heroAmount() -> some View {
-        self.font(.title).fontWeight(.bold)
+        self.font(.largeTitle).fontWeight(.semibold)
+    }
+
+    /// 금액 뒤의 "원". **숫자보다 두 계층 작고 굵기도 색도 뒤로 뺀다** (20 regular, 회색).
+    ///
+    /// 읽어야 하는 건 숫자다. "원"은 어느 청구서에서나 같은 글자라 크기까지 같이
+    /// 주면 큰 자리를 반쯤 나눠 갖는다. `heroAmount()` 와 짝이고, 베이스라인을
+    /// 맞춰 쓴다 (`HStack(alignment: .firstTextBaseline)`).
+    func amountUnit() -> some View {
+        self.font(.title3).fontWeight(.regular).foregroundColor(.secondary)
     }
 }
 
@@ -236,7 +275,7 @@ struct EmptyStateView<Action: View>: View {
             }
             Text(title)
                 .font(.title3)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
             if let message {
                 Text(message)
                     .font(.subheadline)

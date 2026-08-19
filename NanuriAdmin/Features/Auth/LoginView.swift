@@ -24,7 +24,7 @@ struct LoginView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "globe")
                     Text("Google로 로그인")
-                        .fontWeight(.medium)
+                        .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
                 .padding()

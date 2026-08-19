@@ -85,7 +85,7 @@ struct ProfileView: View {
                 .rowSubtext()
             Text("\(profile.bankName ?? "") \(profile.accountNumber ?? "")")
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
@@ -127,7 +127,7 @@ struct ProfileView: View {
                     .frame(width: DS.Icon.feature)
                 Text(label)
                     .font(.subheadline)
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                     .foregroundColor(tint)
                 Spacer()
                 Image(systemName: "chevron.right")

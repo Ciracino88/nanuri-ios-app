@@ -6,6 +6,11 @@ import SwiftUI
 /// 목록 카드는 정보만 보여준다 (`BillRowView`). 되돌릴 수 없는 두 개(거절·삭제)는
 /// 여기서 확인을 한 번 더 받는다 (DESIGN.md 6번).
 ///
+/// **머리에 프로필 영역을 두지 않는다.** 이름·계좌·상태를 위에 한 번 적고 아래
+/// 상자에 또 적으면 같은 값이 한 화면에 두 번 나온다. 이름까지 상자의 한 줄로
+/// 내리면 값이 적히는 곳은 **상자 하나**가 된다. 맨 위는 금액이다 — 이 시트에서
+/// 제일 먼저 읽어야 하는 것이고, 그래서 크기를 독점한다 (DESIGN.md 3번).
+///
 /// 송금은 이 시트가 직접 못 한다. 토스 앱을 열고 돌아와서 "송금했나요?"를 물어야
 /// 하는데(`TossResultView`) 시트 위에 시트를 겹치면 두 개를 같이 닫아야 해서,
 /// **이 시트는 닫히기만 하고 다음 시트는 `BillListView` 가 연다.**
@@ -28,26 +33,20 @@ struct BillDetailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: DS.Spacing.section) {
-                    header
                     amount
                     details
                     ActionButton(title: "영수증 보기", kind: .tinted) { showReceipt = true }
                 }
                 .padding(.horizontal, DS.Spacing.screen)
-                .padding(.top, DS.Spacing.screen)
-                .padding(.bottom, DS.Spacing.section)
+                // 위아래를 한 단계 더 벌린다. 위는 금액(앱에서 가장 큰 글자)이
+                // 손잡이에 붙지 않게, 아래는 "영수증 보기"가 바닥에 고정된
+                // 거절·송금 버튼에 붙지 않게 — 붙으면 누를 때 잘못 짚는다.
+                .padding(.vertical, DS.Spacing.sheetEdge)
             }
 
-            // 바닥 버튼은 스크롤을 안 따라간다. 시트를 반만 올린 상태에서는 위 내용이
-            // 이 선에서 잘리므로, 선과 여백으로 "여기까지가 읽는 자리"를 갈라 준다.
-            // 이게 없으면 잘린 내용이 버튼에 붙어 한 덩어리로 보인다.
-            Divider()
-
-            actions
-                .padding(.horizontal, DS.Spacing.screen)
-                .padding(.top, DS.Spacing.screen)
-                .padding(.bottom, DS.Spacing.screen)
+            bottomBar
         }
+        .presentationDetents(detents)
         .sheet(isPresented: $showReceipt) {
             ReceiptSheetView(receiptUrl: bill.receiptUrl)
         }
@@ -75,29 +74,47 @@ struct BillDetailView: View {
         }
     }
 
-    // MARK: - 머리
+    // MARK: - 높이
 
-    private var header: some View {
-        HStack(spacing: DS.Spacing.medium) {
-            InitialAvatarView(name: bill.submitterName, placement: .sheet)
-            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                Text(bill.submitterName)
-                    .sheetTitle()
-                Text(payee?.accountLine ?? "계좌 미등록")
-                    .font(.subheadline)
-                    .foregroundColor(payee == nil ? DS.Palette.pending : .secondary)
-            }
-            Spacer(minLength: DS.Spacing.small)
-            Text(bill.statusLabel)
-                .tagChip(color: bill.statusColor)
+    /// 시트는 **화면 높이의 정해진 비율**로 열린다 (`DS.Sheet.billDetail`).
+    ///
+    /// `.medium`(화면 절반)은 하필 "영수증 보기" 버튼 자리에서 잘렸다. 잘린 글은
+    /// "아래에 더 있다"는 신호지만 **잘린 버튼은 눌러도 되는 건지부터 헷갈린다.**
+    /// 그렇다고 내용을 재서 딱 맞추면 **열 때마다 높이가 달라진다** — 첫 측정이
+    /// 크기 바뀌는 도중 어디에 걸리느냐를 타서, 같은 청구서가 어떨 때는 길게
+    /// 어떨 때는 짧게 열렸다 (`TROUBLESHOOTING.md`).
+    ///
+    /// 그래서 **늘 같은 자리에서 열리는 쪽**을 골랐다. 비율은 내용보다 조금 넉넉해서
+    /// 남는 자리는 스크롤 안쪽 아래에 생기고, 모자라면 스크롤된다.
+    /// `.large` 는 손으로 더 올릴 때를 위해 남긴다.
+    private var detents: Set<PresentationDetent> {
+        [.fraction(DS.Sheet.billDetail), .large]
+    }
+
+    // MARK: - 바닥
+
+    /// 바닥 버튼은 스크롤을 안 따라간다. 시트를 손으로 올려 내용이 이 선에서
+    /// 잘릴 때, 선과 여백이 "여기까지가 읽는 자리"를 갈라 준다 (DESIGN.md 6번).
+    /// 이게 없으면 잘린 내용이 버튼에 붙어 한 덩어리로 보인다.
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            actions
+                .padding(DS.Spacing.screen)
         }
     }
+
+    // MARK: - 내용
 
     /// 시트에서 제일 먼저 읽어야 하는 자리. 크기를 여기에 몰아준다.
     private var amount: some View {
         VStack(spacing: DS.Spacing.tight) {
-            Text("\(bill.amount.formatted())원")
-                .heroAmount()
+            HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
+                Text(bill.amount.formatted())
+                    .heroAmount()
+                Text("원")
+                    .amountUnit()
+            }
             Text(bill.title)
                 .sheetSubtext()
                 .multilineTextAlignment(.center)
@@ -105,18 +122,29 @@ struct BillDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// 이름·청구일·상태·계좌. **이 시트에서 값이 적히는 곳은 여기 하나뿐이다.**
     private var details: some View {
         VStack(spacing: 0) {
+            detailRow("이름", bill.submitterName)
+            rowDivider
             // 기기 언어가 영어여도 한국어로 나와야 한다. `formatted()` 는 로케일을 탄다.
             detailRow("청구일", bill.createdAt.koreanDateTimeString)
-            Divider().padding(.vertical, DS.Spacing.small)
+            rowDivider
             detailRow("상태", bill.statusLabel, color: bill.statusColor)
-            if let payee {
-                Divider().padding(.vertical, DS.Spacing.small)
-                detailRow("계좌", payee.accountLine)
-            }
+            rowDivider
+            // 계좌가 없어도 줄을 지우지 않는다. 없다는 사실이 여기서 할 결정을
+            // 바꾸므로(송금 대신 계좌 등록) 주황으로 적어 둔다.
+            detailRow(
+                "계좌",
+                payee?.accountLine ?? "계좌 미등록",
+                color: payee == nil ? DS.Palette.pending : nil
+            )
         }
         .groupBox()
+    }
+
+    private var rowDivider: some View {
+        Divider().padding(.vertical, DS.Spacing.small)
     }
 
     private func detailRow(_ label: String, _ value: String, color: Color? = nil) -> some View {
@@ -131,7 +159,7 @@ struct BillDetailView: View {
         }
     }
 
-    // MARK: - 바닥 버튼
+    // MARK: - 처리 버튼
 
     /// 대기중이면 처리하는 자리고, 처리된 뒤에는 지우는 자리다.
     /// 계좌를 못 찾았으면 송금 대신 계좌 등록이 들어온다 — 등록이 먼저다.
