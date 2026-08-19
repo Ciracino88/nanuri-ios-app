@@ -1,6 +1,10 @@
 import SwiftUI
-import Combine
 
+/// 프로필 사진 원. 주소가 없으면 기본 아이콘이 들어온다.
+///
+/// 이미지 로딩은 `CachedAsyncImage` 가 한다 — 예전에는 이 파일이 자기 캐시를
+/// 따로 들고 있었는데(기본 `AsyncImage` 가 재렌더마다 다시 받아서 사진이 안 뜨던
+/// 문제), 영수증도 같은 문제를 겪어서 로더를 공용으로 옮겼다.
 struct AvatarView: View {
     let url: String?
     let size: CGFloat
@@ -8,7 +12,15 @@ struct AvatarView: View {
     var body: some View {
         Group {
             if let url, let parsed = URL(string: url) {
-                CachedAvatarImage(url: parsed)
+                CachedAsyncImage(url: parsed, maxDimension: size) { phase in
+                    if case .success(let image) = phase {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        AvatarView.defaultIcon
+                    }
+                }
             } else {
                 AvatarView.defaultIcon
             }
@@ -21,54 +33,5 @@ struct AvatarView: View {
         Image(systemName: "person.circle.fill")
             .resizable()
             .foregroundColor(Color(.systemGray3))
-    }
-}
-
-/// 한 번 받은 이미지를 전역 캐시에 저장하고, 재렌더에도 상태가 유지되는 로더.
-/// 기본 AsyncImage는 뷰가 재생성될 때마다 다운로드를 다시 시작해,
-/// Realtime 등으로 부모가 자주 재렌더되면 사진이 표시되지 않는 문제가 있다.
-private final class AvatarImageLoader: ObservableObject {
-    @Published var image: UIImage?
-
-    private static let cache = NSCache<NSURL, UIImage>()
-    private var loadedURL: URL?
-
-    func load(_ url: URL) {
-        // 이미 같은 URL을 로드했으면 아무것도 하지 않는다.
-        if loadedURL == url, image != nil { return }
-        loadedURL = url
-
-        if let cached = AvatarImageLoader.cache.object(forKey: url as NSURL) {
-            image = cached
-            return
-        }
-
-        Task { [weak self] in
-            guard
-                let (data, _) = try? await URLSession.shared.data(from: url),
-                let downloaded = UIImage(data: data)
-            else { return }
-            AvatarImageLoader.cache.setObject(downloaded, forKey: url as NSURL)
-            await MainActor.run { self?.image = downloaded }
-        }
-    }
-}
-
-private struct CachedAvatarImage: View {
-    let url: URL
-    @StateObject private var loader = AvatarImageLoader()
-
-    var body: some View {
-        Group {
-            if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                AvatarView.defaultIcon
-            }
-        }
-        .onAppear { loader.load(url) }
-        .onChange(of: url) { newURL in loader.load(newURL) }
     }
 }
