@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// 청구서 탭.
+///
+/// 평소에는 카드를 눌러 한 건씩 처리하고(`BillDetailView`), 한 사람이 여러 건을
+/// 냈을 때는 **묶어 보내기 선택 모드**로 여러 건을 골라 한 번에 보낸다.
+/// 토스 딥링크는 수취인 한 명·금액 하나만 받으므로 **같은 사람끼리만** 묶인다.
 struct BillListView: View {
     @StateObject private var viewModel = BillViewModel()
     /// 계좌부 탭과 같은 인스턴스. ContentView 가 갖고 있다.
@@ -14,6 +19,9 @@ struct BillListView: View {
     @State private var detailBill: Bill?
     /// 상세 시트가 닫힌 **뒤에** 열 시트. 시트 위에 시트를 겹치지 않으려고 한 박자 미룬다.
     @State private var afterDetail: (() -> Void)?
+    /// 묶어 보내기 선택 모드. 헤더 왼쪽 버튼으로 켜고 끈다.
+    @State private var isSelecting = false
+    @State private var selection: Set<UUID> = []
     @Environment(\.scenePhase) private var scenePhase
 
     /// 지금 칩으로 거른 목록. 최근 것이 위로 온다.
@@ -44,15 +52,30 @@ struct BillListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AdminHeaderView(title: "청구서") {
-                Task {
-                    await viewModel.fetchBills()
-                    await payeeViewModel.fetchPayees(showLoading: false)
+            AdminHeaderView(title: "청구서", leading: {
+                HeaderIconButton(
+                    systemName: isSelecting ? "xmark" : "checklist",
+                    label: isSelecting ? "고르기 그만두기" : "묶어서 보낼 청구서 고르기",
+                    tint: isSelecting ? DS.Palette.deposit : .primary
+                ) {
+                    withAnimation(DS.Motion.control) {
+                        if isSelecting { exitSelection() } else { enterSelection() }
+                    }
+                }
+            })
+
+            // 고를 수 있는 건 대기중뿐이라 선택 모드에서는 칩을 걷고 그 자리에
+            // 왜 어떤 카드는 못 고르는지를 적는다. 같은 높이라 목록이 안 튄다.
+            Group {
+                if isSelecting {
+                    Text("같은 사람의 대기중 청구서만 함께 보낼 수 있어요")
+                        .rowSubtext()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    ChipSelector(items: chipItems, selection: $filter)
                 }
             }
-
-            ChipSelector(items: chipItems, selection: $filter)
-                .padding(.vertical, DS.Spacing.medium)
+            .padding(.vertical, DS.Spacing.medium)
 
             Group {
                 if viewModel.isLoading {
@@ -63,11 +86,18 @@ struct BillListView: View {
                     let bills = filteredBills
                     if bills.isEmpty {
                         EmptyStateView(title: emptyTitle)
+                            .pullToRefresh { await reload() }
                     } else {
                         List(bills) { bill in
-                            BillRowView(bill: bill)
+                            BillRowView(bill: bill, selection: isSelecting ? selectionState(for: bill) : nil)
                                 .cardRow()
-                                .onTapGesture { detailBill = bill }
+                                .onTapGesture {
+                                    if isSelecting {
+                                        withAnimation(DS.Motion.control) { toggle(bill) }
+                                    } else {
+                                        detailBill = bill
+                                    }
+                                }
                                 .transition(.asymmetric(
                                     insertion: .move(edge: .top).combined(with: .opacity),
                                     removal: .opacity
@@ -76,9 +106,14 @@ struct BillListView: View {
                         .listStyle(.plain)
                         .screenBackground()
                         .animation(DS.Motion.list, value: bills)
+                        // 헤더에 새로고침 버튼이 없다. 목록은 당겨서 새로고침한다
+                        // (DESIGN.md 1번). 평소에는 실시간으로 들어온다.
+                        .refreshable { await reload() }
                     }
                 }
             }
+
+            if isSelecting { selectionBar }
         }
         .screenBackground()
         .sheet(item: $detailBill, onDismiss: {
@@ -90,13 +125,11 @@ struct BillListView: View {
             BillDetailView(
                 bill: bill,
                 payee: payeeViewModel.payee(for: bill.submitterName),
-                siblings: viewModel.pendingSiblings(of: bill),
                 viewModel: viewModel,
-                onTransfer: { bills in
+                onTransfer: {
                     afterDetail = {
                         guard let payee = payeeViewModel.payee(for: bill.submitterName) else { return }
-                        pendingTransfer = TossTransfer(bills: bills, payee: payee)
-                        viewModel.openToss(bills: bills, payee: payee)
+                        send([bill], to: payee)
                     }
                     detailBill = nil
                 },
@@ -143,5 +176,98 @@ struct BillListView: View {
             guard phase == .active else { return }
             Task { await viewModel.fetchBills(showLoading: false) }
         }
+    }
+
+    private func reload() async {
+        await viewModel.fetchBills(showLoading: false)
+        await payeeViewModel.fetchPayees(showLoading: false)
+    }
+
+    // MARK: - 묶어 보내기
+
+    /// 고른 청구서들. 목록 순서(최근 것이 위)를 그대로 따른다.
+    private var selectedBills: [Bill] {
+        filteredBills.filter { selection.contains($0.id) }
+    }
+
+    private var selectedTotal: Int {
+        selectedBills.reduce(0) { $0 + $1.amount }
+    }
+
+    /// 지금 고르고 있는 사람. 한 건을 고르면 그 사람 것만 더 고를 수 있다.
+    /// 계좌부와 같은 규칙(`normalizedName`)으로 맞춘다.
+    private var selectionOwner: String? {
+        selectedBills.first?.submitterName.normalizedName
+    }
+
+    private func selectionState(for bill: Bill) -> BillRowView.Selection {
+        if selection.contains(bill.id) { return .on }
+        // 대기중이 아니거나 계좌가 없으면 애초에 보낼 수 없다.
+        guard bill.isPending, payeeViewModel.payee(for: bill.submitterName) != nil else { return .blocked }
+        guard let owner = selectionOwner else { return .off }
+        return bill.submitterName.normalizedName == owner ? .off : .blocked
+    }
+
+    private func toggle(_ bill: Bill) {
+        guard selectionState(for: bill) != .blocked else { return }
+        if selection.contains(bill.id) {
+            selection.remove(bill.id)
+        } else {
+            selection.insert(bill.id)
+        }
+    }
+
+    private func enterSelection() {
+        // 고를 수 있는 건 대기중뿐이다. 다른 칩을 보던 중이면 옮겨 준다.
+        filter = .pending
+        selection = []
+        isSelecting = true
+    }
+
+    private func exitSelection() {
+        isSelecting = false
+        selection = []
+    }
+
+    /// 골라 둔 것들을 토스로 넘긴다. 사람은 하나로 정해져 있다.
+    private func sendSelected() {
+        let bills = selectedBills
+        guard let first = bills.first,
+              let payee = payeeViewModel.payee(for: first.submitterName) else { return }
+        send(bills, to: payee)
+        exitSelection()
+    }
+
+    /// 토스를 열고, 돌아왔을 때 물어볼 것을 걸어 둔다. 승인은 그 시트가 한다.
+    private func send(_ bills: [Bill], to payee: Payee) {
+        pendingTransfer = TossTransfer(bills: bills, payee: payee)
+        viewModel.openToss(bills: bills, payee: payee)
+    }
+
+    /// 목록 아래에 고정되는 선택 요약. 내용이 여기서 잘리므로 위에 선을 긋는다
+    /// (DESIGN.md 6번).
+    private var selectionBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            VStack(spacing: DS.Spacing.medium) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(selection.isEmpty ? "보낼 청구서를 고르세요" : "\(selectedBills.count)건 선택")
+                        .rowTitle()
+                    Spacer(minLength: DS.Spacing.small)
+                    if !selection.isEmpty {
+                        Text("\(selectedTotal.formatted())원")
+                            .cardTitle()
+                    }
+                }
+                if !selection.isEmpty {
+                    ActionButton(title: "합쳐서 송금하기", kind: .primary, action: sendSelected)
+                }
+            }
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.top, DS.Spacing.medium)
+            .padding(.bottom, DS.Spacing.small)
+        }
+        .background(Color(.systemBackground))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

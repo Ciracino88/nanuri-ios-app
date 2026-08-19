@@ -3,18 +3,25 @@ import Combine
 
 /// 모든 탭이 쓰는 헤더. 앱의 상단은 항상 이 모양이다.
 ///
-/// 슬롯은 셋뿐이다 — **왼쪽 새로고침 · 가운데 화면 이름 · 오른쪽 알림**.
-/// 새로고침과 알림은 어느 탭에서나 같은 자리에 있어야 하므로 헤더가 직접 갖는다.
-/// 화면마다 다른 동작은 알림 왼쪽에 **하나만** 둔다. 둘 이상이면 메뉴로 묶는다
-/// (재정 탭의 `ellipsis.circle` 처럼). 아이콘이 늘어나면 가운데 이름이 밀린다.
+/// 슬롯은 넷이다 — **왼쪽 화면별 동작 · 가운데 화면 이름 · 오른쪽 화면별 동작 · 알림**.
+/// 알림만 헤더가 직접 갖고 어느 탭에서나 같은 자리에 있다.
+///
+/// **새로고침 버튼은 없다.** 목록을 아래로 당기면 새로고침된다(`.refreshable`).
+/// 예전에는 왼쪽 자리가 새로고침 고정이었는데, 청구서 탭이 실시간으로 들어오게
+/// 되면서 버튼을 누를 일이 거의 없어졌다. 당겨서 새로고침은 목록 어디서나 되는
+/// 손동작이라 자리를 차지하지 않는다. 대신 비워진 왼쪽을 화면이 쓴다
+/// (청구서 탭의 묶어 보내기 선택 모드).
+///
+/// 한쪽에 아이콘은 **하나까지**다. 둘 이상이면 `Menu` 하나로 묶는다 (재정 탭의
+/// `ellipsis.circle`). 아이콘이 늘어나면 가운데 이름이 밀린다.
 ///
 /// 가운데를 누를 일이 있는 화면(재정 탭의 장부 전환)은 `titleAction` 을 준다.
 /// 그러면 이름 옆에 `chevron.down` 이 붙어 눌리는 자리라는 게 보인다.
-struct AdminHeaderView<Trailing: View>: View {
+struct AdminHeaderView<Leading: View, Trailing: View>: View {
     let title: String
     /// 가운데 이름을 눌렀을 때. 주면 `chevron.down` 이 함께 그려진다.
     var titleAction: (() -> Void)?
-    let onRefresh: () -> Void
+    @ViewBuilder let leading: () -> Leading
     @ViewBuilder let trailing: () -> Trailing
 
     @ObservedObject private var notifications = NotificationStore.shared
@@ -23,12 +30,12 @@ struct AdminHeaderView<Trailing: View>: View {
     init(
         title: String,
         titleAction: (() -> Void)? = nil,
-        onRefresh: @escaping () -> Void,
+        @ViewBuilder leading: @escaping () -> Leading,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) {
         self.title = title
         self.titleAction = titleAction
-        self.onRefresh = onRefresh
+        self.leading = leading
         self.trailing = trailing
     }
 
@@ -36,7 +43,7 @@ struct AdminHeaderView<Trailing: View>: View {
         ZStack {
             titleView
             HStack(spacing: 0) {
-                HeaderIconButton(systemName: "arrow.clockwise", label: "새로고침", action: onRefresh)
+                leading()
                 Spacer(minLength: 0)
                 trailing()
                 notificationButton
@@ -95,9 +102,32 @@ struct AdminHeaderView<Trailing: View>: View {
     }
 }
 
+// 빈 슬롯은 자리를 차지하지 않는다. 가운데 이름은 `ZStack` 으로 화면 가운데에
+// 놓이므로 양옆이 비어도 제목이 흔들리지 않는다.
+
+extension AdminHeaderView where Leading == EmptyView {
+    init(
+        title: String,
+        titleAction: (() -> Void)? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.init(title: title, titleAction: titleAction, leading: { EmptyView() }, trailing: trailing)
+    }
+}
+
 extension AdminHeaderView where Trailing == EmptyView {
-    init(title: String, titleAction: (() -> Void)? = nil, onRefresh: @escaping () -> Void) {
-        self.init(title: title, titleAction: titleAction, onRefresh: onRefresh) { EmptyView() }
+    init(
+        title: String,
+        titleAction: (() -> Void)? = nil,
+        @ViewBuilder leading: @escaping () -> Leading
+    ) {
+        self.init(title: title, titleAction: titleAction, leading: leading, trailing: { EmptyView() })
+    }
+}
+
+extension AdminHeaderView where Leading == EmptyView, Trailing == EmptyView {
+    init(title: String, titleAction: (() -> Void)? = nil) {
+        self.init(title: title, titleAction: titleAction, leading: { EmptyView() }, trailing: { EmptyView() })
     }
 }
 

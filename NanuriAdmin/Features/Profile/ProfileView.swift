@@ -3,8 +3,8 @@ import Supabase
 
 /// 프로필 탭.
 ///
-/// 헤더가 세 슬롯(새로고침·이름·알림)으로 고정되면서 갈 곳이 없어진 것들이
-/// 여기로 모였다 — 아바타 · 프로필 수정 · 로그아웃.
+/// 헤더에 자리가 없어 갈 곳이 없던 것들이 여기로 모였다 —
+/// 아바타 · 프로필 수정 · 로그아웃.
 struct ProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
 
@@ -16,9 +16,7 @@ struct ProfileView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AdminHeaderView(title: "프로필") {
-                Task { await load() }
-            }
+            AdminHeaderView(title: "프로필")
 
             if isLoading && profile == nil {
                 Spacer()
@@ -36,6 +34,7 @@ struct ProfileView: View {
                     .padding(.horizontal, DS.Spacing.screen)
                     .padding(.vertical, DS.Spacing.screen)
                 }
+                .refreshable { await load() }
             }
         }
         .screenBackground()

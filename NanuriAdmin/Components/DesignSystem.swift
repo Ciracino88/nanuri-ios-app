@@ -193,6 +193,23 @@ extension View {
     }
 }
 
+// MARK: - 당겨서 새로고침
+
+extension View {
+    /// 목록이 아닌 화면(빈 상태 등)도 당겨서 새로고침되게 감싼다.
+    ///
+    /// `.refreshable` 은 스크롤되는 것에만 붙는다. 헤더에서 새로고침 버튼을
+    /// 걷어냈으므로(DESIGN.md 1번) 목록이 비었을 때 새로고침할 방법이 없으면
+    /// 안 된다. 내용이 화면보다 짧아도 당길 수 있어야 해서 튕김을 항상 켠다.
+    func pullToRefresh(_ action: @escaping @Sendable () async -> Void) -> some View {
+        ScrollView {
+            self.containerRelativeFrame(.vertical)
+        }
+        .scrollBounceBehavior(.always)
+        .refreshable { await action() }
+    }
+}
+
 // MARK: - 빈 상태
 
 /// 목록이 비었을 때 쓰는 안내.

@@ -24,13 +24,11 @@ struct PayeeListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AdminHeaderView(title: "계좌부") {
-                Task { await viewModel.fetchPayees(showLoading: false) }
-            } trailing: {
+            AdminHeaderView(title: "계좌부", trailing: {
                 HeaderIconButton(systemName: "plus", label: "계좌 추가") {
                     editing = .create("")
                 }
-            }
+            })
 
             if !viewModel.payees.isEmpty {
                 SearchField(prompt: "이름 · 은행 · 계좌번호", text: $query)
@@ -48,6 +46,7 @@ struct PayeeListView: View {
                         icon: "person.text.rectangle",
                         message: "청구자 이름과 계좌를 미리 등록해 두면\n청구서가 들어올 때 자동으로 연결돼요."
                     )
+                    .pullToRefresh { await viewModel.fetchPayees(showLoading: false) }
                 } else if filtered.isEmpty {
                     EmptyStateView(
                         title: "찾는 계좌가 없어요",
