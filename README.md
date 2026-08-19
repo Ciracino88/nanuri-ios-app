@@ -44,7 +44,6 @@
 | `NanuriAdmin/` | SwiftUI 앱 (iOS 26.2+) |
 | `worker/` | Cloudflare Worker. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
 | `supabase/migrations/` | DB 스키마. 최신 것이 진실이고 앞의 것은 이력 |
-| `scripts/` | 수기 엑셀 장부를 읽어 옮기는 파이썬 스크립트 |
 
 앱 폴더는 Xcode 16 파일시스템 동기화 그룹이라 **새 `.swift` 는 폴더에 넣으면
 자동 인식된다.** `project.pbxproj` 를 건드릴 일이 없다.
