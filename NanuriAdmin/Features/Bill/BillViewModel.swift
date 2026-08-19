@@ -8,26 +8,65 @@ class BillViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    func subscribeToRealtime() async {
-        let channel = supabase.channel("bills-realtime")
+    /// 실시간 구독을 돌리는 태스크와 그 채널. 화면이 아니라 이 객체가 들고 있는다.
+    private var realtimeTask: Task<Void, Never>?
+    private var realtimeChannel: RealtimeChannelV2?
 
+    deinit {
+        realtimeTask?.cancel()
+    }
+
+    /// 실시간 구독. **뷰가 아니라 뷰모델이 갖는다.**
+    ///
+    /// 예전에는 화면의 `.task` 안에서 이걸 통째로 돌렸는데, 탭을 옮기면 화면이
+    /// 사라지면서 `.task` 가 취소되고 콜백이 떨어져 나갔다. 돌아와서 다시 부르면
+    /// SDK 가 **토픽이 같은 채널을 캐시에서 그대로 돌려주는데**, 이미 구독된
+    /// 채널에는 `postgresChange` 콜백을 못 붙인다 (SDK 가 경고만 찍고 빈 구독을
+    /// 준다). 그래서 탭을 한 번 옮기면 그 뒤로 실시간이 조용히 죽어 있었다.
+    /// 목록이 그럭저럭 맞아 보였던 건 탭에 돌아올 때 `fetchBills()` 를 같이
+    /// 불렀기 때문이다.
+    ///
+    /// 그래서 구독은 뷰 생명주기와 떼어 놓고 **앱을 켠 뒤 한 번만** 만든다.
+    /// 두 번째부터는 아무 일도 안 한다.
+    func subscribeToRealtime() {
+        guard realtimeTask == nil else { return }
+
+        let channel = supabase.channel("bills-realtime")
+        realtimeChannel = channel
+
+        // 콜백은 subscribe() 보다 **먼저** 붙어야 한다. 순서가 바뀌면 조인 payload 에
+        // postgres_changes 가 비어서 아무 이벤트도 안 온다.
         let inserts = channel.postgresChange(InsertAction.self, schema: "public", table: "bills")
         let updates = channel.postgresChange(UpdateAction.self, schema: "public", table: "bills")
         let deletes = channel.postgresChange(DeleteAction.self, schema: "public", table: "bills")
 
-        await channel.subscribe()
+        realtimeTask = Task { [weak self] in
+            await channel.subscribe()
 
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for await _ in inserts { await self.fetchBills(showLoading: false) }
-            }
-            group.addTask {
-                for await _ in updates { await self.fetchBills(showLoading: false) }
-            }
-            group.addTask {
-                for await _ in deletes { await self.fetchBills(showLoading: false) }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in inserts { await self?.fetchBills(showLoading: false) }
+                }
+                group.addTask {
+                    for await _ in updates { await self?.fetchBills(showLoading: false) }
+                }
+                group.addTask {
+                    for await _ in deletes { await self?.fetchBills(showLoading: false) }
+                }
             }
         }
+    }
+
+    /// 구독을 끊는다. 화면이 사라질 때가 아니라 **뷰모델이 없어질 때** 부른다.
+    func stopRealtime() {
+        realtimeTask?.cancel()
+        realtimeTask = nil
+
+        guard let channel = realtimeChannel else { return }
+        realtimeChannel = nil
+        // 채널은 SDK 가 토픽으로 캐시해 둔다. 지우지 않으면 다음에 같은 토픽으로
+        // 새 구독을 만들 때 죽은 채널이 그대로 나온다.
+        Task { await supabase.removeChannel(channel) }
     }
 
     func fetchBills(showLoading: Bool = true) async {

@@ -14,6 +14,7 @@ struct BillListView: View {
     @State private var detailBill: Bill?
     /// 상세 시트가 닫힌 **뒤에** 열 시트. 시트 위에 시트를 겹치지 않으려고 한 박자 미룬다.
     @State private var afterDetail: (() -> Void)?
+    @Environment(\.scenePhase) private var scenePhase
 
     /// 지금 칩으로 거른 목록. 최근 것이 위로 온다.
     var filteredBills: [Bill] {
@@ -129,9 +130,18 @@ struct BillListView: View {
             .presentationDragIndicator(.hidden)
         }
         .task {
+            // 구독은 뷰모델이 들고 있어서 여기서 부르는 건 처음 한 번뿐이다.
+            // 탭을 오갈 때마다 다시 붙이면 SDK 가 죽은 채널을 돌려준다
+            // (`BillViewModel.subscribeToRealtime`).
+            viewModel.subscribeToRealtime()
             await viewModel.fetchBills()
             await payeeViewModel.fetchPayees()
-            await viewModel.subscribeToRealtime()
+        }
+        // 백그라운드에 있는 동안 웹소켓이 끊기면 그 사이 변경은 못 받는다.
+        // 돌아올 때 한 번 맞춰 주는 안전망이다.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await viewModel.fetchBills(showLoading: false) }
         }
     }
 }
