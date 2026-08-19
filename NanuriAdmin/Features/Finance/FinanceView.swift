@@ -25,15 +25,8 @@ struct FinanceView: View {
             AdminHeaderView(
                 title: "재정",
                 titleAction: { viewModel.currentLedger = nil },
-                onRefresh: {
-                    Task {
-                        await viewModel.fetchTransactions()
-                        viewModel.loadSavedStatements()
-                    }
-                }
-            ) {
-                actionMenu(mode: mode)
-            }
+                trailing: { actionMenu(mode: mode) }
+            )
 
             VStack(spacing: 0) {
                 if viewModel.isLoading {
@@ -181,6 +174,13 @@ struct FinanceView: View {
         .listStyle(.plain)
         .screenBackground()
         .animation(DS.Motion.list, value: selectedTab)
+        .refreshable { await reload() }
+    }
+
+    /// 당겨서 새로고침. 헤더에 새로고침 버튼이 없다 (DESIGN.md 1번).
+    private func reload() async {
+        await viewModel.fetchTransactions()
+        viewModel.loadSavedStatements()
     }
 
     private var emptyView: some View {
@@ -189,6 +189,7 @@ struct FinanceView: View {
             icon: "doc.richtext",
             message: "토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 ⋯ 에서 '저장된 거래내역서'를 열어\n'거래내역 불러오기'를 눌러주세요"
         )
+        .pullToRefresh { await reload() }
     }
 
     /// 헤더의 화면별 동작 자리는 하나뿐이라 내보내기·거래내역서를 한 메뉴로 묶는다.

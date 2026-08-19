@@ -127,18 +127,6 @@ class BillViewModel: ObservableObject {
         }
     }
 
-    /// 같은 사람이 낸 다른 **대기중** 청구서. 묶어서 한 번에 보낼 후보다.
-    ///
-    /// 이름 대조는 계좌부와 같은 규칙(`normalizedName`)을 쓴다. 여기만 다르게
-    /// 맞추면 계좌는 찾았는데 묶음에서는 빠지는 일이 생긴다.
-    func pendingSiblings(of bill: Bill) -> [Bill] {
-        guard bill.isPending else { return [] }
-        let key = bill.submitterName.normalizedName
-        return bills
-            .filter { $0.id != bill.id && $0.isPending && $0.submitterName.normalizedName == key }
-            .sorted { $0.createdAt > $1.createdAt }
-    }
-
     /// 계좌부에서 찾은 수취인으로 토스 송금 화면을 연다.
     /// 이름이 계좌부에 없으면 호출되지 않는다 (UI에서 먼저 막는다).
     ///
