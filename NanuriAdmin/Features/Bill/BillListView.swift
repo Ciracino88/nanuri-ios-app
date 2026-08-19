@@ -4,7 +4,8 @@ struct BillListView: View {
     @StateObject private var viewModel = BillViewModel()
     /// 계좌부 탭과 같은 인스턴스. ContentView 가 갖고 있다.
     @ObservedObject var payeeViewModel: PayeeViewModel
-    @State private var pendingBill: Bill? = nil
+    /// 토스에 다녀온 뒤 결과를 물을 송금. 묶어서 보내면 청구서가 여럿 들어 있다.
+    @State private var pendingTransfer: TossTransfer?
     /// 처음 여는 자리는 **대기중**이다. 전체가 아니라 할 일이 먼저다.
     @State private var filter: BillFilter = .pending
     /// 계좌 미등록 청구서에서 바로 띄우는 등록 시트. 목록을 거치지 않는다.
@@ -88,12 +89,13 @@ struct BillListView: View {
             BillDetailView(
                 bill: bill,
                 payee: payeeViewModel.payee(for: bill.submitterName),
+                siblings: viewModel.pendingSiblings(of: bill),
                 viewModel: viewModel,
-                onTransfer: {
+                onTransfer: { bills in
                     afterDetail = {
                         guard let payee = payeeViewModel.payee(for: bill.submitterName) else { return }
-                        pendingBill = bill
-                        viewModel.openToss(bill: bill, payee: payee)
+                        pendingTransfer = TossTransfer(bills: bills, payee: payee)
+                        viewModel.openToss(bills: bills, payee: payee)
                     }
                     detailBill = nil
                 },
@@ -108,18 +110,19 @@ struct BillListView: View {
         .sheet(item: $payeeEdit) { target in
             PayeeEditView(viewModel: payeeViewModel, target: target)
         }
-        .sheet(item: $pendingBill) { bill in
+        .sheet(item: $pendingTransfer) { transfer in
             TossResultView(
-                bill: bill,
-                payee: payeeViewModel.payee(for: bill.submitterName),
+                transfer: transfer,
                 onApprove: {
                     Task {
-                        await viewModel.updateStatus(billId: bill.id, status: "approved")
-                        pendingBill = nil
+                        // 묶은 건 전부 한 번에 완료로 넘긴다. 토스에서 한 번 보냈으므로
+                        // 하나만 완료로 남으면 나머지가 다시 청구된 것처럼 보인다.
+                        await viewModel.updateStatus(billIds: transfer.billIds, status: "approved")
+                        pendingTransfer = nil
                     }
                 },
                 onCancel: {
-                    pendingBill = nil
+                    pendingTransfer = nil
                 }
             )
             .presentationDetents([.height(420)])
