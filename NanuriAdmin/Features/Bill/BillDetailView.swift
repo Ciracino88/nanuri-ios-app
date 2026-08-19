@@ -164,26 +164,20 @@ struct ReceiptSheetView: View {
             Group {
                 if let url = URL(string: receiptUrl) {
                     // 화면에 그릴 크기로 줄여서 디코드하고, 받은 건 캐시에 남는다.
-                    // 시트를 닫았다 열어도 다시 안 받는다 (`CachedAsyncImage`).
-                    CachedAsyncImage(url: url, maxDimension: DS.Size.fullPhoto) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .padding()
-                        case .failure:
-                            VStack(spacing: DS.Spacing.medium) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: DS.Icon.placeholder))
-                                    .foregroundColor(.gray)
-                                Text("이미지를 불러올 수 없어요")
-                                    .foregroundColor(.gray)
-                            }
+                    // 시트를 닫았다 열어도 다시 안 받는다 (`RemoteImage`).
+                    RemoteImage(url: url, maxDimension: DS.Size.fullPhoto) {
+                        ProgressView()
+                    } failure: {
+                        VStack(spacing: DS.Spacing.medium) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: DS.Icon.placeholder))
+                                .foregroundColor(.gray)
+                            Text("이미지를 불러올 수 없어요")
+                                .foregroundColor(.gray)
                         }
                     }
+                    .scaledToFit()
+                    .padding()
                 }
             }
             .navigationTitle("영수증")

@@ -34,13 +34,12 @@ struct ProfileEditView: View {
                                             .resizable()
                                             .scaledToFill()
                                     } else if let avatarUrl, let url = URL(string: avatarUrl) {
-                                        CachedAsyncImage(url: url, maxDimension: DS.Size.avatar) { phase in
-                                            if case .success(let img) = phase {
-                                                img.resizable().scaledToFill()
-                                            } else {
-                                                defaultAvatarIcon
-                                            }
+                                        RemoteImage(url: url, maxDimension: DS.Size.avatar) {
+                                            defaultAvatarIcon
+                                        } failure: {
+                                            defaultAvatarIcon
                                         }
+                                        .scaledToFill()
                                     } else {
                                         defaultAvatarIcon
                                     }

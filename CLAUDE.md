@@ -18,9 +18,9 @@
 | `worker/` | Cloudflare Worker `nanuri-form`. 공개 청구 폼 + Supabase 저장 + APNs 푸시 |
 | `supabase/migrations/` | DB 스키마. 최신 것이 진실이고 앞의 것은 이력 |
 
-원격 이미지는 전부 **`CachedAsyncImage`** 로 그린다 (`Components/RemoteImage.swift`).
-`AsyncImage` 를 직접 쓰지 않는다 — 캐시도 다운샘플링도 없어서 사진이 매번 다시
-받아지고 메모리를 크게 쓴다 (`TROUBLESHOOTING.md`).
+원격 이미지는 전부 **`RemoteImage`** 로 그린다 (`Components/RemoteImage.swift`,
+Kingfisher). `AsyncImage` 도 `KFImage` 도 직접 쓰지 않는다 — 전자는 캐시도 다운샘플링도
+없고, 후자는 `scaleFactor` 를 빠뜨리기 쉽다 (`TROUBLESHOOTING.md`).
 
 앱 탭은 **청구서 / 재정 / 계좌부 / 프로필** 네 개다 (`App/ContentView.swift`).
 모든 탭은 `AdminHeaderView` 를 쓰고 내비게이션 바는 없다. 헤더 규칙은 `DESIGN.md` 1번.

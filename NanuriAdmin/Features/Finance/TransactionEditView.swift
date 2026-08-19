@@ -214,16 +214,15 @@ struct TransactionEditView: View {
                                 onTap: { previewReceipt = ReceiptPreview(source: .remote(urlString)) },
                                 onDelete: { keptUrls.removeAll { $0 == urlString } }
                             ) {
-                                CachedAsyncImage(
+                                RemoteImage(
                                     url: URL(string: urlString),
                                     maxDimension: DS.Size.thumbnail
-                                ) { phase in
-                                    switch phase {
-                                    case .success(let img): img.resizable().scaledToFill()
-                                    case .failure: fallbackTile
-                                    case .empty: loadingTile
-                                    }
+                                ) {
+                                    loadingTile
+                                } failure: {
+                                    fallbackTile
                                 }
+                                .scaledToFill()
                             }
                         }
                         ForEach(pendingImages) { pending in
@@ -421,21 +420,22 @@ struct ReceiptViewerView: View {
     private var zoomableImage: some View {
         switch source {
         case .remote(let url):
-            // 손가락으로 확대하는 화면이라 줄이지 않는다 (`maxDimension: nil`).
-            CachedAsyncImage(url: URL(string: url)) { phase in
-                switch phase {
-                case .success(let img): zoomable(img)
-                case .failure: Text("영수증을 불러오지 못했어요").foregroundColor(.white)
-                case .empty: ProgressView().tint(.white)
+            // 손가락으로 확대하는 화면이라 줄이지 않는다 (`maxDimension` 없음).
+            // 줄여 두면 확대했을 때 뭉갠 게 그대로 보인다.
+            zoomable(
+                RemoteImage(url: URL(string: url)) {
+                    ProgressView().tint(.white)
+                } failure: {
+                    Text("영수증을 불러오지 못했어요").foregroundColor(.white)
                 }
-            }
+            )
         case .local(let image):
-            zoomable(Image(uiImage: image))
+            zoomable(Image(uiImage: image).resizable())
         }
     }
 
-    private func zoomable(_ image: Image) -> some View {
-        image.resizable().scaledToFit()
+    private func zoomable<Content: View>(_ content: Content) -> some View {
+        content.scaledToFit()
             .scaleEffect(scale)
             .gesture(
                 MagnificationGesture()
