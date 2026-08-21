@@ -17,6 +17,8 @@ import Combine
 ///
 /// 가운데를 누를 일이 있는 화면(재정 탭의 장부 전환)은 `titleAction` 을 준다.
 /// 그러면 이름 옆에 `chevron.down` 이 붙어 눌리는 자리라는 게 보인다.
+/// **▾ 를 붙였으면 눌렀을 때 고를 것이 펼쳐져야 한다** — 뒤로 가는 동작을 걸면
+/// 화살표가 거짓말을 한다 (`LedgerSwitcherView`, DESIGN.md 1번).
 struct AdminHeaderView<Leading: View, Trailing: View>: View {
     let title: String
     /// 가운데 이름을 눌렀을 때. 주면 `chevron.down` 이 함께 그려진다.
