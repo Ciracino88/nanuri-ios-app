@@ -208,29 +208,6 @@ struct NewLedgerView: View {
     }
 }
 
-struct DateFilterView: View {
-    @Binding var startDate: Date
-    @Binding var endDate: Date
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        NavigationView {
-            Form {
-                DatePicker("시작일", selection: $startDate, displayedComponents: .date)
-                DatePicker("종료일", selection: $endDate, in: startDate..., displayedComponents: .date)
-            }
-            .navigationTitle("기간 설정")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("완료") { dismiss() }
-                }
-            }
-        }
-        .environment(\.locale, Locale(identifier: "ko_KR"))
-    }
-}
-
 /// 내보낼 파일을 sheet(item:)에 넘기기 위한 래퍼.
 struct ExportFile: Identifiable {
     let id = UUID()

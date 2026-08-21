@@ -9,8 +9,19 @@ class FinanceViewModel: ObservableObject {
     @Published var transactions: [BankTransaction] = []
     @Published var isLoading = false
     @Published var error: String?
-    @Published var startDate = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
-    @Published var endDate = Date()
+    /// 지금 보고 있는 달 (그 달 1일 0시).
+    ///
+    /// 수기 장부가 **시트 하나 = 한 달**이었고 보고서도 월 단위라, 화면도 달을 하나씩
+    /// 넘겨 본다. 임의 기간을 고르는 자리는 두지 않는다 — 월별 회계 보고서에서
+    /// "3월 12일 ~ 5월 2일" 같은 구간은 전월이월이 뜻을 잃어 읽을 수 없는 표가 된다.
+    @Published var currentMonth = Calendar.current.startOfMonth(Date())
+    /// 장부를 고른 뒤 아직 한 번도 달을 맞춰 주지 않았는가.
+    /// (거래를 받아오면 자료가 있는 마지막 달로 한 번만 데려간다)
+    private var needsInitialMonth = true
+
+    /// 보고 있는 달의 시작·끝. 보고서와 영수증 부록도 이걸 그대로 쓴다.
+    var startDate: Date { currentMonth }
+    var endDate: Date { Calendar.current.endOfMonth(currentMonth) }
     @Published var savedStatements: [StatementFile] = []
     @Published var splitsByTransaction: [UUID: [TransactionSplit]] = [:]
     @Published var ledgers: [Ledger] = []
@@ -26,6 +37,69 @@ class FinanceViewModel: ObservableObject {
 
     var deposits: [BankTransaction] { filtered.filter { $0.isDeposit } }
     var withdrawals: [BankTransaction] { filtered.filter { !$0.isDeposit } }
+
+    // MARK: - 달 넘기기
+
+    /// 넘겨 볼 수 있는 달들 (과거 → 현재). 거래가 한 건도 없는 중간 달도 포함한다 —
+    /// 장부는 비어 있어도 그 달이 존재하고, 건너뛰면 이어지는 느낌이 끊긴다.
+    ///
+    /// 뒤쪽 끝은 **마지막 거래가 있는 달과 이번 달 중 나중**이다. 이번 달에 아직
+    /// 거래가 없어도 열 수 있어야 하기 때문이다 (오늘 넣은 게 여기 뜬다).
+    var selectableMonths: [Date] {
+        let cal = Calendar.current
+        let months = transactions.map { cal.startOfMonth($0.datetime) }
+        let thisMonth = cal.startOfMonth(Date())
+        guard var cursor = months.min() else { return [thisMonth] }
+        let last = max(months.max() ?? thisMonth, thisMonth)
+
+        var result: [Date] = []
+        while cursor <= last {
+            result.append(cursor)
+            guard let next = cal.date(byAdding: .month, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return result
+    }
+
+    /// 그 달에 거래가 있는지 (달 고르는 메뉴에서 빈 달을 흐리게 보여주려고).
+    func hasTransactions(in month: Date) -> Bool {
+        let cal = Calendar.current
+        return transactions.contains { cal.isDate($0.datetime, equalTo: month, toGranularity: .month) }
+    }
+
+    var canGoToPreviousMonth: Bool {
+        guard let first = selectableMonths.first else { return false }
+        return currentMonth > first
+    }
+
+    var canGoToNextMonth: Bool {
+        guard let last = selectableMonths.last else { return false }
+        return currentMonth < last
+    }
+
+    func goToPreviousMonth() {
+        guard canGoToPreviousMonth,
+              let previous = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) else { return }
+        currentMonth = previous
+    }
+
+    func goToNextMonth() {
+        guard canGoToNextMonth,
+              let next = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) else { return }
+        currentMonth = next
+    }
+
+    /// 거래를 받아온 직후, 자료가 있는 **마지막 달**로 한 번만 데려간다.
+    /// 이게 없으면 이관 직후처럼 과거 자료만 있을 때 빈 이번 달이 열려 "아무것도
+    /// 없다"로 보인다. 사용자가 달을 넘긴 뒤에는 다시 건드리지 않는다.
+    private func positionAtLatestMonthIfNeeded() {
+        guard needsInitialMonth else { return }
+        needsInitialMonth = false
+        let cal = Calendar.current
+        if let latest = transactions.map({ cal.startOfMonth($0.datetime) }).max() {
+            currentMonth = latest
+        }
+    }
 
     /// 특정 거래의 분할 항목 (없으면 빈 배열).
     func splits(for transactionId: UUID) -> [TransactionSplit] {
@@ -115,6 +189,7 @@ class FinanceViewModel: ObservableObject {
     /// 장부를 선택하고 그 장부의 거래를 불러온다.
     func selectLedger(_ ledger: Ledger) async {
         currentLedger = ledger
+        needsInitialMonth = true   // 장부가 바뀌면 그 장부의 마지막 달로 다시 맞춘다
         await fetchTransactions()
     }
 
@@ -200,6 +275,7 @@ class FinanceViewModel: ObservableObject {
                     .value
                 splitsByTransaction = Dictionary(grouping: splitRows, by: { $0.transactionId })
             }
+            positionAtLatestMonthIfNeeded()
         } catch {
             self.error = error.localizedDescription
         }

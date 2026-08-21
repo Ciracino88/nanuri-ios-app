@@ -13,7 +13,10 @@ extension Date {
     private static let koreanShortDate = koreanFormatter("M월 d일")
     private static let koreanDateTime = koreanFormatter("yyyy년 M월 d일 a h:mm")
     private static let koreanTime = koreanFormatter("a h:mm")
+    private static let koreanYearMonth = koreanFormatter("yyyy년 M월")
 
+    /// 2026년 7월
+    var koreanYearMonthString: String { Date.koreanYearMonth.string(from: self) }
     /// 2026년 7월 4일
     var koreanDateString: String { Date.koreanDate.string(from: self) }
     /// 7월 4일
