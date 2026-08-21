@@ -131,11 +131,18 @@ anon 에 기본 권한이 열려 있어서(Supabase 기본값), RLS 없는 테�
 
 ## 빌드 / 검증
 
-`xcode-select` 가 CommandLineTools 를 가리키고 있어 `xcodebuild` 가 그냥은 안 된다:
+`xcode-select` 는 2026-08-21 에 Xcode 를 가리키도록 고쳤다
+(`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`).
+그 전에는 CommandLineTools 를 가리켜서 `xcodebuild` 도, 시뮬레이터 도구도 안 됐다.
+다시 안 되면 `xcode-select -p` 부터 확인한다.
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project NanuriAdmin.xcodeproj -scheme NanuriAdmin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build
+xcodebuild -project NanuriAdmin.xcodeproj -scheme NanuriAdmin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build
 ```
+
+**화면을 눈으로 확인하려면 사람이 필요하다.** 시뮬레이터는 띄울 수 있지만
+Google 로그인 벽에서 막히고, 인증은 대신 진행하지 않는다. 로그인된 상태를
+만들어 주거나 실기기 스크린샷을 받아야 화면을 볼 수 있다.
 
 `wrangler` 는 전역 설치돼 있지 않다. `npx wrangler ...` 로 쓴다.
 배포 전 `npx wrangler deploy --dry-run` 으로 설정만 검증할 수 있다.
