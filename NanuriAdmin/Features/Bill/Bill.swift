@@ -37,6 +37,17 @@ extension Bill {
         }
     }
 
+    /// 상세 시트 머리에서 금액 바로 아래 적는 한 줄. **칩(`statusLabel`)과 같은 값을
+    /// 문장으로 적은 것이다.** 시트에는 칩을 두지 않는다 — 한 건만 들여다보는
+    /// 자리라 "지금 어떤 상태인가"를 배지로 줄여 쓸 이유가 없다.
+    var statusSentence: String {
+        switch status {
+        case "approved": return "송금을 완료했어요"
+        case "rejected": return "거절한 청구서예요"
+        default: return "아직 송금하지 않았어요"
+        }
+    }
+
     var statusColor: Color {
         switch status {
         case "approved": return DS.Palette.done

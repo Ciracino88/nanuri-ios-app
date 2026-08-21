@@ -21,14 +21,16 @@ struct ActionButton: View {
     }
 
     let title: String
+    /// 글자 왼쪽에 붙는 SF Symbol. **버튼이 여럿 있는 자리에서는 주지 않는다** —
+    /// 아이콘은 "이건 결정이 아니라 잠깐 보는 것"을 말해 주는 표시라서,
+    /// 결정 버튼(송금·거절)까지 달면 뜻이 없어진다 (DESIGN.md 6번).
+    var icon: String? = nil
     var kind: Kind = .secondary
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(.semibold)
+            label
                 .frame(maxWidth: .infinity)
                 .frame(height: DS.Size.actionButton)
                 .background(background)
@@ -36,6 +38,20 @@ struct ActionButton: View {
                 .clipShape(RoundedRectangle(cornerRadius: DS.Radius.group))
         }
         .buttonStyle(.plain)
+    }
+
+    /// 아이콘은 글자와 한 덩어리로 가운데 놓인다. 왼쪽 끝에 붙이지 않는다 —
+    /// 가로를 채우는 버튼이라 아이콘만 멀리 떨어지면 다른 버튼처럼 보인다.
+    private var label: some View {
+        HStack(spacing: DS.Spacing.small) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: DS.Icon.inline, weight: .semibold))
+            }
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+        }
     }
 
     private var background: Color {

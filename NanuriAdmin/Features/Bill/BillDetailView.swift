@@ -6,9 +6,22 @@ import SwiftUI
 /// 목록 카드는 정보만 보여준다 (`BillRowView`). 되돌릴 수 없는 두 개(거절·삭제)는
 /// 여기서 확인을 한 번 더 받는다 (DESIGN.md 6번).
 ///
+/// 구조는 **위에서 아래로 한 줄기**다 (DESIGN.md 1번 "영수증 시트의 뼈대").
+///
+/// ```
+/// 닫기 ✕                 ← 오른쪽 위. 시트를 내리지 않고도 닫는다
+/// 198,000원              ← 금액 (34). 이 시트에서 제일 먼저 읽는 것
+/// 아직 송금하지 않았어요    ← 상태를 문장 한 줄로. 색이 뜻이다
+/// ────────────────       ← 머리와 값을 가르는 선 한 올
+/// 이름 · 항목 · 청구일 · 계좌   ← 상자 없이, 줄 사이만 넓게
+/// [ 영수증 보기 ]         ← 결정이 아닌 것. 아이콘이 그걸 말해 준다
+/// ────────────────
+/// [ 거절 ] [ 송금하기 ]    ← 바닥 고정
+/// ```
+///
 /// **머리에 프로필 영역을 두지 않는다.** 이름·계좌·상태를 위에 한 번 적고 아래
-/// 상자에 또 적으면 같은 값이 한 화면에 두 번 나온다. 이름까지 상자의 한 줄로
-/// 내리면 값이 적히는 곳은 **상자 하나**가 된다. 맨 위는 금액이다 — 이 시트에서
+/// 상자에 또 적으면 같은 값이 한 화면에 두 번 나온다. 이름까지 아래 값 줄로
+/// 내리면 값이 적히는 곳은 **한 군데**가 된다. 맨 위는 금액이다 — 이 시트에서
 /// 제일 먼저 읽어야 하는 것이고, 그래서 크기를 독점한다 (DESIGN.md 3번).
 ///
 /// 송금은 이 시트가 직접 못 한다. 토스 앱을 열고 돌아와서 "송금했나요?"를 물어야
@@ -31,16 +44,23 @@ struct BillDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            closeBar
+
             ScrollView {
                 VStack(spacing: DS.Spacing.section) {
                     amount
+                    // 머리(금액·상태)와 값을 가르는 선 한 올. 상자를 걷어낸 자리를
+                    // 이게 대신한다 — 값 네 줄이 금액에 딸린 설명처럼 붙어 보이면 안 된다.
+                    Divider()
                     details
-                    ActionButton(title: "영수증 보기", kind: .tinted) { showReceipt = true }
+                    ActionButton(title: "영수증 보기", icon: "doc.text", kind: .tinted) {
+                        showReceipt = true
+                    }
                 }
                 .padding(.horizontal, DS.Spacing.screen)
                 // 위아래를 한 단계 더 벌린다. 위는 금액(앱에서 가장 큰 글자)이
-                // 손잡이에 붙지 않게, 아래는 "영수증 보기"가 바닥에 고정된
-                // 거절·송금 버튼에 붙지 않게 — 붙으면 누를 때 잘못 짚는다.
+                // 닫기 버튼에 붙지 않게, 아래는 "영수증 보기"가 바닥에 고정된
+                // 버튼에 붙지 않게 — 붙으면 누를 때 잘못 짚는다.
                 .padding(.vertical, DS.Spacing.sheetEdge)
             }
 
@@ -91,6 +111,20 @@ struct BillDetailView: View {
         [.fraction(DS.Sheet.billDetail), .large]
     }
 
+    // MARK: - 닫기
+
+    /// 오른쪽 위 ✕. 손잡이(드래그 인디케이터)로도 내릴 수 있지만, **닫는 자리가
+    /// 눈에 보이는 것**과 아래로 끌 수 있다는 것은 다른 이야기다. 이게 생기면서
+    /// 처리된 청구서의 바닥 "닫기" 버튼이 필요 없어졌고, 바닥은 그 건에 남은
+    /// 동작 하나(삭제)만 갖는다.
+    private var closeBar: some View {
+        HStack {
+            Spacer()
+            HeaderIconButton(systemName: "xmark", label: "닫기") { dismiss() }
+        }
+        .padding(.horizontal, DS.Spacing.small)
+    }
+
     // MARK: - 바닥
 
     /// 바닥 버튼은 스크롤을 안 따라간다. 시트를 손으로 올려 내용이 이 선에서
@@ -107,6 +141,11 @@ struct BillDetailView: View {
     // MARK: - 내용
 
     /// 시트에서 제일 먼저 읽어야 하는 자리. 크기를 여기에 몰아준다.
+    ///
+    /// 금액 아래는 **상태 한 줄**이다. 목록 카드에서는 칩(`statusLabel`)이지만
+    /// 여기서는 문장으로 적는다 — 한 건만 들여다보는 자리라 배지로 줄여 쓸
+    /// 이유가 없다. 색은 카드의 칩과 같은 `statusColor` 다. 색이 뜻이라서
+    /// 대기(주황)·완료(초록)·거절(빨강)이 화면마다 같아야 한다 (DESIGN.md 5번).
     private var amount: some View {
         VStack(spacing: DS.Spacing.tight) {
             HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
@@ -115,23 +154,26 @@ struct BillDetailView: View {
                 Text("원")
                     .amountUnit()
             }
-            Text(bill.title)
+            Text(bill.statusSentence)
                 .sheetSubtext()
-                .multilineTextAlignment(.center)
+                .foregroundColor(bill.statusColor)
         }
         .frame(maxWidth: .infinity)
     }
 
-    /// 이름·청구일·상태·계좌. **이 시트에서 값이 적히는 곳은 여기 하나뿐이다.**
+    /// 이름·항목·청구일·계좌. **이 시트에서 값이 적히는 곳은 여기 하나뿐이다.**
+    ///
+    /// 상자(`.groupBox()`)도 줄 사이 구분선도 없다. 시트에서 이 값들은 **곁가지가
+    /// 아니라 내용 자체**라, 묶어 봐야 묶일 상대가 없고 테두리만 남는다.
+    /// 대신 줄 간격을 한 단계 넓혀서(`section`) 라벨-값 짝이 가로로 읽히게 한다 —
+    /// 선을 그어 나누던 일을 여백이 한다. (`.groupBox()` 는 값 덩어리가 다른
+    /// 내용과 섞이는 `TossResultView` 에 남아 있다.)
     private var details: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: DS.Spacing.section) {
             detailRow("이름", bill.submitterName)
-            rowDivider
+            detailRow("항목", bill.title)
             // 기기 언어가 영어여도 한국어로 나와야 한다. `formatted()` 는 로케일을 탄다.
             detailRow("청구일", bill.createdAt.koreanDateTimeString)
-            rowDivider
-            detailRow("상태", bill.statusLabel, color: bill.statusColor)
-            rowDivider
             // 계좌가 없어도 줄을 지우지 않는다. 없다는 사실이 여기서 할 결정을
             // 바꾸므로(송금 대신 계좌 등록) 주황으로 적어 둔다.
             detailRow(
@@ -140,11 +182,6 @@ struct BillDetailView: View {
                 color: payee == nil ? DS.Palette.pending : nil
             )
         }
-        .groupBox()
-    }
-
-    private var rowDivider: some View {
-        Divider().padding(.vertical, DS.Spacing.small)
     }
 
     private func detailRow(_ label: String, _ value: String, color: Color? = nil) -> some View {
@@ -163,20 +200,22 @@ struct BillDetailView: View {
 
     /// 대기중이면 처리하는 자리고, 처리된 뒤에는 지우는 자리다.
     /// 계좌를 못 찾았으면 송금 대신 계좌 등록이 들어온다 — 등록이 먼저다.
+    ///
+    /// 처리된 청구서에 남는 동작은 삭제 하나라 **가로를 다 쓴다.** 예전에는
+    /// "닫기"와 나란히 둘이었는데, 닫기가 오른쪽 위 ✕ 로 올라가면서 짝이 없어졌다.
     @ViewBuilder
     private var actions: some View {
-        HStack(spacing: DS.Spacing.small) {
-            if bill.isPending {
+        if bill.isPending {
+            HStack(spacing: DS.Spacing.small) {
                 ActionButton(title: "거절", kind: .destructive) { showRejectAlert = true }
                 if payee != nil {
                     ActionButton(title: "송금하기", kind: .primary, action: onTransfer)
                 } else {
                     ActionButton(title: "계좌 등록하기", kind: .primary, action: onRegisterPayee)
                 }
-            } else {
-                ActionButton(title: "닫기") { dismiss() }
-                ActionButton(title: "삭제", kind: .destructive) { showDeleteAlert = true }
             }
+        } else {
+            ActionButton(title: "삭제", kind: .destructive) { showDeleteAlert = true }
         }
     }
 }
