@@ -7,14 +7,14 @@ import SwiftUI
 ///
 /// 사진이 있는 관리자 프로필은 `AvatarView` 를 쓴다. 청구자는 사진이 없다 —
 /// 공개 폼이 이름만 받기 때문이다. 목록을 훑을 때 줄을 잡아 주는 표식일 뿐이라
-/// **색을 뜻으로 쓰지 않는다.** 사람마다 다른 색을 주면 색이 뜻을 잃는다
-/// (DESIGN.md 5번). 상태는 옆의 상태 칩이 이미 말하고 있다.
+/// **색을 뜻으로 쓰지 않는다.** 사람마다 다른 색을 주면 색이 뜻을 잃는다.
+/// 상태는 옆의 상태 배지가 이미 말하고 있다.
 struct InitialAvatarView: View {
     let name: String
 
     var body: some View {
         Circle()
-            .fill(Color(.systemGray5))
+            .fill(DS.Surface.secondary)
             .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
             .overlay(Text(initial).rowTitle())
     }

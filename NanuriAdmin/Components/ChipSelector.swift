@@ -36,13 +36,13 @@ struct ChipSelector<Value: Hashable>: View {
         return Button {
             withAnimation(DS.Motion.control) { selection = item.value }
         } label: {
+            // 굵기를 선택 여부로 바꾸지 않는다 — 칩 글자는 Label 스케일 고정이고,
+            // 굵기가 바뀌면 글자 폭이 달라져 칩이 좌우로 흔들린다.
             HStack(spacing: DS.Spacing.tight) {
                 Text(item.label)
-                    .font(.subheadline)
-                    .fontWeight(isSelected ? .semibold : .regular)
                 Text("\(item.count)")
-                    .font(.caption)
-                    .opacity(0.7)
+                    .tabularAmount()
+                    .foregroundColor(isSelected ? DS.Ink.inverse : DS.Ink.placeholder)
             }
             .selectableChip(isSelected: isSelected)
         }

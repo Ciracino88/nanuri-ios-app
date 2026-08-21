@@ -64,52 +64,13 @@ struct BillListView: View {
                 }
             })
 
-            // 고를 수 있는 건 대기중뿐이라 선택 모드에서는 칩을 걷고 그 자리에
-            // 왜 어떤 카드는 못 고르는지를 적는다. 같은 높이라 목록이 안 튄다.
-            Group {
-                if isSelecting {
-                    Text("같은 사람의 대기중 청구서만 함께 보낼 수 있어요")
-                        .rowSubtext()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    ChipSelector(items: chipItems, selection: $filter)
-                }
-            }
-            .padding(.vertical, DS.Spacing.medium)
-
             Group {
                 if viewModel.isLoading {
                     Spacer()
                     ProgressView()
                     Spacer()
                 } else {
-                    let bills = filteredBills
-                    if bills.isEmpty {
-                        EmptyStateView(title: emptyTitle)
-                            .pullToRefresh { await reload() }
-                    } else {
-                        List(bills) { bill in
-                            BillRowView(bill: bill, selection: isSelecting ? selectionState(for: bill) : nil)
-                                .cardRow()
-                                .onTapGesture {
-                                    if isSelecting {
-                                        withAnimation(DS.Motion.control) { toggle(bill) }
-                                    } else {
-                                        detailBill = bill
-                                    }
-                                }
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-                        .listStyle(.plain)
-                        .screenBackground()
-                        .animation(DS.Motion.list, value: bills)
-                        // 헤더에 새로고침 버튼이 없다. 목록은 당겨서 새로고침한다
-                        // (DESIGN.md 1번). 평소에는 실시간으로 들어온다.
-                        .refreshable { await reload() }
-                    }
+                    billList
                 }
             }
 
@@ -246,6 +207,63 @@ struct BillListView: View {
 
     /// 목록 아래에 고정되는 선택 요약. 내용이 여기서 잘리므로 위에 선을 긋는다
     /// (DESIGN.md 6번).
+    /// **필터 줄이 목록 안에 있다.**
+    ///
+    /// 예전에는 헤더 아래에 붙박여 있어서 목록만 좁은 창처럼 스크롤됐다.
+    /// `List` 의 첫 행으로 넣으면 화면 전체가 한 덩어리로 굴러가면서도
+    /// `List` 가 주는 것들(행 스와이프·재사용)을 그대로 쓴다.
+    private var billList: some View {
+        List {
+            // 고를 수 있는 건 대기중뿐이라 선택 모드에서는 칩을 걷고 그 자리에
+            // 왜 어떤 카드는 못 고르는지를 적는다. 같은 높이라 목록이 안 튄다.
+            Group {
+                if isSelecting {
+                    Text("같은 사람의 대기중 청구서만 함께 보낼 수 있어요")
+                        .rowSubtext()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    ChipSelector(items: chipItems, selection: $filter)
+                }
+            }
+            .padding(.vertical, DS.Spacing.medium)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            let bills = filteredBills
+            if bills.isEmpty {
+                EmptyStateView(title: emptyTitle)
+                    .padding(.top, DS.Spacing.s12)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(bills) { bill in
+                    BillRowView(bill: bill, selection: isSelecting ? selectionState(for: bill) : nil)
+                        .cardRow()
+                        .onTapGesture {
+                            if isSelecting {
+                                withAnimation(DS.Motion.control) { toggle(bill) }
+                            } else {
+                                detailBill = bill
+                            }
+                        }
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollBounceBehavior(.always)
+        .screenBackground()
+        .animation(DS.Motion.list, value: filteredBills)
+        // 헤더에 새로고침 버튼이 없다. 목록은 당겨서 새로고침한다.
+        // 평소에는 실시간으로 들어온다.
+        .refreshable { await reload() }
+    }
+
     private var selectionBar: some View {
         VStack(spacing: 0) {
             Divider()
@@ -267,7 +285,9 @@ struct BillListView: View {
             .padding(.top, DS.Spacing.medium)
             .padding(.bottom, DS.Spacing.small)
         }
-        .background(Color(.systemBackground))
+        // 바닥에 고정된 바다. 그림자는 위로만 던져 안전영역과 이어지게 한다.
+        .background(DS.Surface.card)
+        .elevation(.bottomBar)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

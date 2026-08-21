@@ -30,12 +30,6 @@ struct PayeeListView: View {
                 }
             })
 
-            if !viewModel.payees.isEmpty {
-                SearchField(prompt: "이름 · 은행 · 계좌번호", text: $query)
-                    .padding(.horizontal, DS.Spacing.screen)
-                    .padding(.vertical, DS.Spacing.medium)
-            }
-
             Group {
                 if viewModel.isLoading && viewModel.payees.isEmpty {
                     ProgressView()
@@ -47,12 +41,6 @@ struct PayeeListView: View {
                         message: "청구자 이름과 계좌를 미리 등록해 두면\n청구서가 들어올 때 자동으로 연결돼요."
                     )
                     .pullToRefresh { await viewModel.fetchPayees(showLoading: false) }
-                } else if filtered.isEmpty {
-                    EmptyStateView(
-                        title: "찾는 계좌가 없어요",
-                        icon: "magnifyingglass",
-                        message: "이름·은행·계좌번호로 찾을 수 있어요."
-                    )
                 } else {
                     list
                 }
@@ -80,8 +68,33 @@ struct PayeeListView: View {
         }
     }
 
+    /// **검색 줄이 목록 안에 있다.**
+    ///
+    /// 예전에는 헤더 아래에 붙박여 있어서 목록만 좁은 창처럼 스크롤됐다.
+    /// `List` 의 첫 행으로 넣으면 화면 전체가 한 덩어리로 굴러가면서도
+    /// **행 스와이프 삭제가 그대로 살아 있다** — `ScrollView` 로 갈아엎었다면
+    /// 삭제로 가는 길이 길게 누르기 하나만 남았을 것이다.
     private var list: some View {
         List {
+            SearchField(prompt: "이름 · 은행 · 계좌번호", text: $query)
+                .padding(.horizontal, DS.Spacing.s4)
+                .padding(.vertical, DS.Spacing.medium)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            if filtered.isEmpty {
+                EmptyStateView(
+                    title: "찾는 계좌가 없어요",
+                    icon: "magnifyingglass",
+                    message: "이름·은행·계좌번호로 찾을 수 있어요."
+                )
+                .padding(.top, DS.Spacing.s12)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+
             ForEach(filtered) { payee in
                 row(payee)
                     .cardRow()
@@ -117,21 +130,20 @@ struct PayeeListView: View {
 
     private func row(_ payee: Payee) -> some View {
         HStack(spacing: DS.Spacing.medium) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 Text(payee.name)
                     .rowTitle()
                 Text(payee.accountLine)
                     .rowSubtext()
                 if let memo = payee.memo, !memo.isEmpty {
                     Text(memo)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .rowSubtext()
                 }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(DS.Icon.font(DS.Icon.m))
+                .foregroundColor(DS.Ink.placeholder)
         }
         .contentShape(Rectangle())
         .cardStyle()

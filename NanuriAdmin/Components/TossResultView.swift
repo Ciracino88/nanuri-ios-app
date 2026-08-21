@@ -33,58 +33,59 @@ struct TossResultView: View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
-                    .fill(DS.Palette.deposit.opacity(0.12))
-                    .frame(width: 56, height: 56)
+                    .fill(DS.Surface.brandWeak)
+                    .frame(width: DS.Size.buttonXL, height: DS.Size.buttonXL)
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: DS.Icon.feature))
-                    .foregroundColor(DS.Palette.deposit)
+                    .font(DS.Icon.font(DS.Icon.l))
+                    .foregroundColor(DS.Ink.brand)
             }
-            .padding(.bottom, 16)
-            .padding(.top, 32)
+            .padding(.bottom, DS.Spacing.s4)
+            .padding(.top, DS.Spacing.s8)
 
             Text("송금하셨나요?")
-                .font(.title3)
-                .fontWeight(.semibold)
-                .padding(.bottom, 6)
+                .typeStyle(DS.Typo.h4)
+                .foregroundColor(DS.Ink.primary)
+                .padding(.bottom, DS.Spacing.small)
 
             Text(transfer.isGrouped
                  ? "\(transfer.bills.count)건을 합쳐서 보냈어요. 결과를 선택해주세요"
                  : "토스에서 송금 후 결과를 선택해주세요")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .typeStyle(DS.Typo.body2)
+                .foregroundColor(DS.Ink.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.bottom, 24)
+                .padding(.bottom, DS.Spacing.s6)
 
             // 묶음이 길어지면 상자가 자라서 아래 버튼을 밀어낸다. 상자만 스크롤시켜
             // **버튼은 언제나 같은 자리**에 두 개 다 보이게 한다.
             ScrollView {
                 VStack(spacing: 0) {
                     infoRow(label: "수령인", value: transfer.recipientName)
-                    Divider().padding(.vertical, 10)
+                    divider
                     infoRow(label: "계좌", value: transfer.payee.accountLine)
-                    Divider().padding(.vertical, 10)
+                    divider
 
                     ForEach(transfer.bills) { bill in
                         infoRow(
                             label: transfer.isGrouped ? bill.title : "청구 항목",
                             value: transfer.isGrouped ? "\(bill.amount.formatted())원" : bill.title
                         )
-                        Divider().padding(.vertical, 10)
+                        divider
                     }
 
-                    HStack {
+                    HStack(alignment: .firstTextBaseline) {
                         Text(transfer.isGrouped ? "합계 \(transfer.bills.count)건" : "금액")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .typeStyle(DS.Typo.body2)
+                            .foregroundColor(DS.Ink.secondary)
                         Spacer()
                         Text("\(transfer.total.formatted())원")
-                            .font(.title3)
-                            .fontWeight(.semibold)
+                            .typeStyle(DS.Typo.h4)
+                            .tabularAmount()
+                            .foregroundColor(DS.Ink.primary)
                     }
                 }
                 .groupBox()
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, DS.Spacing.s6)
 
             HStack(spacing: DS.Spacing.small) {
                 ActionButton(title: "취소", action: onCancel)
@@ -92,18 +93,26 @@ struct TossResultView: View {
             }
             .padding(.bottom, DS.Spacing.small)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, DS.Spacing.screen)
+    }
+
+    /// 값 줄 사이. 시트 안이라 그림자를 안 쓰므로 헤어라인 한 올이 줄을 가른다.
+    private var divider: some View {
+        Rectangle()
+            .fill(DS.Line.default)
+            .frame(height: DS.Line.hairline)
+            .padding(.vertical, DS.Spacing.medium)
     }
 
     private func infoRow(label: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .typeStyle(DS.Typo.body2)
+                .foregroundColor(DS.Ink.secondary)
             Spacer(minLength: DS.Spacing.medium)
             Text(value)
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                .typeStyle(DS.Typo.body2)
+                .foregroundColor(DS.Ink.primary)
                 .multilineTextAlignment(.trailing)
         }
     }

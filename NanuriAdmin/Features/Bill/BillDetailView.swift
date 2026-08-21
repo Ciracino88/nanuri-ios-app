@@ -237,10 +237,11 @@ struct ReceiptSheetView: View {
                     } failure: {
                         VStack(spacing: DS.Spacing.medium) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: DS.Icon.placeholder))
-                                .foregroundColor(.gray)
+                                .font(DS.Icon.font(DS.Icon.placeholder))
+                                .foregroundColor(DS.Ink.placeholder)
                             Text("이미지를 불러올 수 없어요")
-                                .foregroundColor(.gray)
+                                .typeStyle(DS.Typo.body2)
+                                .foregroundColor(DS.Ink.secondary)
                         }
                     }
                     .scaledToFit()

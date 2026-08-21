@@ -2,84 +2,373 @@ import SwiftUI
 
 /// 앱 전체가 공유하는 디자인 토큰.
 ///
-/// 규칙과 그 이유는 저장소 루트의 `DESIGN.md` 에 있다.
-/// 화면 코드에 숫자를 직접 적기 시작하면 값이 조용히 갈라진다. 새 값이 필요하면
-/// 먼저 여기에 이름을 붙이고 쓴다.
+/// **이 앱의 디자인 기준은 저장소 루트의 `TOSS.md` 다.** 원본을 한 글자도 고치지 않고
+/// 받아 뒀고, 원시 팔레트는 `DesignTokens.swift` 의 `Ramp` 에 따로 있다.
+///
+/// 두 층으로 나뉜다 — 원시 팔레트(`Ramp`)와 뜻이 붙은 시맨틱 층(여기).
+/// **화면은 시맨틱 층만 쓴다.** 원문 규칙이 그렇다: product 색은 시맨틱 alias 로만
+/// 호출하고, base 팔레트는 새 role 을 만들 때만 직접 본다.
+///
+/// 화면 코드에 숫자를 직접 적지 않는 규칙은 그대로다. 새 값이 필요하면 먼저
+/// 여기에 이름을 붙인다.
 enum DS {
 
     // MARK: - 여백
 
+    /// 4px 를 기본 단위로 하는 12단 사다리.
     enum Spacing {
-        static let tight: CGFloat = 4
-        static let small: CGFloat = 8
-        static let medium: CGFloat = 12
-        /// 화면 좌우 여백이자 카드 안쪽 여백. 이 둘이 같아야 카드가 화면에 정렬돼 보인다.
-        static let screen: CGFloat = 16
-        static let section: CGFloat = 20
-        /// 시트 안쪽 위아래 여백. 위로는 닫기 줄(✕)과 금액 사이를,
-        /// 아래로는 **마지막 버튼과 바닥에 고정된 버튼 사이**를 벌린다.
-        /// `section`(20)으로는 위는 금액이 ✕ 에 붙어 보이고, 아래는 두 버튼이 붙어
-        /// 보여서 누를 때 잘못 짚기 쉽다.
-        static let sheetEdge: CGFloat = 32
+        static let s1: CGFloat = 4
+        static let s2: CGFloat = 8
+        static let s3: CGFloat = 12
+        static let s4: CGFloat = 16
+        static let s5: CGFloat = 20
+        static let s6: CGFloat = 24
+        static let s7: CGFloat = 28
+        static let s8: CGFloat = 32
+        static let s10: CGFloat = 40
+        static let s12: CGFloat = 48
+        static let s16: CGFloat = 64
+        static let s20: CGFloat = 80
+
+        // 뜻이 붙은 자리 — 화면은 되도록 이 이름들을 쓴다.
+        // 원문의 룰 오브 섬 세 가지가 그대로 들어와 있다.
+
+        /// 라벨과 입력처럼 **밀접하게 붙는 것들** 사이.
+        static let tight = s1
+        static let small = s2
+        static let medium = s3
+
+        /// 화면 좌우 여백. 원문이 값을 발행한 자리다 — "24px 화면 outer padding".
+        /// 카드 안쪽 여백도 같은 값이라야 카드가 화면에 정렬돼 보인다.
+        static let screen = s6
+
+        /// 섹션 사이.
+        static let section = s8
+
+        /// 시트 안쪽 위아래 여백.
+        static let sheetEdge = s8
+
         /// 세로로 이어지는 카드 사이 간격 (위아래 각각).
-        static let cardGap: CGFloat = 6
+        /// 원문의 "16px list-row 간 간격" 을 위아래로 나눠 가진 값이다.
+        static let cardGap = s2
     }
 
     // MARK: - 모서리
 
+    /// 4~32px 8단 + `full`. 원문이 "프로덕션에서 가장 둥근 모바일 시스템 중 하나"로
+    /// 분류되는 사다리다. **iOS 류 squircle 은 쓰지 않는다.**
     enum Radius {
-        static let card: CGFloat = 16
-        /// 시트 안에서 값 줄을 묶는 상자, 그리고 가로를 채우는 큰 버튼.
-        static let group: CGFloat = 14
-        /// PillPicker 처럼 여러 버튼을 감싸는 컨트롤.
-        static let control: CGFloat = 13
-        /// 정사각형 아이콘 버튼.
+        static let xs: CGFloat = 4    // 작은 배지
+        static let s: CGFloat = 8     // 인라인 태그
+        static let m: CGFloat = 12    // 입력 필드 · M 버튼(40)
+        static let l: CGFloat = 14    // L 버튼(48) · 토스트
+        static let xl: CGFloat = 16   // XL 버튼(56) · 카드
+        static let xl2: CGFloat = 20  // 시트 · 다이얼로그
+        static let xl3: CGFloat = 24  // 큰 카드 · 섹션
+        static let xl4: CGFloat = 32  // hero 블록
+        /// pill·capsule 자리. SwiftUI 에서는 `Capsule()` 로 그린다 (원문 999px).
+
+        /// 카드 한 장.
+        ///
+        /// 버튼 라운드(16)가 아니라 **`xl3`(24)** 다 — 원문 사다리에서 24 가
+        /// "big cards / sections" 자리고, 목록을 이고 있는 큰 카드가 여기 해당한다.
+        /// 16 으로 두면 카드가 야무져 보여서 이 시스템 특유의 뭉툭함이 안 난다.
+        static let card = xl3
+        /// 시트 안에서 값 줄을 묶는 상자.
+        static let group = xl2
+        /// 여러 버튼을 감싸는 컨트롤 (세그먼트 트랙).
+        static let control = m
+        /// 정사각형 아이콘 버튼. 원문 S 버튼(32)과 같은 10 이다.
         static let button: CGFloat = 10
     }
 
-    // MARK: - 색
+    // MARK: - 색: 글자와 아이콘
 
-    /// 뜻이 정해진 색. 화면이 달라도 같은 뜻이면 같은 색을 쓴다.
+    /// 전경색. 원문의 `tds-fg-*` 축이다.
+    ///
+    /// 어두운 화면 값은 **이 앱이 정했다** — 원문은 밝은 모드만 발행한다.
+    enum Ink {
+        /// 본문. **순수 검정이 아니다** — 차갑게 기운 `grey900` 이다.
+        static let primary = Color.adaptive(light: Ramp.grey900, dark: Ramp.grey50)
+        static let secondary = Color.adaptive(light: Ramp.grey700, dark: Ramp.grey400)
+        static let tertiary = Color.adaptive(light: Ramp.grey600, dark: Ramp.grey500)
+        static let placeholder = Color.adaptive(light: Ramp.grey400, dark: Ramp.grey600)
+        static let disabled = Color.adaptive(light: Ramp.grey400, dark: Ramp.grey600)
+        /// 채운 버튼 위의 글자.
+        static let inverse = Color.adaptive(light: Ramp.white, dark: Ramp.white)
+        static let brand = Color.adaptive(light: Ramp.blue500, dark: 0x5A9CF8)
+        static let danger = Color.adaptive(light: Ramp.red500, dark: 0xF56273)
+    }
+
+    // MARK: - 색: 바탕
+
+    /// 배경색. 원문의 `tds-bg-*` 축이다.
+    enum Surface {
+        /// 카드가 얹히는 화면 바닥.
+        static let page = Color.adaptive(light: Ramp.grey50, dark: 0x0E1116)
+        /// 카드 · 시트 안쪽.
+        static let card = Color.adaptive(light: Ramp.white, dark: 0x181C22)
+        /// 보조 표면 — 입력 필드 쉬는 상태, 보조 버튼, 세그먼트 트랙.
+        static let secondary = Color.adaptive(light: Ramp.grey100, dark: 0x232830)
+        static let tertiary = Color.adaptive(light: Ramp.grey200, dark: 0x2E343D)
+        /// 브랜드의 옅은 바탕.
+        static let brandWeak = Color.adaptive(light: Ramp.blue50, dark: 0x16283F)
+
+        /// 알림함처럼 **화면 하나를 통째로 물들이는** 섹션 배경.
+        ///
+        /// ⚠️ **원문에 없는 토큰이다.** 레퍼런스 화면에서 눈으로 뜬 값이라 브랜드
+        /// 스펙이 아니다. `blue50`(#EAF5FF)보다 채도를 낮춰 회색 쪽으로 당겼다 —
+        /// 그대로 쓰면 파랑이 너무 서서 그 위의 파란 요소들이 안 보인다.
+        ///
+        /// 이 위에 얹는 아이콘 타일은 `brandWeak` 가 아니라 `card`(흰색)를 쓴다.
+        /// 둘 다 옅은 파랑이면 타일이 배경에 묻힌다.
+        static let notice = Color.adaptive(light: 0xF0F4FB, dark: 0x131720)
+    }
+
+    // MARK: - 색: 선
+
+    /// 원문의 `tds-line-*` 축. **기본은 1px 헤어라인이고, 2px 장식 보더는 쓰지 않는다.**
+    enum Line {
+        /// 기본 구분선.
+        static let `default` = Color.adaptive(light: Ramp.grey200, dark: 0x2E343D)
+        /// 회색 배경 위 카드 보더. 원문이 이 자리에 알파 토큰을 따로 둔다 (검정 8%).
+        static let subtle = Color.black.opacity(0.08)
+        static let strong = Color.adaptive(light: Ramp.grey400, dark: 0x4B5765)
+        /// 포커스된 입력. **1.5px 로 한 단 굵어진다.**
+        static let focused = Color.adaptive(light: Ramp.blue500, dark: 0x5A9CF8)
+        /// 포커스 테두리 굵기.
+        static let focusedWidth: CGFloat = 1.5
+        /// 기본 헤어라인 굵기.
+        static let hairline: CGFloat = 1
+    }
+
+    // MARK: - 색: 상태 겹침
+
+    /// 눌림·비활성은 색을 갈아끼우지 않고 **덮어서** 표현한다.
+    enum State {
+        /// 눌린 상태. 원문이 그림자가 아니라 overlay 로 못 박은 자리다 (검정 26%).
+        static let pressOverlay = Color.black.opacity(0.26)
+        /// 화면을 덮는 막 (시트 뒤).
+        static let scrim = Color.black.opacity(0.56)
+        /// 비활성. **부분 회색 처리하지 않고 노드 전체에 건다.**
+        static let disabledOpacity: Double = 0.30
+    }
+
+    // MARK: - 색: 뜻이 정해진 색
+
+    /// 화면이 달라도 같은 뜻이면 같은 색을 쓴다.
+    ///
+    /// ## 입금이 파랑, 출금이 검정인 이유
+    ///
+    /// 원문 `list-row` 규칙이 그렇다 — **양수는 `text-brand`(파랑), 음수는
+    /// `text-primary`(검정)**. 빨강이 아니다.
+    ///
+    /// 장부에서 지출은 사고가 아니라 일상이다. 출금을 빨강으로 칠하면 목록 절반이
+    /// 경고처럼 보이고, 정작 진짜 경고(거절·삭제)가 묻힌다. **빨강은 되돌릴 수 없는
+    /// 것에만 남긴다.**
     enum Palette {
-        /// 입금 · 주요 동작(송금) · 첨부.
-        static let deposit = Color.blue
-        /// 출금 · 되돌릴 수 없는 동작(삭제·거절).
-        static let withdrawal = Color.red
-        /// 대기 · 주의(계좌 미등록).
-        static let pending = Color.orange
-        /// 완료(송금됨).
-        static let done = Color.green
+        /// 입금 · 첨부.
+        static let deposit = Ink.brand
+
+        /// 출금. **빨강이 아니라 본문색이다.**
+        static let withdrawal = Ink.primary
+
+        /// 되돌릴 수 없는 동작 (삭제 · 거절), 그리고 잔액이 음수인 상태.
+        static let danger = Ink.danger
+
+        /// 대기 · 주의 (계좌 미등록).
+        static let pending = Color.adaptive(light: Ramp.orange500, dark: Ramp.orange500)
+
+        /// 완료 (송금됨).
+        static let done = Color.adaptive(light: Ramp.green500, dark: 0x1FA35C)
+
+        /// 주요 동작. **화면당 하나만 쓴다** — 원문이 단일 강조색 정책을 못 박는다.
+        static let accent = Ink.brand
+    }
+
+    // MARK: - 색 쌍 (배지)
+
+    /// 글자색과 그 색의 옅은 바탕을 짝지은 것.
+    struct ColorTone {
+        let content: Color
+        let surface: Color
+    }
+
+    /// 배지의 색 쌍.
+    ///
+    /// ⚠️ **옅은 바탕(washed) 단계는 원문에 없다.** 원문이 시맨틱 base step 만
+    /// 발행하고 배지 전용 washed step 은 노출하지 않는다고 직접 밝힌다 — 원문조차
+    /// red 배지 바탕을 "정식 토큰 없음, 추정" 으로 적어 뒀다.
+    /// 아래 바탕색은 **이 앱의 추정치**이지 브랜드 스펙이 아니다.
+    enum Tone {
+        static let brand = ColorTone(content: Ink.brand, surface: Surface.brandWeak)
+        static let danger = ColorTone(
+            content: Ink.danger,
+            surface: .adaptive(light: 0xFDEAEC, dark: 0x3A1A1F)
+        )
+        static let pending = ColorTone(
+            content: .adaptive(light: 0xB35F00, dark: Ramp.orange500),
+            surface: .adaptive(light: 0xFFF1E0, dark: 0x3A2A16)
+        )
+        static let done = ColorTone(
+            content: Palette.done,
+            surface: .adaptive(light: 0xE3F5EA, dark: 0x14301F)
+        )
+        /// 뜻이 없는 회색 배지.
+        static let neutral = ColorTone(content: Ink.secondary, surface: Surface.secondary)
+    }
+
+    // MARK: - 그림자
+
+    /// **평면이 기본이다.** 그림자는 떠 있는 표면(메뉴·툴팁·다이얼로그·토스트)에만 쓴다.
+    ///
+    /// 목록 카드에는 그림자를 주지 않는다 — 대신 헤어라인 보더가 경계를 만든다.
+    /// 눌린 상태도 그림자가 아니라 `State.pressOverlay` 다. **inner shadow 는 없다.**
+    ///
+    /// 원문은 CSS blur 로 발행한다. SwiftUI 의 `shadow(radius:)` 는 대략 그 절반이라
+    /// 값을 나눠 담았다. 두 겹으로 쌓이는 토큰은 진한 쪽만 남겼다.
+    struct Shadow {
+        let color: Color
+        let radius: CGFloat
+        let x: CGFloat
+        let y: CGFloat
+
+        private init(alpha: Double, blur: CGFloat, y: CGFloat) {
+            self.color = Color(hex: Ramp.navy900).opacity(alpha)
+            self.radius = blur / 2
+            self.x = 0
+            self.y = y
+        }
+
+        /// 메뉴. 세그먼트에서 선택된 칸이 떠오르는 데도 쓴다.
+        static let menu = Shadow(alpha: 0.04, blur: 2, y: 1)
+        /// 툴팁.
+        static let tooltip = Shadow(alpha: 0.06, blur: 12, y: 4)
+        /// 다이얼로그.
+        static let dialog = Shadow(alpha: 0.10, blur: 32, y: 12)
+        /// 토스트.
+        static let toast = Shadow(alpha: 0.16, blur: 24, y: 8)
+        /// 바닥에 고정된 바. 원문에 컨벤션으로만 적힌 값이고 정식 토큰은 아니다.
+        static let bottomBar = Shadow(alpha: 0.06, blur: 12, y: -2)
+    }
+
+    // MARK: - 글자
+
+    /// 크기 · 굵기 · 행간 · 자간을 한 덩어리로 들고 다니는 글자 스타일.
+    ///
+    /// 원문 서체는 자체 제작 서체라 외부 배포가 안 되고, 원문 스스로 **Pretendard**
+    /// 를 가장 가까운 대체로 지목한다. 앱에 번들돼 있지 않아 지금은 시스템 서체로
+    /// 그린다 — Pretendard 를 넣게 되면 `font` 계산 한 줄만 고치면 된다.
+    ///
+    /// **자간이 음수다.** 큰 글자일수록 조여 무게를 잡는 것이 이 시스템의 특징이라
+    /// 자간을 토큰에 같이 넣었다. 행간은 SwiftUI 의 `lineSpacing` 이 기본 행간에
+    /// *더하는* 값이라 원문 배수를 그대로 못 넣는다 — 기본 행간을 크기의 1.2 배로
+    /// 보고 차이만 넘긴다. 근사다.
+    struct TypeStyle {
+        let size: CGFloat
+        let weight: Font.Weight
+        /// 원문의 line-height 배수.
+        let lineHeight: CGFloat
+        /// 원문의 tracking(em)을 pt 로 환산한 값.
+        let tracking: CGFloat
+
+        var font: Font { .system(size: size, weight: weight) }
+        var lineSpacing: CGFloat { max(0, size * lineHeight - size * 1.2) }
+    }
+
+    enum Typo {
+        // Display · Heading — Bold 700, 자간을 바짝 조인다.
+        static let display1 = TypeStyle(size: 56, weight: .bold, lineHeight: 1.30, tracking: -0.28)
+        static let display2 = TypeStyle(size: 40, weight: .bold, lineHeight: 1.20, tracking: -0.80)
+        static let h1 = TypeStyle(size: 28, weight: .bold, lineHeight: 1.30, tracking: -0.56)
+        static let h2 = TypeStyle(size: 24, weight: .bold, lineHeight: 1.30, tracking: -0.48)
+        static let h3 = TypeStyle(size: 22, weight: .bold, lineHeight: 1.30, tracking: -0.33)
+        static let h4 = TypeStyle(size: 20, weight: .bold, lineHeight: 1.35, tracking: -0.30)
+
+        // Title — Semibold 600
+        static let title1 = TypeStyle(size: 18, weight: .semibold, lineHeight: 1.45, tracking: -0.18)
+        static let title2 = TypeStyle(size: 17, weight: .semibold, lineHeight: 1.45, tracking: -0.17)
+
+        // Body — Regular 400. **본문 기본은 body2(15/1.5)다** (한글 가독성 표준).
+        static let body1 = TypeStyle(size: 17, weight: .regular, lineHeight: 1.50, tracking: -0.085)
+        static let body2 = TypeStyle(size: 15, weight: .regular, lineHeight: 1.50, tracking: -0.075)
+        static let body3 = TypeStyle(size: 13, weight: .regular, lineHeight: 1.50, tracking: 0)
+
+        // Label — 버튼·컨트롤 전용. "버튼은 장식이 아니라 문장처럼 읽힌다."
+        static let labelL = TypeStyle(size: 17, weight: .bold, lineHeight: 1.25, tracking: -0.085)
+        static let labelM = TypeStyle(size: 15, weight: .semibold, lineHeight: 1.25, tracking: -0.075)
+        static let labelS = TypeStyle(size: 13, weight: .semibold, lineHeight: 1.25, tracking: 0)
+
+        /// 목록 행의 금액. 원문 list-row 가 **Bold 700 15px** 로 못 박은 값이라
+        /// Label 사다리와 따로 둔다 (`labelM` 은 Semibold 600 이다).
+        static let amount = TypeStyle(size: 15, weight: .bold, lineHeight: 1.25, tracking: -0.075)
+
+        /// 카드 머리에 홀로 서는 큰 수. 라벨이 이 수를 설명하는 구조로 쓴다.
+        static let heroNumber = TypeStyle(size: 28, weight: .bold, lineHeight: 1.30, tracking: -0.56)
+
+        // Caption — Medium 500
+        static let caption = TypeStyle(size: 12, weight: .medium, lineHeight: 1.40, tracking: 0)
+        static let captionS = TypeStyle(size: 11, weight: .medium, lineHeight: 1.40, tracking: 0)
     }
 
     // MARK: - 아이콘 크기
 
-    /// 아이콘만 고정 pt 를 쓴다. 텍스트는 항상 시맨틱 폰트다 (DESIGN.md 참고).
+    /// 원문 아이콘 사이즈는 16/20/24/32 이고 **24 가 일꾼**이다.
+    /// 조형은 아웃라인이 기본이고, 채운 변형은 활성 탭 아이콘에만 쓴다.
     enum Icon {
+        static let s: CGFloat = 16
+        static let m: CGFloat = 20
+        static let l: CGFloat = 24
+        static let xl: CGFloat = 32
+
         /// 카드 안 작은 액션 버튼.
-        static let inline: CGFloat = 15
+        static let inline = s
         /// 헤더 · 툴바 액션.
-        static let action: CGFloat = 18
+        static let action = l
         /// 목록 행이나 카드의 대표 아이콘.
-        static let feature: CGFloat = 22
+        static let feature = l
         /// 빈 화면 일러스트.
-        static let placeholder: CGFloat = 46
+        static let placeholder: CGFloat = 48
+
+        /// 아이콘 폰트. **굵기를 기본(regular)으로 고정한다.**
+        ///
+        /// 원문 stroke 가 24px 그리드에서 1.5~1.67px 다. SF Symbols 의
+        /// `.medium`/`.semibold` 는 그보다 훨씬 두꺼워서, 같은 크기여도 선이
+        /// 굵어 화면이 무거워 보인다. 굵기를 화면이 고르지 못하게 여기서 닫는다.
+        static func font(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
     }
 
     enum Size {
-        /// 카드 안 정사각 아이콘 버튼 한 변.
-        static let iconButton: CGFloat = 36
+        // 버튼 4단. **높이와 모서리가 짝으로 움직인다.**
+        /// XL — 화면 최하단 강제 액션.
+        static let buttonXL: CGFloat = 56
+        /// L — 시트 안 결정 버튼.
+        static let buttonL: CGFloat = 48
+        static let buttonM: CGFloat = 40
+        static let buttonS: CGFloat = 32
+
         /// 시트 바닥에서 가로를 채우는 액션 버튼 높이.
-        static let actionButton: CGFloat = 50
-        /// 목록 행의 이니셜 원.
+        static let actionButton = buttonL
+        /// 입력 필드 높이.
+        static let field = buttonL
+        /// 칩 높이. 원문 값이 34 다.
+        static let chip: CGFloat = 34
+        /// 배지 높이.
+        static let badge: CGFloat = 22
+
+        /// 카드 안 정사각 아이콘 버튼 한 변.
+        static let iconButton = buttonM
+        /// 목록 행의 이니셜 원. 원문 list-row 아바타가 44 다.
         static let rowAvatar: CGFloat = 44
-        /// 헤더 아이콘 버튼 한 변이자 헤더 바 높이. 손가락이 닿는 최소치(44)다.
+        /// 헤더 아이콘 버튼 한 변이자 헤더 바 높이.
+        /// 원문 top-app-bar 가 56 이지만, 이 앱 헤더는 탭 넷을 이고 있어 44 를 유지한다.
+        /// 손가락이 닿는 최소치(44)이기도 하다.
         static let headerButton: CGFloat = 44
         /// 프로필 화면의 큰 아바타.
         static let avatar: CGFloat = 88
         /// 폼 안 영수증 썸네일 한 변.
         static let thumbnail: CGFloat = 90
         /// 화면 가득 보는 사진(영수증)의 최대 변. 어느 아이폰 폭보다 넉넉하다.
-        /// 실제 디코드 크기는 여기에 화면 배율(2x·3x)을 곱한 값이다.
         static let fullPhoto: CGFloat = 512
     }
 
@@ -91,26 +380,65 @@ enum DS {
         /// 내용을 재서 딱 맞추던 시절이 있었는데 **열 때마다 높이가 달랐다** —
         /// 첫 측정이 애니메이션 중 어느 순간에 걸리느냐를 탔다 (`TROUBLESHOOTING.md`).
         /// 같은 청구서가 어떨 때는 길고 어떨 때는 짧은 것보다, 늘 같은 자리에서
-        /// 열리는 게 낫다.
-        ///
-        /// iPhone 15(852)에서 비율에 852를 곱하고 65(위 손잡이 자리 + 아래 안전영역)를
-        /// 빼면 내용이 쓸 수 있는 높이다. 0.75 면 574pt 다.
-        ///
-        /// 시트에 닫기 줄(44)이 생기고 값 줄이 상자에서 나와 간격이 넓어지면서
-        /// 필요한 높이가 515pt(닫기 44 + 스크롤 내용 388 + 바닥 바 83)로 늘었다.
-        /// **0.7 은 531pt 라 16pt 밖에 안 남는다** — 항목 이름이 길어 두 줄이 되면
-        /// (+22) 바로 잘린다. 0.75 는 59pt 남는다.
-        /// 남는 자리는 스크롤 안쪽 아래에 생기므로 잘리는 것보다 안전한 쪽으로 둔다.
+        /// 열리는 게 낫다. **되돌리지 말 것.**
         static let billDetail: CGFloat = 0.75
     }
 
     // MARK: - 움직임
 
+    /// **바운스 오버슈트가 없다.** 원문이 스프링이 아니라 시간·곡선 토큰으로만
+    /// 모션을 운용하고, 오버슈트·parallax·320ms 초과 fade 를 금지한다.
+    /// 그래서 예전에 쓰던 `Animation.spring` 을 전부 걷어냈다.
     enum Motion {
+        /// 기본 곡선 (ease-out-expo).
+        static func ease(_ duration: Double) -> Animation {
+            .timingCurve(0.22, 0.61, 0.36, 1, duration: duration)
+        }
+        /// 더 빠르게 떨어지는 곡선. 시트가 들어올 때.
+        static func easeOut(_ duration: Double) -> Animation {
+            .timingCurve(0.16, 1, 0.3, 1, duration: duration)
+        }
+
+        static let fast: Double = 0.12   // 버튼 눌림
+        static let base: Double = 0.20   // 토글 · 선택 변경
+        static let slow: Double = 0.32   // 시트 · 다이얼로그
+
         /// 목록 항목이 들고 날 때.
-        static let list = Animation.spring(response: 0.4, dampingFraction: 0.8)
+        static let list = ease(base)
         /// 컨트롤 선택이 바뀔 때.
-        static let control = Animation.spring(response: 0.3, dampingFraction: 0.7)
+        static let control = ease(base)
+        /// 시트가 들고 날 때.
+        static let sheet = easeOut(slow)
+    }
+}
+
+// MARK: - 글자 붙이기
+
+extension View {
+    /// 크기·굵기·행간·자간을 한 번에 건다.
+    func typeStyle(_ style: DS.TypeStyle) -> some View {
+        self
+            .font(style.font)
+            .tracking(style.tracking)
+            .lineSpacing(style.lineSpacing)
+    }
+}
+
+extension View {
+    /// 금액·잔액처럼 **자릿수가 흔들리면 안 되는 수**에 건다.
+    ///
+    /// 원문이 실시간 금융 데이터에 tabular figure 를 쓰라고 명시한다. 목록에서
+    /// 금액이 세로로 쌓일 때 숫자 폭이 제각각이면 자릿수가 어긋나 보인다.
+    ///
+    /// `typeStyle()` 뒤에 붙인다 — 폰트를 나중에 걸면 이 설정이 덮인다.
+    func tabularAmount() -> some View { self.monospacedDigit() }
+}
+
+// MARK: - 그림자 붙이기
+
+extension View {
+    func elevation(_ shadow: DS.Shadow) -> some View {
+        self.shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
     }
 }
 
@@ -119,20 +447,35 @@ enum DS {
 extension View {
     /// 카드 한 장. 목록의 행, 요약 상자, 안내 상자가 전부 이 모양이다.
     ///
-    /// 그림자는 일부러 아주 옅다(6%). 카드가 화면을 가득 채우는 구조라
-    /// 이보다 진해지면 목록 전체가 무거워 보인다.
+    /// **그림자도 테두리도 없다.** 평면이 기본이고 그림자는 떠 있는 표면에만 쓴다.
+    /// 경계는 흰 카드와 회색 배경의 명도 차만으로 만든다 — 한때 여기에
+    /// `line-subtle` 헤어라인을 둘렀는데, 카드마다 선이 생기니 화면이 목록이 아니라
+    /// **폼처럼** 읽혔다. 토큰에 그 용도가 적혀 있어도 실제로는 안 쓰는 자리다.
+    ///
+    /// 여러 줄을 담는 카드는 `padding: 0` 으로 받아 안에서 `cardRowDivider` 로 가른다.
     func cardStyle(padding: CGFloat = DS.Spacing.screen) -> some View {
         self
             .padding(padding)
-            .background(Color(.systemBackground))
+            .background(DS.Surface.card)
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card))
-            .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+    }
+
+    /// 카드 **안에서** 줄을 가르는 헤어라인.
+    ///
+    /// 카드가 여러 줄을 담는 그릇이라는 게 이 시스템의 기본형이다 — 한 항목당
+    /// 카드 한 장을 쌓으면 화면이 같은 크기 상자의 반복이 된다.
+    func cardRowDivider(inset: CGFloat = DS.Spacing.screen) -> some View {
+        self.overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DS.Line.default)
+                .frame(height: DS.Line.hairline)
+                .padding(.leading, inset)
+        }
     }
 
     /// 카드를 `List` 행으로 쓸 때 함께 붙인다.
     ///
     /// `List` 기본 장식(구분선·선택 배경·기본 인셋)을 걷어내고 카드 간격만 남긴다.
-    /// 카드는 자기 그림자를 가지므로 구분선이 겹치면 지저분해진다.
     func cardRow() -> some View {
         self
             .padding(.horizontal, DS.Spacing.screen)
@@ -144,100 +487,86 @@ extension View {
 
     /// 시트 안에서 라벨-값 줄을 묶는 상자.
     ///
-    /// 카드와 배경색이 **반대**다. 시트 바닥이 `systemBackground` 라서 카드와 같은
-    /// 색으로 칠하면 상자가 안 보인다. 그래서 여기서만 화면 바닥색을 안쪽에 쓴다.
-    ///
-    /// 그래도 흰 바탕 위의 `systemGroupedBackground` 는 명도 차가 4% 남짓이라
-    /// 상자가 있는지 없는지 잘 안 보인다. **테두리 한 올이 실제로 경계를 만든다.**
-    /// 카드는 그림자로 뜨지만 시트 안에서는 그림자를 쓰지 않는다 — 시트가 이미
-    /// 떠 있는 면이라 그 위에 또 띄우면 층이 두 번 생긴다.
+    /// 시트 바닥이 카드색이라 같은 색으로 칠하면 상자가 안 보인다. 그래서 보조
+    /// 표면색을 쓴다. 시트 안에서는 그림자를 쓰지 않는다 — 시트가 이미 떠 있는
+    /// 면이라 그 위에 또 띄우면 층이 두 번 생긴다.
     func groupBox(padding: CGFloat = DS.Spacing.screen) -> some View {
         self
             .padding(padding)
-            .background(Color(.systemGroupedBackground))
+            .background(DS.Surface.secondary)
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.group))
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.group)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
     }
 
-    /// 카드를 얹는 화면 바닥색. 카드(`systemBackground`)와 대비를 만든다.
+    /// 카드를 얹는 화면 바닥색.
     ///
     /// 안전영역까지 덮는다. 헤더가 자기 배경 없이 이 색 위에 얹히기 때문에,
     /// 상태바 자리가 안 덮이면 헤더 위쪽에만 다른 색 띠가 남는다.
-    func screenBackground() -> some View {
-        self.background(Color(.systemGroupedBackground).ignoresSafeArea())
+    /// 기본은 회색 페이지지만, 알림함처럼 화면을 다른 색으로 물들이는 자리는
+    /// 색을 넘겨 쓴다.
+    func screenBackground(_ surface: Color = DS.Surface.page) -> some View {
+        self.background(surface.ignoresSafeArea())
     }
 }
 
-// MARK: - 글자
+// MARK: - 글자 역할
 
 extension View {
     /// 화면 이름. 헤더 가운데(`AdminHeaderView`)와 로그인 화면 제목이 이걸 쓴다.
-    ///
-    /// 제목이 가운데로 오면서 양옆 버튼과 높이를 나눠 쓴다. `.largeTitle` 은 그
-    /// 자리에 아예 안 들어간다.
-    ///
-    /// **카드 제목과 크기는 같고 굵기만 다르다** (20 semibold ↔ 20 regular).
-    /// 헤더는 화면에 하나뿐이고 양옆이 비어 있어서 굵기를 안 줘도 화면 이름으로
-    /// 읽힌다. 22 bold 이던 시절에는 상단만 무거워서 아래 내용이 눌렸다.
-    /// **앱에서 굵기를 일부러 뺀 자리는 여기와 `amountUnit()` 둘뿐이다.**
     func headerTitle() -> some View {
-        self.font(.title3).fontWeight(.regular)
+        self.typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.primary)
     }
 
-    /// 목록 행·카드의 제목.
+    /// 목록 행의 제목. **15pt Semibold 다.**
+    ///
+    /// 18(`title1`)이었던 적이 있는데, 그건 원문이 **카드 타이틀**에 준 값이지
+    /// 촘촘히 반복되는 목록 행의 값이 아니다. 행에서 제목이 금액(15 Bold)보다
+    /// 커지면 무게 중심이 왼쪽으로 쏠린다 — 목록에서 먼저 읽혀야 하는 건 금액이다.
+    /// 제목과 금액은 **같은 15pt 이고 굵기만 갈린다** (Semibold ↔ Bold).
+    ///
+    /// 섹션을 이끄는 큰 제목이 필요하면 `cardTitle()` 을 쓴다.
     func rowTitle() -> some View {
-        self.font(.subheadline).fontWeight(.semibold).foregroundColor(.primary)
+        self.typeStyle(DS.Typo.labelM).foregroundColor(DS.Ink.primary)
     }
 
     /// 제목 아래 딸린 설명 (계좌 줄, 날짜, 메모).
     func rowSubtext() -> some View {
-        self.font(.caption).foregroundColor(.secondary)
+        self.typeStyle(DS.Typo.body3).foregroundColor(DS.Ink.secondary)
     }
 
     /// 카드 안 소제목 · 카드의 강조 금액.
     func cardTitle() -> some View {
-        self.font(.title3).fontWeight(.semibold)
+        self.typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.primary)
     }
 
-    /// 시트에서 한 계층 키운 제목·값 (17).
+    /// 시트에서 한 계층 키운 제목·값.
     ///
-    /// 시트는 한 건만 들여다보는 자리라 목록 카드와 밀도가 다르다. 목록에서
-    /// 15pt 로 촘촘히 쌓던 걸 그대로 가져오면 화면이 넓은데 글자만 작아 보인다.
-    /// **굵기는 주지 않는다.** 상자 안에서는 라벨(15 회색)과 값(17 검정)이 크기와
-    /// 색으로 이미 갈린다. 거기에 굵기까지 얹으면 값 네 줄이 한꺼번에 진해져서
-    /// 상자가 시트에서 제일 무거운 덩어리가 된다 — 그 자리는 금액 것이다.
-    /// `.headline` 은 시스템이 semibold 를 물고 오므로 **눌러 줘야 한다.**
+    /// **굵기를 올리지 않는다.** 상자 안에서는 라벨(회색)과 값(검정)이 크기와
+    /// 색으로 이미 갈린다. 거기에 굵기까지 얹으면 값 줄이 한꺼번에 진해져서
+    /// 상자가 시트에서 제일 무거운 덩어리가 된다. 그 자리는 금액 것이다.
     func sheetTitle() -> some View {
-        self.font(.headline).fontWeight(.regular)
+        self.typeStyle(DS.Typo.body1).foregroundColor(DS.Ink.primary)
     }
 
-    /// 시트에서 한 계층 키운 설명 (15).
+    /// 시트에서 한 계층 키운 설명.
     func sheetSubtext() -> some View {
-        self.font(.subheadline).foregroundColor(.secondary)
+        self.typeStyle(DS.Typo.body2).foregroundColor(DS.Ink.secondary)
     }
 
-    /// 상세 시트 머리의 금액 (34). **앱에서 가장 큰 글자다.**
+    /// 상세 시트 머리의 금액. **앱에서 가장 큰 글자다.**
     ///
-    /// 맨 윗단을 이거 하나만 쓴다. 청구서 한 건을 열었을 때 제일 먼저 읽어야 하는
-    /// 건 금액이고, 그 자리는 화면에 하나뿐이라서 크기를 독점시킨다. 시트 머리에서
-    /// 이름·계좌·상태가 상자로 내려가 **금액만 남으면서** 한 계층 올렸다 (28 → 34).
-    /// 화면 이름이 22 에서 20 으로 내려온 것과 같은 이유다 — 큰 자리는 하나면 된다.
-    /// 목록 카드의 금액은 `cardTitle()`(20) 그대로다 — 거기선 여러 건이 나란히
-    /// 놓이므로 하나만 커지면 안 된다.
+    /// 청구서 한 건을 열었을 때 제일 먼저 읽어야 하는 건 금액이고, 그 자리는
+    /// 화면에 하나뿐이라서 크기를 독점시킨다.
     func heroAmount() -> some View {
-        self.font(.largeTitle).fontWeight(.semibold)
+        self.typeStyle(DS.Typo.h1).foregroundColor(DS.Ink.primary)
     }
 
-    /// 금액 뒤의 "원". **숫자보다 두 계층 작고 굵기도 색도 뒤로 뺀다** (20 regular, 회색).
+    /// 금액 뒤의 "원". **숫자보다 뒤로 뺀다.**
     ///
     /// 읽어야 하는 건 숫자다. "원"은 어느 청구서에서나 같은 글자라 크기까지 같이
     /// 주면 큰 자리를 반쯤 나눠 갖는다. `heroAmount()` 와 짝이고, 베이스라인을
     /// 맞춰 쓴다 (`HStack(alignment: .firstTextBaseline)`).
     func amountUnit() -> some View {
-        self.font(.title3).fontWeight(.regular).foregroundColor(.secondary)
+        self.typeStyle(DS.Typo.title2).foregroundColor(DS.Ink.secondary)
     }
 }
 
@@ -246,9 +575,9 @@ extension View {
 extension View {
     /// 목록이 아닌 화면(빈 상태 등)도 당겨서 새로고침되게 감싼다.
     ///
-    /// `.refreshable` 은 스크롤되는 것에만 붙는다. 헤더에서 새로고침 버튼을
-    /// 걷어냈으므로(DESIGN.md 1번) 목록이 비었을 때 새로고침할 방법이 없으면
-    /// 안 된다. 내용이 화면보다 짧아도 당길 수 있어야 해서 튕김을 항상 켠다.
+    /// `.refreshable` 은 스크롤되는 것에만 붙는다. 헤더에 새로고침 버튼이 없으므로
+    /// 목록이 비었을 때 새로고침할 방법이 없으면 안 된다. 내용이 화면보다 짧아도
+    /// 당길 수 있어야 해서 튕김을 항상 켠다.
     func pullToRefresh(_ action: @escaping @Sendable () async -> Void) -> some View {
         ScrollView {
             self.containerRelativeFrame(.vertical)
@@ -275,15 +604,20 @@ struct EmptyStateView<Action: View>: View {
             if let icon {
                 Image(systemName: icon)
                     .font(.system(size: DS.Icon.placeholder))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DS.Ink.placeholder)
             }
+            // **빈 상태는 목소리를 낮춘다.**
+            //
+            // 18 semibold 에 본문 검정이던 적이 있는데, 아무것도 없는 화면에서
+            // 그 한 줄만 크고 진하니 "없다" 가 아니라 "무슨 일이 났다" 로 읽혔다.
+            // 없는 건 사건이 아니라 상태다 — 크기도 색도 한 단씩 뒤로 뺀다.
             Text(title)
-                .font(.title3)
-                .fontWeight(.semibold)
+                .typeStyle(DS.Typo.labelM)
+                .foregroundColor(DS.Ink.secondary)
             if let message {
                 Text(message)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .typeStyle(DS.Typo.body3)
+                    .foregroundColor(DS.Ink.tertiary)
                     .multilineTextAlignment(.center)
             }
             action()

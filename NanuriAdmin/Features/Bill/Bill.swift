@@ -48,13 +48,20 @@ extension Bill {
         }
     }
 
-    var statusColor: Color {
+    /// 상태 배지의 색 쌍 (글자색 + 옅은 바탕).
+    ///
+    /// 거절이 `danger` 다 — 출금색(`withdrawal`)이 아니다. 이 시스템에서 출금은
+    /// 검정이고 빨강은 되돌릴 수 없는 것에만 남는다 (`DS.Palette` 참고).
+    var statusTone: DS.ColorTone {
         switch status {
-        case "approved": return DS.Palette.done
-        case "rejected": return DS.Palette.withdrawal
-        default: return DS.Palette.pending
+        case "approved": return DS.Tone.done
+        case "rejected": return DS.Tone.danger
+        default: return DS.Tone.pending
         }
     }
+
+    /// 글자·아이콘만 필요한 자리 (상세 시트의 상태 줄).
+    var statusColor: Color { statusTone.content }
 }
 
 // MARK: - 목록 거르개

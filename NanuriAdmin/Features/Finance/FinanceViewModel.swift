@@ -143,6 +143,114 @@ class FinanceViewModel: ObservableObject {
     var totalDeposit: Int { deposits.reduce(0) { $0 + $1.amount } }
     var totalWithdrawal: Int { withdrawals.reduce(0) { $0 + abs($1.amount) } }
 
+    // MARK: - 요약이 쓰는 값들
+
+    /// 지난달 총 출금. **비교할 지난달이 아예 없으면 `nil`** 이다.
+    ///
+    /// 0 을 돌려주면 "지난달보다 전부 더 썼다" 는 문장이 나오는데, 그건 지난달에
+    /// 안 쓴 게 아니라 **장부가 그때부터 시작하지 않았다**는 뜻일 수 있다.
+    /// 둘을 구분해야 해서 `Optional` 이다.
+    var previousMonthWithdrawal: Int? {
+        guard currentLedger?.mode != .event else { return nil }
+        let cal = Calendar.current
+        guard let previous = cal.date(byAdding: .month, value: -1, to: currentMonth) else { return nil }
+        let start = cal.startOfMonth(previous)
+        let end = cal.endOfMonth(previous)
+        let items = transactions.filter {
+            $0.datetime >= start && $0.datetime <= end && !$0.isDeposit
+        }
+        guard !items.isEmpty else { return nil }
+        return items.reduce(0) { $0 + abs($1.amount) }
+    }
+
+    /// 이 달에 있는 날들 (1일 → 말일). 날짜 셀렉터가 훑는 축이다.
+    ///
+    /// 거래가 없는 날도 뺀 자리를 남긴다 — 건너뛰면 날짜 간격이 들쭉날쭉해져서
+    /// 어느 날이 비었는지가 안 보인다.
+    var daysInCurrentMonth: [Date] {
+        guard currentLedger?.mode != .event else { return [] }
+        let cal = Calendar.current
+        var days: [Date] = []
+        var cursor = cal.startOfDay(for: startDate)
+        let last = cal.startOfDay(for: endDate)
+        while cursor <= last {
+            days.append(cursor)
+            guard let next = cal.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return days
+    }
+
+    /// 이 달을 덮는 주들 (일요일 시작). 날짜 셀렉터가 한 주씩 넘긴다.
+    ///
+    /// 달 경계에 걸친 주는 **이전·다음 달 날짜까지 그대로 들고 온다** — 한 주는
+    /// 일곱 칸이어야 요일 자리가 안 흔들린다. 그 칸들은 이 달 밖이라 눌리지 않는다.
+    var weeksInCurrentMonth: [[Date]] {
+        guard currentLedger?.mode != .event else { return [] }
+        var cal = Calendar.current
+        cal.firstWeekday = 1  // 일요일 시작
+        let days = daysInCurrentMonth
+        guard let first = days.first, let last = days.last else { return [] }
+        guard let firstWeek = cal.dateInterval(of: .weekOfYear, for: first) else { return [] }
+
+        var weeks: [[Date]] = []
+        var cursor = cal.startOfDay(for: firstWeek.start)
+        while cursor <= last {
+            var week: [Date] = []
+            for offset in 0..<7 {
+                guard let day = cal.date(byAdding: .day, value: offset, to: cursor) else { break }
+                week.append(cal.startOfDay(for: day))
+            }
+            weeks.append(week)
+            guard let next = cal.date(byAdding: .day, value: 7, to: cursor) else { break }
+            cursor = next
+        }
+        return weeks
+    }
+
+    /// 그 날이 지금 보고 있는 달에 속하는가. 주 단위로 끊다 보면 앞뒤 달이 섞인다.
+    func isInCurrentMonth(_ day: Date) -> Bool {
+        day >= Calendar.current.startOfDay(for: startDate) && day <= endDate
+    }
+
+    /// 달 시작부터 하루씩 쌓은 **누적 출금**. 그래프가 쓴다.
+    ///
+    /// `monthsAgo: 0` 이 이 달, `1` 이 지난달이다. 그 달에 거래가 없으면 빈 배열이라
+    /// 그래프가 선을 안 그린다.
+    func cumulativeWithdrawals(monthsAgo: Int) -> [Int] {
+        let cal = Calendar.current
+        guard let month = cal.date(byAdding: .month, value: -monthsAgo, to: currentMonth) else { return [] }
+        let start = cal.startOfMonth(month)
+        let end = cal.endOfMonth(month)
+        let items = transactions.filter {
+            $0.datetime >= start && $0.datetime <= end && !$0.isDeposit
+        }
+        guard !items.isEmpty else { return [] }
+
+        var perDay: [Int: Int] = [:]
+        for tx in items {
+            let day = cal.component(.day, from: tx.datetime)
+            perDay[day, default: 0] += abs(tx.amount)
+        }
+        let dayCount = cal.component(.day, from: end)
+        var running = 0
+        return (1...dayCount).map { day in
+            running += perDay[day] ?? 0
+            return running
+        }
+    }
+
+    /// 날짜별 순증감 (입금 − 출금). 거래가 없는 날은 키가 없다.
+    var dailyNet: [Date: Int] {
+        let cal = Calendar.current
+        var result: [Date: Int] = [:]
+        for tx in filtered {
+            let day = cal.startOfDay(for: tx.datetime)
+            result[day, default: 0] += tx.isDeposit ? tx.amount : -abs(tx.amount)
+        }
+        return result
+    }
+
     // MARK: - 장부
 
     func fetchLedgers() async {

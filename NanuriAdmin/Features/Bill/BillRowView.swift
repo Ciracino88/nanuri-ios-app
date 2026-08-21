@@ -51,7 +51,7 @@ struct BillRowView: View {
                         .lineLimit(1)
                     Spacer(minLength: DS.Spacing.small)
                     Text(bill.statusLabel)
-                        .tagChip(color: bill.statusColor)
+                        .tagChip(bill.statusTone)
                 }
             }
 
@@ -59,11 +59,11 @@ struct BillRowView: View {
             // 거짓말이 된다.
             if selection == nil {
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(DS.Icon.font(DS.Icon.m))
+                    .foregroundColor(DS.Ink.placeholder)
             }
         }
-        .opacity(selection == .blocked ? 0.4 : 1)
+        .opacity(selection == .blocked ? DS.State.disabledOpacity : 1)
         .contentShape(Rectangle())
         .cardStyle()
         // 카드 전체가 하나의 버튼이다. 줄마다 따로 읽히면 세 번 넘겨야 한 건을 안다.
@@ -74,8 +74,8 @@ struct BillRowView: View {
 
     private func selectionMark(_ selection: Selection) -> some View {
         Image(systemName: selection == .on ? "checkmark.circle.fill" : "circle")
-            .font(.system(size: DS.Icon.feature))
-            .foregroundColor(selection == .on ? DS.Palette.deposit : .secondary)
+            .font(DS.Icon.font(DS.Icon.feature))
+            .foregroundColor(selection == .on ? DS.Palette.accent : DS.Ink.placeholder)
             .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
     }
 

@@ -19,14 +19,13 @@ struct StatementsListView: View {
                             } label: {
                                 HStack {
                                     Image(systemName: "doc.richtext")
-                                        .foregroundColor(.red)
-                                    VStack(alignment: .leading, spacing: 2) {
+                                        .font(DS.Icon.font(DS.Icon.l))
+                                        .foregroundColor(DS.Ink.brand)
+                                    VStack(alignment: .leading, spacing: DS.Spacing.s1 / 2) {
                                         Text(statement.importedAt.koreanDateString)
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
+                                            .rowTitle()
                                         Text(statement.importedAt.koreanTimeString + " 가져옴")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .rowSubtext()
                                     }
                                     Spacer()
                                     ShareLink(item: statement.url) {
@@ -34,8 +33,8 @@ struct StatementsListView: View {
                                     }
                                     .buttonStyle(.plain)
                                     Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .font(DS.Icon.font(DS.Icon.m))
+                                        .foregroundColor(DS.Ink.placeholder)
                                 }
                             }
                             .buttonStyle(.plain)
