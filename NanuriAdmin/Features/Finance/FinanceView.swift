@@ -9,6 +9,11 @@ struct FinanceView: View {
     @State private var isExporting = false
     @State private var exportMessage = "내보내는 중…"
     @State private var reportPreview: ReportPreview?
+    /// 헤더 가운데를 눌러 여는 장부 전환 시트.
+    @State private var showSwitcher = false
+    /// 전환 시트가 닫힌 **뒤에** 할 일. 시트 위에 시트를 겹치지 않으려고 한 박자 미룬다.
+    @State private var afterSwitcher: (() -> Void)?
+    @State private var showNewLedger = false
 
     var body: some View {
         if let ledger = viewModel.currentLedger {
@@ -21,10 +26,11 @@ struct FinanceView: View {
     private func content(ledger: Ledger) -> some View {
         let mode = ledger.mode
         return VStack(spacing: 0) {
-            // 가운데는 탭 이름이고, 누르면 장부 게이트로 돌아간다 (장부 전환).
+            // 가운데는 탭 이름이고, 누르면 장부를 고르는 시트가 열린다.
+            // ▾ 는 펼쳐진다는 뜻이라 되돌아가는 동작을 걸어 두면 눌러 봐야 알게 된다.
             AdminHeaderView(
                 title: "재정",
-                titleAction: { viewModel.currentLedger = nil },
+                titleAction: { showSwitcher = true },
                 trailing: { actionMenu(mode: mode) }
             )
 
@@ -83,6 +89,36 @@ struct FinanceView: View {
             }
             .sheet(item: $reportPreview) { preview in
                 FinanceReportPreviewView(html: preview.html, title: preview.title)
+            }
+            // 전환 시트가 완전히 닫힌 뒤에 다음 일을 한다. 같은 순간에 둘을
+            // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다 (`BillListView` 와 같다).
+            .sheet(isPresented: $showSwitcher, onDismiss: {
+                afterSwitcher?()
+                afterSwitcher = nil
+            }) {
+                LedgerSwitcherView(
+                    viewModel: viewModel,
+                    onSelect: { picked in
+                        // 보고 있던 장부를 다시 고르면 아무 일도 안 한다.
+                        // 다시 받아 오면 달 위치까지 처음으로 되돌아간다.
+                        if picked.id != viewModel.currentLedger?.id {
+                            afterSwitcher = { Task { await viewModel.selectLedger(picked) } }
+                        }
+                        showSwitcher = false
+                    },
+                    onCreate: {
+                        afterSwitcher = { showNewLedger = true }
+                        showSwitcher = false
+                    },
+                    onManage: {
+                        // 장부를 비우면 게이트 화면이 나온다 — 거기서 만들고 지운다.
+                        afterSwitcher = { viewModel.currentLedger = nil }
+                        showSwitcher = false
+                    }
+                )
+            }
+            .sheet(isPresented: $showNewLedger) {
+                NewLedgerView(viewModel: viewModel)
             }
         }
         .screenBackground()
