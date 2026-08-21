@@ -237,6 +237,13 @@ struct ExportFile: Identifiable {
     let url: URL
 }
 
+/// 미리볼 보고서를 sheet(item:)에 넘기기 위한 래퍼.
+struct ReportPreview: Identifiable {
+    let id = UUID()
+    let html: String
+    let title: String
+}
+
 /// UIActivityViewController(공유시트) 래퍼. 파일 앱 저장·메일·메신저 공유 등을 지원.
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]

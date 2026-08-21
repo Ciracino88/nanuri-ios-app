@@ -49,16 +49,54 @@ enum FinanceReportExporter {
 
     // MARK: - 재정 보고서 PDF (모드별, 영수증 미포함)
 
-    static func makeReportPDF(mode: FinanceReportMode, items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String) -> URL? {
-        let html: String
-        let safeName = sanitizeFilename(ledgerName)
+    /// 보고서 HTML. 화면(웹뷰)과 PDF가 **같은 표를 쓰도록** 하는 단일 진입점이다.
+    /// `forScreen` 은 화면 전용 CSS만 얹는다 — 표 내용과 인쇄 결과는 달라지지 않는다.
+    static func makeReportHTML(mode: FinanceReportMode, items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String, forScreen: Bool) -> String {
         switch mode {
         case .monthly:
-            html = buildMonthlyHTML(items: items, opening: opening, startDate: startDate, endDate: endDate)
+            return buildMonthlyHTML(items: items, opening: opening, startDate: startDate, endDate: endDate, forScreen: forScreen)
         case .event:
-            html = buildEventHTML(items: items, startDate: startDate, endDate: endDate, eventName: ledgerName)
+            return buildEventHTML(items: items, startDate: startDate, endDate: endDate, eventName: ledgerName, forScreen: forScreen)
         }
+    }
+
+    static func makeReportPDF(mode: FinanceReportMode, items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String) -> URL? {
+        let html = makeReportHTML(mode: mode, items: items, opening: opening,
+                                  startDate: startDate, endDate: endDate,
+                                  ledgerName: ledgerName, forScreen: false)
+        let safeName = sanitizeFilename(ledgerName)
         return renderHTMLToPDF(html, filename: "\(safeName)_\(rangeSuffix(startDate, endDate)).pdf")
+    }
+
+    /// 표를 감싸는 가로 스크롤 상자. 화면에서만 두른다 —
+    /// 이 둘이 빈 문자열이라 **PDF 로 가는 HTML 은 이전과 한 글자도 다르지 않다.**
+    private static func twOpen(_ forScreen: Bool) -> String { forScreen ? "<div class='tw'>" : "" }
+    private static func twClose(_ forScreen: Bool) -> String { forScreen ? "</div>" : "" }
+
+    /// 화면에서만 필요한 것 — 기기 폭에 맞추기, 넓은 표는 가로 스크롤, 다크 모드.
+    /// PDF 경로에서는 빈 문자열이라 A4 출력이 그대로 유지된다.
+    /// (`DESIGN.md` 5번: 보고서는 DS 규칙 밖이라 여기서 색을 직접 적는다)
+    private static func screenCSS(_ forScreen: Bool) -> String {
+        guard forScreen else { return "" }
+        return """
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+        <style>
+        body { margin:0; padding:16px 12px 32px; font-size:13px; }
+        h1 { font-size:17px; }
+        /* 표가 기기 폭보다 넓으면 표만 가로로 민다 — 본문은 안 밀린다. */
+        .tw { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        .tw table { min-width:340px; }
+        th,td { padding:6px 6px; white-space:nowrap; }
+        td.desc, .tw td:not(.num) { white-space:normal; word-break:keep-all; }
+        @media (prefers-color-scheme: dark) {
+          body { background:#000; color:#e5e5e7; }
+          th,td { border-color:#48484a; }
+          thead th { background:#1c1c1e; color:#e5e5e7; }
+          tr.total td { background:#1c1c1e; }
+          .sub { color:#98989d; }
+        }
+        </style>
+        """
     }
 
     /// 파일명에 쓸 수 없는 문자를 제거한다.
@@ -96,7 +134,7 @@ enum FinanceReportExporter {
 
     // MARK: - 월별 회계 보고서 (전월이월 → 누적 잔액)
 
-    private static func buildMonthlyHTML(items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date) -> String {
+    private static func buildMonthlyHTML(items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, forScreen: Bool) -> String {
         let cal = Calendar.current
         let sorted = items.sorted { $0.datetime < $1.datetime }
 
@@ -190,26 +228,26 @@ enum FinanceReportExporter {
         thead th { background:#f2f2f2; font-weight:600; }
         tr.total td { font-weight:700; background:#fafafa; }
         .section-title { font-size:13px; font-weight:700; margin:18px 0 6px; }
-        </style></head><body>
+        </style>\(screenCSS(forScreen))</head><body>
         <h1>\(title)</h1>
 
-        <table>
+        \(twOpen(forScreen))<table>
           <thead><tr><th>월</th><th>일</th><th>적요</th><th>수입</th><th>지출</th><th>잔액</th></tr></thead>
           <tbody>\(detail)</tbody>
-        </table>
+        </table>\(twClose(forScreen))
 
         <div class='section-title'>수입 · 지출 요약</div>
-        <table>
+        \(twOpen(forScreen))<table>
           <thead><tr><th colspan='2'>수입</th><th colspan='2'>지출</th></tr></thead>
           <tbody>\(summary)</tbody>
-        </table>
+        </table>\(twClose(forScreen))
         </body></html>
         """
     }
 
     // MARK: - 행사 결산 내역 (수입/지출 좌우 대응, 항목별 개별 나열, 전월이월·누적 잔액 없음)
 
-    private static func buildEventHTML(items: [ReportLineItem], startDate: Date, endDate: Date, eventName: String?) -> String {
+    private static func buildEventHTML(items: [ReportLineItem], startDate: Date, endDate: Date, eventName: String?, forScreen: Bool) -> String {
         let deposits = items.filter { $0.isDeposit }
         let withdrawals = items.filter { !$0.isDeposit }
         let totalIncome = deposits.reduce(0) { $0 + $1.magnitude }
@@ -274,16 +312,16 @@ enum FinanceReportExporter {
         td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
         thead th { background:#f2f2f2; font-weight:600; text-align:center; }
         tr.total td { font-weight:700; background:#fafafa; }
-        </style></head><body>
+        </style>\(screenCSS(forScreen))</head><body>
         <h1>\(title)</h1>
         <div class='sub'>기간: \(dateFmt.string(from: startDate)) ~ \(dateFmt.string(from: endDate))</div>
-        <table>
+        \(twOpen(forScreen))<table>
           <thead>
             <tr><th colspan='3'>수입</th><th colspan='3'>지출</th></tr>
             <tr><th>항목</th><th class='num'>금액</th><th>내용</th><th>항목</th><th class='num'>금액</th><th>내용</th></tr>
           </thead>
           <tbody>\(body)</tbody>
-        </table>
+        </table>\(twClose(forScreen))
         </body></html>
         """
     }

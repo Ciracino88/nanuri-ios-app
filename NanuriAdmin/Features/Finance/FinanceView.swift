@@ -9,6 +9,7 @@ struct FinanceView: View {
     @State private var exportFile: ExportFile?
     @State private var isExporting = false
     @State private var exportMessage = "내보내는 중…"
+    @State private var reportPreview: ReportPreview?
 
     var body: some View {
         if let ledger = viewModel.currentLedger {
@@ -80,6 +81,9 @@ struct FinanceView: View {
             }
             .sheet(item: $exportFile) { file in
                 ShareSheet(items: [file.url])
+            }
+            .sheet(item: $reportPreview) { preview in
+                FinanceReportPreviewView(html: preview.html, title: preview.title)
             }
         }
         .screenBackground()
@@ -195,6 +199,16 @@ struct FinanceView: View {
     /// 헤더의 화면별 동작 자리는 하나뿐이라 내보내기·거래내역서를 한 메뉴로 묶는다.
     private func actionMenu(mode: FinanceReportMode) -> some View {
         Menu {
+            // 내보내기보다 먼저 둔다 — 확인하고 내보내는 순서가 자연스럽다.
+            Button {
+                if let html = viewModel.reportHTML() {
+                    reportPreview = ReportPreview(html: html, title: mode.title)
+                }
+            } label: {
+                Label("보고서 미리보기", systemImage: "tablecells")
+            }
+            .disabled(viewModel.filtered.isEmpty)
+
             Button {
                 exportMessage = "보고서 만드는 중…"
                 isExporting = true

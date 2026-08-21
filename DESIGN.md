@@ -385,8 +385,22 @@ EmptyStateView(
 다만 아래 1번(다크 모드)과 2번(큰 글씨)은 **평소 설정으로 쓰는 것과 다른 조건**이라
 따로 켜 보기 전까지는 여전히 안 본 것으로 둔다.
 
-### 5. PDF 보고서는 이 규칙 밖에 있다
+### 5. 보고서는 이 규칙 밖에 있다
 
 `FinanceReportExporter` 는 화면이 아니라 출력물이라 `UIFont` 로 직접 그린다
-(331행에 `ofSize: 12, weight: .semibold`). Dynamic Type 도 안 타고 종이 위에서만
+(369행에 `ofSize: 12, weight: .semibold`). Dynamic Type 도 안 타고 종이 위에서만
 읽히므로 위 규칙을 적용하지 않았다. 손대려면 보고서 전체를 같이 봐야 한다.
+
+**보고서 미리보기(`FinanceReportPreviewView`)도 여기에 딸려 들어온다.** 재정 탭
+`⋯` 메뉴에서 열리는 이 화면은 표를 다시 그리지 않고 **PDF와 같은 HTML** 을
+`WKWebView` 로 띄운다 (`makeReportHTML(forScreen:)`). 집계 로직이 한 벌이라
+화면과 출력물이 어긋날 수 없는 대신, **DS 도 Dynamic Type 도 안 탄다** — 색과
+글자 크기가 `screenCSS` 안의 CSS에 있다. 다크 모드는 거기 `prefers-color-scheme`
+로 따로 대응한다.
+
+`forScreen: false` 일 때 `screenCSS` · `twOpen` · `twClose` 가 전부 빈 문자열이라
+**PDF 로 가는 HTML 은 이 작업 전과 한 글자도 다르지 않다.** 화면용 CSS를 손볼
+때 이 성질을 깨뜨리지 말 것 — 깨지면 종이 출력이 조용히 같이 바뀐다.
+
+아직 안 본 것: 이 화면은 **실기기·시뮬레이터에서 렌더링을 확인하지 않았다.**
+표 폭(6열)이 세로 화면에서 어떻게 읽히는지, 다크 모드가 실제로 어떤지 봐야 한다.
