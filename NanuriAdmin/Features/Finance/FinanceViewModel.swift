@@ -120,27 +120,38 @@ class FinanceViewModel: ObservableObject {
 
     // MARK: - 내보내기
 
+    /// 보고서가 덮는 기간. 화면 미리보기와 PDF가 **같은 기간**을 쓰도록 한 곳에 둔다.
+    /// 행사 장부는 날짜 필터가 없으므로 실제 거래 기간을 보고서 기간으로 쓴다.
+    private func reportRange(mode: FinanceReportMode) -> (start: Date, end: Date) {
+        guard mode == .event else { return (startDate, endDate) }
+        let dates = filtered.map { $0.datetime }
+        return (dates.min() ?? startDate, dates.max() ?? endDate)
+    }
+
+    /// 화면(웹뷰)에 띄울 보고서 HTML. PDF와 같은 표를 같은 코드로 만든다.
+    func reportHTML() -> String? {
+        guard let ledger = currentLedger else {
+            error = "장부를 먼저 선택해주세요."
+            return nil
+        }
+        let range = reportRange(mode: ledger.mode)
+        return FinanceReportExporter.makeReportHTML(
+            mode: ledger.mode, items: reportItems, opening: openingBalance,
+            startDate: range.start, endDate: range.end, ledgerName: ledger.name,
+            forScreen: true
+        )
+    }
+
     /// 현재 기간의 거래내역을 선택한 모드에 맞는 PDF 보고서로 만든다 (영수증 미포함).
     func exportReportPDF() -> URL? {
         guard let ledger = currentLedger else {
             error = "장부를 먼저 선택해주세요."
             return nil
         }
-        let mode = ledger.mode
-        // 행사 장부는 날짜 필터가 없으므로 실제 거래 기간을 보고서 기간으로 쓴다.
-        let start: Date
-        let end: Date
-        if mode == .event {
-            let dates = filtered.map { $0.datetime }
-            start = dates.min() ?? startDate
-            end = dates.max() ?? endDate
-        } else {
-            start = startDate
-            end = endDate
-        }
+        let range = reportRange(mode: ledger.mode)
         guard let url = FinanceReportExporter.makeReportPDF(
-            mode: mode, items: reportItems, opening: openingBalance,
-            startDate: start, endDate: end, ledgerName: ledger.name
+            mode: ledger.mode, items: reportItems, opening: openingBalance,
+            startDate: range.start, endDate: range.end, ledgerName: ledger.name
         ) else {
             error = "보고서 생성에 실패했어요."
             return nil
