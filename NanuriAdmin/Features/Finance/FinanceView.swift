@@ -3,7 +3,6 @@ import SwiftUI
 struct FinanceView: View {
     @ObservedObject var viewModel: FinanceViewModel
     @State private var selectedTab = 0
-    @State private var showDateFilter = false
     @State private var editingTransaction: BankTransaction?
     @State private var showStatements = false
     @State private var exportFile: ExportFile?
@@ -37,7 +36,7 @@ struct FinanceView: View {
                 } else if viewModel.transactions.isEmpty {
                     emptyView
                 } else {
-                    if mode == .monthly { dateFilterBar }
+                    if mode == .monthly { monthBar }
                     summaryCard(ledger: ledger)
                     PillPicker(
                         tabs: [
@@ -93,34 +92,67 @@ struct FinanceView: View {
         }
     }
 
-    private var dateFilterBar: some View {
-        HStack {
-            Image(systemName: "calendar")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Text("\(viewModel.startDate.koreanShortDateString) ~ \(viewModel.endDate.koreanShortDateString)")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-            Button {
-                showDateFilter = true
-            } label: {
-                Text("기간 변경")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(.systemGray6))
-                    .foregroundColor(.primary)
-                    .clipShape(Capsule())
+    /// 달을 하나씩 넘기는 줄. 수기 장부가 시트 하나 = 한 달이었던 그대로다.
+    /// 가운데를 누르면 달 목록에서 바로 건너뛴다 (20개월을 한 칸씩 넘기지 않아도 되게).
+    private var monthBar: some View {
+        HStack(spacing: DS.Spacing.small) {
+            monthStep(systemName: "chevron.left",
+                      label: "이전 달",
+                      enabled: viewModel.canGoToPreviousMonth) {
+                viewModel.goToPreviousMonth()
             }
-            .buttonStyle(.plain)
-            .sheet(isPresented: $showDateFilter) {
-                DateFilterView(startDate: $viewModel.startDate, endDate: $viewModel.endDate)
+
+            Menu {
+                // 최근 달이 위로 오게 뒤집는다 — 보통 찾는 건 가까운 달이다.
+                ForEach(viewModel.selectableMonths.reversed(), id: \.self) { month in
+                    Button {
+                        viewModel.currentMonth = month
+                    } label: {
+                        if viewModel.hasTransactions(in: month) {
+                            Text(month.koreanYearMonthString)
+                        } else {
+                            Label(month.koreanYearMonthString, systemImage: "minus.circle")
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: DS.Spacing.tight) {
+                    Text(viewModel.currentMonth.koreanYearMonthString)
+                        .rowTitle()
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("달 고르기")
+
+            monthStep(systemName: "chevron.right",
+                      label: "다음 달",
+                      enabled: viewModel.canGoToNextMonth) {
+                viewModel.goToNextMonth()
             }
         }
         .padding(.horizontal, DS.Spacing.screen)
-        .padding(.vertical, 10)
+        .padding(.vertical, DS.Spacing.small)
+        .animation(DS.Motion.control, value: viewModel.currentMonth)
+    }
+
+    private func monthStep(systemName: String, label: String,
+                           enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: DS.Icon.inline, weight: .semibold))
+                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
+                .background(Color(.systemGray6))
+                .foregroundColor(enabled ? .primary : .secondary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(label)
     }
 
     /// 헤더 가운데가 탭 이름("재정")이 되면서 지금 보고 있는 장부 이름이 갈 곳이
@@ -178,7 +210,19 @@ struct FinanceView: View {
         .listStyle(.plain)
         .screenBackground()
         .animation(DS.Motion.list, value: selectedTab)
+        .animation(DS.Motion.list, value: viewModel.currentMonth)
         .refreshable { await reload() }
+        // 장부 전체가 아니라 **이 달만** 비어 있는 경우다. 전체 빈 화면으로 덮으면
+        // 달 넘기는 줄까지 사라져서 빠져나갈 길이 없어진다. 목록 자리에만 얹는다.
+        .overlay {
+            if currentItems.isEmpty {
+                EmptyStateView(
+                    title: "이 달은 거래가 없어요",
+                    message: "위 화살표로 다른 달을 보거나,\n⋯ 에서 거래내역서를 불러오세요."
+                )
+                .allowsHitTesting(false)
+            }
+        }
     }
 
     /// 당겨서 새로고침. 헤더에 새로고침 버튼이 없다 (DESIGN.md 1번).
