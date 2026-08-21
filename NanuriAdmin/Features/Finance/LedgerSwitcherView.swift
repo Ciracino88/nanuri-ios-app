@@ -53,19 +53,18 @@ struct LedgerSwitcherView: View {
     private func row(_ ledger: Ledger) -> some View {
         let isCurrent = ledger.id == viewModel.currentLedger?.id
         return HStack(spacing: DS.Spacing.medium) {
-            icon(ledger.mode.icon, tint: DS.Palette.deposit)
+            icon(ledger.mode.icon, tone: DS.Tone.brand)
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 Text(ledger.name)
                     .sheetTitle()
-                    .foregroundColor(.primary)
                 Text(ledger.mode.title)
                     .sheetSubtext()
             }
             Spacer(minLength: DS.Spacing.small)
             if isCurrent {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: DS.Icon.feature))
-                    .foregroundColor(DS.Palette.deposit)
+                    .font(DS.Icon.font(DS.Icon.l))
+                    .foregroundColor(DS.Palette.accent)
             }
         }
         .padding(DS.Spacing.screen)
@@ -78,10 +77,9 @@ struct LedgerSwitcherView: View {
     /// 여기서 하려던 일은 고르기고, 만들기는 그 다음이다.
     private var createRow: some View {
         HStack(spacing: DS.Spacing.medium) {
-            icon("plus", tint: .secondary)
+            icon("plus", tone: DS.Tone.neutral)
             Text("새 장부 만들기")
                 .sheetTitle()
-                .foregroundColor(.primary)
             Spacer(minLength: 0)
         }
         .padding(DS.Spacing.screen)
@@ -90,12 +88,12 @@ struct LedgerSwitcherView: View {
 
     /// 게이트 화면(`FinanceLedgerGateView`) 행과 같은 모양이다. 같은 장부를
     /// 두 화면이 다르게 그리면 옮겨 다닐 때 다른 것으로 보인다.
-    private func icon(_ systemName: String, tint: Color) -> some View {
+    private func icon(_ systemName: String, tone: DS.ColorTone) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: DS.Icon.feature))
-            .foregroundColor(tint)
-            .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
-            .background(tint.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
+            .font(DS.Icon.font(DS.Icon.l))
+            .foregroundColor(tone.content)
+            .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
+            .background(tone.surface)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
     }
 }

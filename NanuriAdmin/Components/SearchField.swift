@@ -4,17 +4,24 @@ import SwiftUI
 ///
 /// `.searchable` 을 쓰지 않는다. 그건 내비게이션 바가 있어야 나오는데 모든 탭이
 /// 내비게이션 바를 숨기고 `AdminHeaderView` 를 직접 그리기 때문이다.
+///
+/// 원문 Search-field 자리다 — 48pt 높이, radius 12, 쉬는 상태는 보조 표면색이고
+/// **포커스되면 흰 배경 + 1.5px 파랑 보더**로 한 단 강해진다.
 struct SearchField: View {
     let prompt: String
     @Binding var text: String
 
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         HStack(spacing: DS.Spacing.small) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: DS.Icon.inline))
-                .foregroundColor(.secondary)
+                .font(DS.Icon.font(DS.Icon.m))
+                .foregroundColor(isFocused ? DS.Ink.brand : DS.Ink.placeholder)
             TextField(prompt, text: $text)
-                .font(.subheadline)
+                .typeStyle(DS.Typo.body2)
+                .foregroundColor(DS.Ink.primary)
+                .focused($isFocused)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .submitLabel(.search)
@@ -23,16 +30,24 @@ struct SearchField: View {
                     text = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: DS.Icon.inline))
-                        .foregroundColor(.secondary)
+                        .font(DS.Icon.font(DS.Icon.m))
+                        .foregroundColor(DS.Ink.placeholder)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("검색어 지우기")
             }
         }
         .padding(.horizontal, DS.Spacing.medium)
-        .padding(.vertical, DS.Spacing.small)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.control))
+        .frame(height: DS.Size.field)
+        .background(isFocused ? DS.Surface.card : DS.Surface.secondary)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.m)
+                .strokeBorder(
+                    isFocused ? DS.Line.focused : DS.Line.default,
+                    lineWidth: isFocused ? DS.Line.focusedWidth : DS.Line.hairline
+                )
+        )
+        .animation(DS.Motion.control, value: isFocused)
     }
 }

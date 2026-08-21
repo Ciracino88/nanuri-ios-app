@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 칩들이 줄 끝에서 자동으로 다음 줄로 넘어가는 간단한 흐름 레이아웃.
 struct ChipFlowLayout: Layout {
-    var spacing: CGFloat = 6
+    var spacing: CGFloat = DS.Spacing.tight
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
@@ -48,21 +48,22 @@ struct CategorySuggestionChips: View {
     var body: some View {
         if !suggestions.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Spacing.small) {
                     ForEach(suggestions, id: \.self) { suggestion in
                         Button {
                             selected = suggestion
                         } label: {
+                            // 글자 크기는 칩이 정한다 — Label 스케일이 컨트롤 전용이다.
                             Text(suggestion)
-                                .font(.caption)
                                 .selectableChip(isSelected: selected == suggestion)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, DS.Spacing.tight)
             }
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            .listRowInsets(EdgeInsets(top: DS.Spacing.tight, leading: DS.Spacing.s4,
+                                      bottom: DS.Spacing.tight, trailing: DS.Spacing.s4))
         }
     }
 }
@@ -92,12 +93,13 @@ struct FinanceLedgerGateView: View {
                         Button {
                             showNewLedger = true
                         } label: {
+                            // 이 화면에서 할 일이 이것뿐이라 주요 동작이다.
                             Label("새 장부 만들기", systemImage: "plus")
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, DS.Spacing.screen)
-                                .padding(.vertical, 10)
-                                .background(DS.Palette.deposit)
-                                .foregroundColor(.white)
+                                .typeStyle(DS.Typo.labelM)
+                                .padding(.horizontal, DS.Spacing.section)
+                                .frame(height: DS.Size.buttonM)
+                                .background(DS.Palette.accent)
+                                .foregroundColor(DS.Ink.inverse)
                                 .clipShape(Capsule())
                         }
                     }
@@ -130,28 +132,25 @@ struct FinanceLedgerGateView: View {
         .task { await viewModel.fetchLedgers() }
     }
 
-    /// 행이 크고 개수가 적은 목록이라 제목만 `.headline` 이다 (DESIGN.md 3).
+    /// 원문 list-row 를 그대로 따른다 — 44pt 아바타 + 제목/부제 스택 + 우측 화살표.
     private func row(_ ledger: Ledger) -> some View {
         HStack(spacing: DS.Spacing.medium) {
             Image(systemName: ledger.mode.icon)
-                .font(.system(size: DS.Icon.feature))
-                .foregroundColor(DS.Palette.deposit)
-                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
-                .background(DS.Palette.deposit.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.button))
+                .font(DS.Icon.font(DS.Icon.l))
+                .foregroundColor(DS.Ink.brand)
+                .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
+                .background(DS.Surface.brandWeak)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 Text(ledger.name)
-                    .font(.headline)
-                    // .headline 이 물고 오는 굵기가 곧 우리 semibold 다. 명시해 둔다.
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .rowTitle()
                 Text(ledger.mode.title)
                     .rowSubtext()
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(DS.Icon.font(DS.Icon.m))
+                .foregroundColor(DS.Ink.placeholder)
         }
         .contentShape(Rectangle())
         .cardStyle()
@@ -179,8 +178,8 @@ struct NewLedgerView: View {
                     }
                     .pickerStyle(.segmented)
                     Text(mode.subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .typeStyle(DS.Typo.body3)
+                        .foregroundColor(DS.Ink.secondary)
                 }
             }
             .navigationTitle("새 장부")
@@ -230,4 +229,53 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// 같은 날 거래를 묶은 덩어리. 재정 탭 목록이 카드 한 장에 하루를 담는다.
+struct DayGroup: Identifiable {
+    let day: Date
+    var items: [BankTransaction]
+
+    var id: Date { day }
+}
+
+extension Int {
+    /// 좁은 자리에 넣는 줄인 금액. 부호는 붙이지 않으므로 **절댓값을 넘긴다.**
+    ///
+    /// ```
+    ///      8,500 → "8,500"
+    ///     87,180 → "8.7만"
+    ///    892,500 → "89.3만"
+    ///  1,685,080 → "168.5만"
+    /// 12,340,000 → "1,234만"
+    /// ```
+    ///
+    /// 규칙 셋:
+    /// - **만 미만은 그대로** 쓴다. `0.85만` 은 줄인 게 아니라 읽기만 어려워진다.
+    /// - 소수는 **첫째 자리까지만**. 좁은 칸에서 자릿수가 늘면 결국 다시 줄어든다.
+    /// - **`.0` 은 뗀다.** `50.0만` 이 `50만` 보다 정확해 보이지만 주는 정보는 같다.
+    ///
+    /// 천만을 넘기면 소수를 버린다 — 그쯤 되면 소수 한 자리가 가리키는 천 원
+    /// 단위가 수 전체에서 뜻이 없다.
+    var compactAmount: String {
+        if self >= 100_000_000 {
+            let value = Double(self) / 100_000_000
+            return "\(trimmed(value))억"
+        }
+        if self >= 10_000_000 {
+            return "\((self / 10_000).formatted())만"
+        }
+        if self >= 10_000 {
+            let value = Double(self) / 10_000
+            return "\(trimmed(value))만"
+        }
+        return formatted()
+    }
+
+    private func trimmed(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        return rounded == rounded.rounded()
+            ? "\(Int(rounded))"
+            : String(format: "%.1f", rounded)
+    }
 }

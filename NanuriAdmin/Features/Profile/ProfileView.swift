@@ -70,7 +70,7 @@ struct ProfileView: View {
             if let positions = profile?.position, !positions.isEmpty {
                 ChipFlowLayout(spacing: DS.Spacing.small) {
                     ForEach(positions, id: \.self) { position in
-                        Text(position).tagChip(color: DS.Palette.deposit)
+                        Text(position).tagChip(DS.Tone.brand)
                     }
                 }
             }
@@ -84,8 +84,8 @@ struct ProfileView: View {
             Text("내 계좌")
                 .rowSubtext()
             Text("\(profile.bankName ?? "") \(profile.accountNumber ?? "")")
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                .typeStyle(DS.Typo.body1)
+                .foregroundColor(DS.Ink.primary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
@@ -96,16 +96,19 @@ struct ProfileView: View {
             actionRow(
                 icon: "person.crop.circle",
                 label: "프로필 수정",
-                tint: .primary
+                tint: DS.Ink.primary
             ) {
                 showProfileEdit = true
             }
             // 아이콘을 지나 글자 앞에서 시작하게 (좌여백 + 아이콘 + 아이콘~글자 간격)
-            Divider().padding(.leading, DS.Spacing.screen + DS.Icon.feature + DS.Spacing.medium)
+            Rectangle()
+                .fill(DS.Line.default)
+                .frame(height: DS.Line.hairline)
+                .padding(.leading, DS.Spacing.screen + DS.Icon.feature + DS.Spacing.medium)
             actionRow(
                 icon: "rectangle.portrait.and.arrow.right",
                 label: "로그아웃",
-                tint: DS.Palette.withdrawal
+                tint: DS.Palette.danger
             ) {
                 showLogoutAlert = true
             }
@@ -122,17 +125,16 @@ struct ProfileView: View {
         Button(action: action) {
             HStack(spacing: DS.Spacing.medium) {
                 Image(systemName: icon)
-                    .font(.system(size: DS.Icon.feature))
+                    .font(DS.Icon.font(DS.Icon.feature))
                     .foregroundColor(tint)
                     .frame(width: DS.Icon.feature)
                 Text(label)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .typeStyle(DS.Typo.body1)
                     .foregroundColor(tint)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(DS.Icon.font(DS.Icon.m))
+                    .foregroundColor(DS.Ink.placeholder)
             }
             .padding(DS.Spacing.screen)
             .contentShape(Rectangle())

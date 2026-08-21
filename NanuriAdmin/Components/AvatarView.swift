@@ -29,6 +29,6 @@ struct AvatarView: View {
     static var defaultIcon: some View {
         Image(systemName: "person.circle.fill")
             .resizable()
-            .foregroundColor(Color(.systemGray3))
+            .foregroundColor(DS.Ink.disabled)
     }
 }

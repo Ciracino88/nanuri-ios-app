@@ -44,6 +44,9 @@ struct TransactionEditView: View {
                     LabeledContent("내용", value: transaction.description ?? "-")
                     LabeledContent("금액", value: "\(transaction.amount.formatted())원")
                     LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
+                    // 목록 행에서 내려온 값이다. 훑을 때 읽는 수가 아니라
+                    // 한 건을 들여다볼 때 확인하는 수라 여기가 제자리다.
+                    LabeledContent("거래 후 잔액", value: "\(transaction.balance.formatted())원")
                 }
                 Section("분류") {
                     TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
@@ -158,21 +161,23 @@ struct TransactionEditView: View {
                         activeSplit = draft
                     } label: {
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DS.Spacing.s1 / 2) {
                                 Text(draft.category.isEmpty ? "미분류" : draft.category)
-                                    .foregroundColor(.primary)
+                                    .typeStyle(DS.Typo.body2)
+                                    .foregroundColor(DS.Ink.primary)
                                 if !draft.memo.isEmpty {
                                     Text(draft.memo)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .rowSubtext()
                                 }
                             }
                             Spacer()
                             Text("\(draft.amount.formatted())원")
-                                .foregroundColor(.secondary)
+                                .typeStyle(DS.Typo.body2)
+                                .tabularAmount()
+                                .foregroundColor(DS.Ink.secondary)
                             Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                .font(DS.Icon.font(DS.Icon.m))
+                                .foregroundColor(DS.Ink.placeholder)
                         }
                     }
                     .buttonStyle(.plain)
@@ -189,13 +194,17 @@ struct TransactionEditView: View {
 
                 HStack {
                     Text("합계 \(splitSum.formatted())원 / 거래액 \(txMagnitude.formatted())원")
-                        .foregroundColor(.secondary)
+                        .typeStyle(DS.Typo.body3)
+                        .tabularAmount()
+                        .foregroundColor(DS.Ink.secondary)
                     Spacer()
+                    // 맞으면 완료색, 아니면 아직 손봐야 한다는 뜻이라 주의색이다.
+                    // 빨강을 쓰지 않는다 — 빨강은 되돌릴 수 없는 것에만 남긴다.
                     Text(splitRemaining == 0 ? "일치 ✓" : "남은 \(splitRemaining.formatted())원")
-                        .foregroundColor(splitRemaining == 0 ? .green : .red)
-                        .fontWeight(.semibold)
+                        .typeStyle(DS.Typo.labelS)
+                        .tabularAmount()
+                        .foregroundColor(splitRemaining == 0 ? DS.Palette.done : DS.Palette.pending)
                 }
-                .font(.caption)
             }
         } header: {
             Text("분할")
@@ -254,15 +263,15 @@ struct TransactionEditView: View {
 
     private var fallbackTile: some View {
         Image(systemName: "exclamationmark.triangle")
-            .foregroundColor(.secondary)
+            .foregroundColor(DS.Ink.placeholder)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(.systemGray6))
+            .background(DS.Surface.secondary)
     }
 
     private var loadingTile: some View {
         ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(.systemGray6))
+            .background(DS.Surface.secondary)
     }
 
     private func thumbnailFrame<Content: View>(
@@ -274,17 +283,17 @@ struct TransactionEditView: View {
         return ZStack(alignment: .topTrailing) {
             content()
                 .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .contentShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
+                .contentShape(RoundedRectangle(cornerRadius: DS.Radius.l))
                 .onTapGesture(perform: onTap)
 
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: DS.Icon.action))
+                    .font(DS.Icon.font(DS.Icon.action))
                     .foregroundStyle(.white, .black.opacity(0.55))
             }
             .buttonStyle(.plain)
-            .padding(5)
+            .padding(DS.Spacing.tight)
             .disabled(isSaving)
         }
         .frame(width: size, height: size)
@@ -348,11 +357,13 @@ struct SplitEditSheet: View {
                         .keyboardType(.numberPad)
                     HStack {
                         Text("거래액 \(txMagnitude.formatted())원 · 다른 항목 \(otherSum.formatted())원")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .typeStyle(DS.Typo.body3)
+                            .tabularAmount()
+                            .foregroundColor(DS.Ink.secondary)
                         Spacer()
                         Button("남은 전액") { amount = remainingForFull }
-                            .font(.caption)
+                            .typeStyle(DS.Typo.labelS)
+                            .foregroundColor(DS.Ink.brand)
                     }
                 }
                 Section("내용") {
@@ -426,7 +437,9 @@ struct ReceiptViewerView: View {
                 RemoteImage(url: URL(string: url)) {
                     ProgressView().tint(.white)
                 } failure: {
-                    Text("영수증을 불러오지 못했어요").foregroundColor(.white)
+                    Text("영수증을 불러오지 못했어요")
+                        .typeStyle(DS.Typo.body2)
+                        .foregroundColor(.white)
                 }
             )
         case .local(let image):
@@ -456,7 +469,7 @@ struct ReceiptViewerView: View {
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: DS.Icon.feature))
+                        .font(DS.Icon.font(DS.Icon.feature))
                         .foregroundStyle(.white, .white.opacity(0.3))
                 }
                 .padding()

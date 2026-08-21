@@ -48,9 +48,9 @@ struct ProfileEditView: View {
                                 .clipShape(Circle())
 
                                 Image(systemName: "camera.circle.fill")
-                                    .font(.system(size: DS.Icon.feature))
-                                    .foregroundColor(.accentColor)
-                                    .background(Color(.systemBackground).clipShape(Circle()))
+                                    .font(DS.Icon.font(DS.Icon.feature))
+                                    .foregroundColor(DS.Ink.brand)
+                                    .background(DS.Surface.card.clipShape(Circle()))
                                     .offset(x: 4, y: 4)
                             }
                         }
@@ -63,7 +63,7 @@ struct ProfileEditView: View {
                 // 기본 정보
                 Section("기본 정보") {
                     HStack {
-                        Text("이름").foregroundColor(.gray)
+                        Text("이름").foregroundColor(DS.Ink.secondary)
                         Spacer()
                         TextField("홍길동", text: $name)
                             .multilineTextAlignment(.trailing)
@@ -98,7 +98,7 @@ struct ProfileEditView: View {
                         }
                     }
                     HStack {
-                        Text("계좌번호").foregroundColor(.gray)
+                        Text("계좌번호").foregroundColor(DS.Ink.secondary)
                         Spacer()
                         TextField("계좌번호 입력", text: $accountNumber)
                             .multilineTextAlignment(.trailing)
@@ -108,7 +108,9 @@ struct ProfileEditView: View {
 
                 if let error {
                     Section {
-                        Text(error).foregroundColor(.red).font(.caption)
+                        Text(error)
+                            .typeStyle(DS.Typo.body3)
+                            .foregroundColor(DS.Ink.danger)
                     }
                 }
             }
@@ -138,7 +140,7 @@ struct ProfileEditView: View {
             .overlay {
                 if isLoading {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black.opacity(0.1))
+                        .background(DS.State.scrim.opacity(0.2))
                 }
             }
         }
@@ -147,7 +149,7 @@ struct ProfileEditView: View {
     private var defaultAvatarIcon: some View {
         Image(systemName: "person.circle.fill")
             .resizable()
-            .foregroundColor(Color(.systemGray4))
+            .foregroundColor(DS.Ink.disabled)
     }
 
     func loadProfile() async {
@@ -219,9 +221,9 @@ private struct PositionChip: View {
 
     var body: some View {
         Button(action: onTap) {
+            // 글자 크기는 칩이 정한다 — Label 스케일이 컨트롤 전용이다.
             Text(label)
-                .font(.subheadline)
-                .selectableChip(isSelected: isSelected, tint: .accentColor)
+                .selectableChip(isSelected: isSelected)
         }
         .buttonStyle(.plain)
     }
