@@ -116,6 +116,24 @@ Release 구성을 development 프로파일로 기기에 올릴 때 그렇게 된
 
 ---
 
+## 장부는 전부 월별이다
+
+`finance_ledgers.type` 이 `monthly` | `event` 두 가지였고 화면 골격이 그걸로 갈렸다 —
+행사 결산은 달 개념이 없어서 날짜 축도 지난달 비교도 안 그렸다.
+**행사 결산을 쓰지 않기로 해서 `event` 를 걷어냈다** (2026-08-25).
+
+- `FinanceReportMode` 열거형이 사라졌다. `Ledger.mode` 도 없다.
+- `filtered`·`previousMonthWithdrawal`·`daysInCurrentMonth`·`weeksInCurrentMonth`
+  에 있던 `guard ... != .event` 가 전부 빠졌다. 이제 늘 달 단위로 자른다.
+- 보고서는 `buildMonthlyHTML` 하나다. `makeReportHTML` 에 `mode` 를 안 넘긴다.
+- 새 장부 시트에서 유형 고르는 자리가 없어졌다. 이름만 받는다.
+
+**DB 의 `check (type in ('monthly','event'))` 는 그대로 두었다.** 제약을 좁히는
+마이그레이션은 얻는 게 없고, 혹시 남아 있는 옛 행이 있으면 그것만 깨진다.
+앱은 늘 `Ledger.monthlyType` 을 넣는다.
+
+---
+
 ## 로그
 
 **`print` 를 쓰지 않는다.** `Components/Log.swift` 의 카테고리별 `Logger` 를 쓴다.

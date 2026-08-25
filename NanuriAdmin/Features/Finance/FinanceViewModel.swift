@@ -28,10 +28,9 @@ class FinanceViewModel: ObservableObject {
     @Published var ledgers: [Ledger] = []
     @Published var currentLedger: Ledger?
 
-    /// 행사 장부는 통장 전체가 한 행사이므로 날짜 필터를 적용하지 않는다.
+    /// 지금 보고 있는 달의 거래.
     var filtered: [BankTransaction] {
-        guard currentLedger?.mode != .event else { return transactions }
-        return transactions.filter {
+        transactions.filter {
             $0.datetime >= startDate && $0.datetime <= endDate
         }
     }
@@ -152,7 +151,6 @@ class FinanceViewModel: ObservableObject {
     /// 안 쓴 게 아니라 **장부가 그때부터 시작하지 않았다**는 뜻일 수 있다.
     /// 둘을 구분해야 해서 `Optional` 이다.
     var previousMonthWithdrawal: Int? {
-        guard currentLedger?.mode != .event else { return nil }
         let cal = Calendar.current
         guard let previous = cal.date(byAdding: .month, value: -1, to: currentMonth) else { return nil }
         let start = cal.startOfMonth(previous)
@@ -194,7 +192,6 @@ class FinanceViewModel: ObservableObject {
     /// 거래가 없는 날도 뺀 자리를 남긴다 — 건너뛰면 날짜 간격이 들쭉날쭉해져서
     /// 어느 날이 비었는지가 안 보인다.
     var daysInCurrentMonth: [Date] {
-        guard currentLedger?.mode != .event else { return [] }
         let cal = Calendar.current
         var days: [Date] = []
         var cursor = cal.startOfDay(for: startDate)
@@ -212,7 +209,6 @@ class FinanceViewModel: ObservableObject {
     /// 달 경계에 걸친 주는 **이전·다음 달 날짜까지 그대로 들고 온다** — 한 주는
     /// 일곱 칸이어야 요일 자리가 안 흔들린다. 그 칸들은 이 달 밖이라 눌리지 않는다.
     var weeksInCurrentMonth: [[Date]] {
-        guard currentLedger?.mode != .event else { return [] }
         var cal = Calendar.current
         cal.firstWeekday = 1  // 일요일 시작
         let days = daysInCurrentMonth
@@ -293,11 +289,11 @@ class FinanceViewModel: ObservableObject {
     }
 
     @discardableResult
-    func createLedger(name: String, mode: FinanceReportMode) async -> Ledger? {
+    func createLedger(name: String) async -> Ledger? {
         do {
             let created: Ledger = try await supabase
                 .from("finance_ledgers")
-                .insert(LedgerInsert(name: name, type: mode.rawValue))
+                .insert(LedgerInsert(name: name))
                 .select()
                 .single()
                 .execute()
@@ -329,25 +325,15 @@ class FinanceViewModel: ObservableObject {
 
     // MARK: - 내보내기
 
-    /// 보고서가 덮는 기간. 화면 미리보기와 PDF가 **같은 기간**을 쓰도록 한 곳에 둔다.
-    /// 행사 장부는 날짜 필터가 없으므로 실제 거래 기간을 보고서 기간으로 쓴다.
-    private func reportRange(mode: FinanceReportMode) -> (start: Date, end: Date) {
-        guard mode == .event else { return (startDate, endDate) }
-        let dates = filtered.map { $0.datetime }
-        return (dates.min() ?? startDate, dates.max() ?? endDate)
-    }
-
     /// 화면(웹뷰)에 띄울 보고서 HTML. PDF와 같은 표를 같은 코드로 만든다.
     func reportHTML() -> String? {
-        guard let ledger = currentLedger else {
+        guard currentLedger != nil else {
             error = "장부를 먼저 선택해주세요."
             return nil
         }
-        let range = reportRange(mode: ledger.mode)
         return FinanceReportExporter.makeReportHTML(
-            mode: ledger.mode, items: reportItems, opening: openingBalance,
-            startDate: range.start, endDate: range.end, ledgerName: ledger.name,
-            forScreen: true
+            items: reportItems, opening: openingBalance,
+            startDate: startDate, endDate: endDate, forScreen: true
         )
     }
 
@@ -357,10 +343,9 @@ class FinanceViewModel: ObservableObject {
             error = "장부를 먼저 선택해주세요."
             return nil
         }
-        let range = reportRange(mode: ledger.mode)
         guard let url = FinanceReportExporter.makeReportPDF(
-            mode: ledger.mode, items: reportItems, opening: openingBalance,
-            startDate: range.start, endDate: range.end, ledgerName: ledger.name
+            items: reportItems, opening: openingBalance,
+            startDate: startDate, endDate: endDate, ledgerName: ledger.name
         ) else {
             error = "보고서 생성에 실패했어요."
             return nil

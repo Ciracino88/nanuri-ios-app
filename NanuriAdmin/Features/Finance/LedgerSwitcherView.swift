@@ -53,13 +53,11 @@ struct LedgerSwitcherView: View {
     private func row(_ ledger: Ledger) -> some View {
         let isCurrent = ledger.id == viewModel.currentLedger?.id
         return HStack(spacing: DS.Spacing.medium) {
-            icon(ledger.mode.icon, tone: DS.Tone.brand)
-            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                Text(ledger.name)
-                    .sheetTitle()
-                Text(ledger.mode.title)
-                    .sheetSubtext()
-            }
+            icon("calendar", tone: DS.Tone.brand)
+            // 부제가 없다. 예전엔 장부 유형(월별/행사)을 적었는데 유형이 하나뿐이라
+            // 모든 줄에 같은 글자가 붙어 아무것도 구별해 주지 않았다.
+            Text(ledger.name)
+                .sheetTitle()
             Spacer(minLength: DS.Spacing.small)
             if isCurrent {
                 Image(systemName: "checkmark.circle.fill")
@@ -70,7 +68,7 @@ struct LedgerSwitcherView: View {
         .padding(DS.Spacing.screen)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(ledger.name), \(ledger.mode.title)\(isCurrent ? ", 지금 보는 장부" : "")")
+        .accessibilityLabel("\(ledger.name)\(isCurrent ? ", 지금 보는 장부" : "")")
     }
 
     /// 맨 아래 줄. 고르는 것들과 같은 상자에 있지만 **파랑을 주지 않는다** —

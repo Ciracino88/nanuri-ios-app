@@ -45,23 +45,19 @@ enum FinanceReportExporter {
         return order.map { ($0, sums[$0]!) }.sorted { $0.1 > $1.1 }
     }
 
-    // MARK: - 재정 보고서 PDF (모드별, 영수증 미포함)
+    // MARK: - 재정 보고서 PDF (영수증 미포함)
 
     /// 보고서 HTML. 화면(웹뷰)과 PDF가 **같은 표를 쓰도록** 하는 단일 진입점이다.
     /// `forScreen` 은 화면 전용 CSS만 얹는다 — 표 내용과 인쇄 결과는 달라지지 않는다.
-    static func makeReportHTML(mode: FinanceReportMode, items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String, forScreen: Bool) -> String {
-        switch mode {
-        case .monthly:
-            return buildMonthlyHTML(items: items, opening: opening, startDate: startDate, endDate: endDate, forScreen: forScreen)
-        case .event:
-            return buildEventHTML(items: items, startDate: startDate, endDate: endDate, eventName: ledgerName, forScreen: forScreen)
-        }
+    static func makeReportHTML(items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, forScreen: Bool) -> String {
+        buildMonthlyHTML(items: items, opening: opening, startDate: startDate, endDate: endDate, forScreen: forScreen)
     }
 
-    static func makeReportPDF(mode: FinanceReportMode, items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String) -> URL? {
-        let html = makeReportHTML(mode: mode, items: items, opening: opening,
+    /// `ledgerName` 은 표에 안 들어가고 **파일 이름에만** 쓰인다.
+    static func makeReportPDF(items: [ReportLineItem], opening: Int, startDate: Date, endDate: Date, ledgerName: String) -> URL? {
+        let html = makeReportHTML(items: items, opening: opening,
                                   startDate: startDate, endDate: endDate,
-                                  ledgerName: ledgerName, forScreen: false)
+                                  forScreen: false)
         let safeName = sanitizeFilename(ledgerName)
         return renderHTMLToPDF(html, filename: "\(safeName)_\(rangeSuffix(startDate, endDate)).pdf")
     }
@@ -242,89 +238,6 @@ enum FinanceReportExporter {
         </body></html>
         """
     }
-
-    // MARK: - 행사 결산 내역 (수입/지출 좌우 대응, 항목별 개별 나열, 전월이월·누적 잔액 없음)
-
-    private static func buildEventHTML(items: [ReportLineItem], startDate: Date, endDate: Date, eventName: String?, forScreen: Bool) -> String {
-        let deposits = items.filter { $0.isDeposit }
-        let withdrawals = items.filter { !$0.isDeposit }
-        let totalIncome = deposits.reduce(0) { $0 + $1.magnitude }
-        let totalExpense = withdrawals.reduce(0) { $0 + $1.magnitude }
-        let net = totalIncome - totalExpense
-
-        // 카테고리(항목)별로 묶되 합산하지 않고 개별 항목을 나열한다.
-        // 항목명은 그룹 첫 줄에만 표시(이후 공백), 내용 = 메모.
-        func displayRows(_ its: [ReportLineItem]) -> [(item: String, amount: String, note: String)] {
-            var order: [String] = []
-            var groups: [String: [ReportLineItem]] = [:]
-            for it in its.sorted(by: { $0.datetime < $1.datetime }) {
-                let key = it.categoryLabel
-                if groups[key] == nil { order.append(key); groups[key] = [] }
-                groups[key]?.append(it)
-            }
-            var result: [(String, String, String)] = []
-            for cat in order {
-                for (i, it) in (groups[cat] ?? []).enumerated() {
-                    let note = it.memo?.trimmingCharacters(in: .whitespaces) ?? ""
-                    result.append((i == 0 ? cat : "", num(it.magnitude), note))
-                }
-            }
-            return result.map { (item: $0.0, amount: $0.1, note: $0.2) }
-        }
-
-        let incomeRows = displayRows(deposits)
-        let expenseRows = displayRows(withdrawals)
-        let rowCount = max(incomeRows.count, expenseRows.count)
-
-        var body = ""
-        for i in 0..<rowCount {
-            let inc = i < incomeRows.count ? incomeRows[i] : (item: "", amount: "", note: "")
-            let exp = i < expenseRows.count ? expenseRows[i] : (item: "", amount: "", note: "")
-            body += """
-            <tr>\
-            <td>\(htmlEscape(inc.item))</td><td class='num'>\(inc.amount)</td><td>\(htmlEscape(inc.note))</td>\
-            <td>\(htmlEscape(exp.item))</td><td class='num'>\(exp.amount)</td><td>\(htmlEscape(exp.note))</td>\
-            </tr>
-            """
-        }
-        // 총계 (양측) + 잔액 (수입측)
-        body += """
-        <tr class='total'><td>총계</td><td class='num'>\(num(totalIncome))</td><td></td>\
-        <td>총계</td><td class='num'>\(num(totalExpense))</td><td></td></tr>
-        <tr class='total'><td>잔액</td><td class='num'>\(num(net))</td><td></td><td></td><td></td><td></td></tr>
-        """
-
-        let dateFmt = DateFormatter()
-        dateFmt.locale = Locale(identifier: "ko_KR")
-        dateFmt.dateFormat = "yyyy년 M월 d일"
-        let title = (eventName?.isEmpty == false) ? eventName! : "행사 결산 내역"
-
-        return """
-        <html><head><meta charset='utf-8'><style>
-        * { -webkit-print-color-adjust: exact; }
-        body { font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif; color:#111; font-size:12px; }
-        h1 { font-size:18px; text-align:center; margin:0 0 4px; }
-        .sub { text-align:center; color:#666; font-size:11px; margin-bottom:16px; }
-        table { width:100%; border-collapse:collapse; }
-        th,td { border:1px solid #333; padding:5px 8px; text-align:left; }
-        td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
-        thead th { background:#f2f2f2; font-weight:600; text-align:center; }
-        tr.total td { font-weight:700; background:#fafafa; }
-        </style>\(screenCSS(forScreen))</head><body>
-        <h1>\(title)</h1>
-        <div class='sub'>기간: \(dateFmt.string(from: startDate)) ~ \(dateFmt.string(from: endDate))</div>
-        \(twOpen(forScreen))<table>
-          <thead>
-            <tr><th colspan='3'>수입</th><th colspan='3'>지출</th></tr>
-            <tr><th>항목</th><th class='num'>금액</th><th>내용</th><th>항목</th><th class='num'>금액</th><th>내용</th></tr>
-          </thead>
-          <tbody>\(body)</tbody>
-        </table>\(twClose(forScreen))
-        </body></html>
-        """
-    }
-
-    // MARK: - 영수증 부록 PDF
 
     static func makeReceiptsPDF(transactions: [BankTransaction], startDate: Date, endDate: Date) async -> URL? {
         let dateFmt = DateFormatter()

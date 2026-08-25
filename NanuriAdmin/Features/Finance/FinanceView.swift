@@ -28,28 +28,17 @@ struct FinanceView: View {
     }
 
     private func content(ledger: Ledger) -> some View {
-        let mode = ledger.mode
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             // 가운데를 **달 넘김**에 내줬다. 탭 이름("재정")은 탭바가 이미 말하고
             // 있고, 이 화면에서 가장 자주 건드리는 건 달이다.
             //
             // 장부를 고르는 길은 **왼쪽 슬롯**이 갖는다. 요약 밴드에 잠깐 뒀다가
             // 그 자리가 "자세히 보기" 로 넘어가면서 헤더로 돌아왔다.
-            Group {
-                if mode == .monthly {
-                    AdminHeaderView(
-                        center: { monthStepper },
-                        leading: { ledgerButton(ledger) },
-                        trailing: { actionMenu(mode: mode) }
-                    )
-                } else {
-                    AdminHeaderView(
-                        title: "재정",
-                        titleAction: { showSwitcher = true },
-                        trailing: { actionMenu(mode: mode) }
-                    )
-                }
-            }
+            AdminHeaderView(
+                center: { monthStepper },
+                leading: { ledgerButton(ledger) },
+                trailing: { actionMenu() }
+            )
 
             VStack(spacing: 0) {
                 if viewModel.isLoading {
@@ -59,7 +48,7 @@ struct FinanceView: View {
                 } else if viewModel.transactions.isEmpty {
                     emptyView
                 } else {
-                    scrollingContent(ledger: ledger, mode: mode)
+                    scrollingContent()
                 }
             }
             .overlay {
@@ -98,7 +87,7 @@ struct FinanceView: View {
                 FinanceReportPreviewView(html: preview.html, title: preview.title)
             }
             .sheet(isPresented: $showSpendingDetail) {
-                SpendingDetailView(viewModel: viewModel, ledger: ledger)
+                SpendingDetailView(viewModel: viewModel)
             }
             // 전환 시트가 완전히 닫힌 뒤에 다음 일을 한다. 같은 순간에 둘을
             // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다 (`BillListView` 와 같다).
@@ -210,7 +199,7 @@ struct FinanceView: View {
     ///
     /// **라벨이 위, 숫자가 아래다.** 여기서는 "무엇의 수인지"를 먼저 알아야
     /// 수가 읽힌다.
-    private func summaryBand(ledger: Ledger) -> some View {
+    private func summaryBand() -> some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: DS.Spacing.s4) {
                 bandAmount(label: "총 입금",
@@ -229,7 +218,7 @@ struct FinanceView: View {
                 .frame(height: DS.Line.hairline)
                 .padding(.horizontal, DS.Spacing.s4)
 
-            insightRow(ledger: ledger)
+            insightRow()
         }
         .background(DS.Surface.secondary)
     }
@@ -250,14 +239,14 @@ struct FinanceView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 밴드 발치 줄 — 왼쪽은 지난달과 견준 한 문장과 장부 바꾸기, 오른쪽은 그래프.
+    /// 밴드 발치 줄 — 왼쪽은 지난달과 견준 한 문장과 "자세히 보기", 오른쪽은 그래프.
     ///
     /// 문장은 **결과**를 말하고 그래프는 **언제 벌어졌는지**를 말한다. 둘이 같은
     /// 자리에 있어야 "왜 그런지" 까지 한눈에 읽힌다.
     ///
-    /// 장부 이름이 헤더에서 빠졌으므로 **여기가 장부를 고르는 자리**다.
-    /// 화면이 어느 장부인지는 어디선가 반드시 말해야 한다.
-    private func insightRow(ledger: Ledger) -> some View {
+    /// 장부를 고르는 자리가 잠깐 여기 있었는데, 그 자리를 "자세히 보기" 에 내주고
+    /// 헤더 왼쪽으로 돌아갔다 (`ledgerButton`).
+    private func insightRow() -> some View {
         HStack(alignment: .center, spacing: DS.Spacing.medium) {
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 // 본문보다 한 계층 작다. 대신 **금액만** 굵기와 색으로 도드라져서
@@ -305,7 +294,7 @@ struct FinanceView: View {
 
     /// 헤더 왼쪽의 장부 전환. 아이콘 하나라 이름은 VoiceOver 가 읽는다.
     private func ledgerButton(_ ledger: Ledger) -> some View {
-        HeaderIconButton(systemName: ledger.mode.icon,
+        HeaderIconButton(systemName: "calendar",
                          label: "장부 바꾸기, 지금 \(ledger.name)") {
             showSwitcher = true
         }
@@ -441,7 +430,7 @@ struct FinanceView: View {
     ///
     /// `List` 가 아니라 `ScrollView` 다 — 목록에 스와이프 동작이 없어서 `List` 를
     /// 쓸 이유가 없고, 머리 콘텐츠를 같이 굴리려면 이쪽이 맞다.
-    private func scrollingContent(ledger: Ledger, mode: FinanceReportMode) -> some View {
+    private func scrollingContent() -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 // 레퍼런스 순서 그대로 — 거르개가 먼저, 요약이 그다음, 날짜 축이
@@ -454,11 +443,9 @@ struct FinanceView: View {
                 .padding(.top, DS.Spacing.medium)
                 .padding(.bottom, DS.Spacing.s5)
 
-                summaryBand(ledger: ledger)
+                summaryBand()
 
-                if mode == .monthly {
-                    daySelector
-                }
+                daySelector
 
                 if currentItems.isEmpty {
                     // 장부 전체가 아니라 **지금 걸러 놓은 범위만** 비어 있는 경우다.
@@ -542,12 +529,12 @@ struct FinanceView: View {
     }
 
     /// 헤더의 화면별 동작 자리는 하나뿐이라 내보내기·거래내역서를 한 메뉴로 묶는다.
-    private func actionMenu(mode: FinanceReportMode) -> some View {
+    private func actionMenu() -> some View {
         Menu {
             // 내보내기보다 먼저 둔다 — 확인하고 내보내는 순서가 자연스럽다.
             Button {
                 if let html = viewModel.reportHTML() {
-                    reportPreview = ReportPreview(html: html, title: mode.title)
+                    reportPreview = ReportPreview(html: html, title: "월별 회계 보고서")
                 }
             } label: {
                 Label("보고서 미리보기", systemImage: "tablecells")
@@ -565,7 +552,7 @@ struct FinanceView: View {
                     if let url { exportFile = ExportFile(url: url) }
                 }
             } label: {
-                Label("\(mode.title) (PDF)", systemImage: "doc.text")
+                Label("월별 회계 보고서 (PDF)", systemImage: "doc.text")
             }
             .disabled(viewModel.filtered.isEmpty)
 
