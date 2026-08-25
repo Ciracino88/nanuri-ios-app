@@ -30,17 +30,15 @@ enum FinanceReportExporter {
     /// A4 (pt)
     private static let pageSize = CGSize(width: 595.2, height: 841.8)
 
-    private static func categoryKey(_ category: String?) -> String {
-        if let c = category?.trimmingCharacters(in: .whitespaces), !c.isEmpty { return c }
-        return "미분류"
-    }
-
     /// 카테고리별 합계 (금액 큰 순). 카테고리 없으면 "미분류".
+    ///
+    /// 묶는 이름은 `ReportLineItem.categoryLabel` 이 정한다 — 분석 화면과 같은
+    /// 규칙이라야 두 곳의 합계가 어긋나지 않는다.
     private static func categoryTotals(_ items: [ReportLineItem]) -> [(String, Int)] {
         var order: [String] = []
         var sums: [String: Int] = [:]
         for it in items {
-            let key = categoryKey(it.category)
+            let key = it.categoryLabel
             if sums[key] == nil { order.append(key) }
             sums[key, default: 0] += it.magnitude
         }
@@ -260,7 +258,7 @@ enum FinanceReportExporter {
             var order: [String] = []
             var groups: [String: [ReportLineItem]] = [:]
             for it in its.sorted(by: { $0.datetime < $1.datetime }) {
-                let key = categoryKey(it.category)
+                let key = it.categoryLabel
                 if groups[key] == nil { order.append(key); groups[key] = [] }
                 groups[key]?.append(it)
             }

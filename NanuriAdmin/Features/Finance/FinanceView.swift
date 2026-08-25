@@ -16,6 +16,8 @@ struct FinanceView: View {
     @State private var showNewLedger = false
     /// 날짜 셀렉터에서 고른 날. `nil` 이면 이 달 전체다.
     @State private var selectedDay: Date?
+    /// 요약 밴드의 "자세히 보기" 가 여는 분석 화면.
+    @State private var showSpendingDetail = false
 
     var body: some View {
         if let ledger = viewModel.currentLedger {
@@ -94,6 +96,9 @@ struct FinanceView: View {
             }
             .sheet(item: $reportPreview) { preview in
                 FinanceReportPreviewView(html: preview.html, title: preview.title)
+            }
+            .sheet(isPresented: $showSpendingDetail) {
+                SpendingDetailView(viewModel: viewModel, ledger: ledger)
             }
             // 전환 시트가 완전히 닫힌 뒤에 다음 일을 한다. 같은 순간에 둘을
             // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다 (`BillListView` 와 같다).
@@ -257,17 +262,17 @@ struct FinanceView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                 // 본문보다 한 계층 작다. 대신 **금액만** 굵기와 색으로 도드라져서
                 // 문장을 다 읽지 않아도 수가 먼저 눈에 걸린다.
-                comparisonText
+                viewModel.comparison.text
                     .typeStyle(DS.Typo.labelS)
                     .foregroundColor(DS.Ink.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
+                // 보고서(종이)가 아니라 **분석 화면**이 열린다. 밴드는 소비 이야기를
+                // 하고 있는데 종이 장부를 열면 문맥이 끊기고, 보고서로 가는 길은
+                // 헤더 메뉴에 따로 있다 (`actionMenu`).
                 Button {
-                    // 지금은 이 달 보고서를 연다. 전용 분석 화면이 생기면 그쪽으로 바꾼다.
-                    if let html = viewModel.reportHTML() {
-                        reportPreview = ReportPreview(html: html, title: ledger.mode.title)
-                    }
+                    showSpendingDetail = true
                 } label: {
                     HStack(spacing: DS.Spacing.tight) {
                         Text("자세히 보기")
@@ -286,49 +291,16 @@ struct FinanceView: View {
 
             // 견줄 지난달이 없으면 선이 하나뿐이라 "견주는 그래프" 가 아니게 된다.
             // 그럴 땐 아예 안 그린다.
-            if viewModel.previousMonthWithdrawal != nil {
+            if viewModel.comparison.hasPrevious {
                 SpendingSparkline(
                     current: viewModel.cumulativeWithdrawals(monthsAgo: 0),
                     previous: viewModel.cumulativeWithdrawals(monthsAgo: 1),
-                    tint: comparisonColor
+                    tint: viewModel.comparison.color
                 )
             }
         }
         .padding(.horizontal, DS.Spacing.s4)
         .padding(.vertical, DS.Spacing.s4)
-    }
-
-    /// 지난달과 견준 한 문장. 견줄 지난달이 없으면 이 달 수지를 대신 말한다.
-    ///
-    /// **금액 조각만 굵기와 색을 달리 준다.** 문장 전체를 강조하면 밴드에서
-    /// 제일 무거운 덩어리가 되는데, 그 자리는 위의 두 수 것이다.
-    private var comparisonText: Text {
-        guard let previous = viewModel.previousMonthWithdrawal else {
-            let net = viewModel.totalDeposit - viewModel.totalWithdrawal
-            return net < 0
-                ? amountPart(abbreviated(-net)) + Text(" 더 나갔어요")
-                : amountPart(abbreviated(net)) + Text(" 남았어요")
-        }
-        let diff = viewModel.totalWithdrawal - previous
-        if diff == 0 { return Text("지난달과 똑같이 썼어요") }
-        return Text("지난달보다 ")
-            + amountPart(abbreviated(abs(diff)))
-            + Text(diff > 0 ? " 더 썼어요" : " 덜 썼어요")
-    }
-
-    private func amountPart(_ text: String) -> Text {
-        Text(text).fontWeight(.bold).foregroundColor(comparisonColor)
-    }
-
-    /// **더 썼으면 빨강, 덜 썼으면 파랑.** 그래프의 이 달 선도 같은 색을 쓴다 —
-    /// 문장과 그림이 같은 것을 말하고 있다는 걸 색이 묶어 준다.
-    ///
-    /// 이 앱에서 빨강은 되돌릴 수 없는 것의 색이라 아껴 왔는데, 여기서는 예외로
-    /// 둔다. 지출이 늘어난 건 되돌릴 수 없는 일이 맞고, 견주는 자리라 색이
-    /// 없으면 문장이 그냥 흘러간다.
-    private var comparisonColor: Color {
-        guard let previous = viewModel.previousMonthWithdrawal else { return DS.Ink.brand }
-        return viewModel.totalWithdrawal > previous ? DS.Palette.danger : DS.Palette.deposit
     }
 
     /// 헤더 왼쪽의 장부 전환. 아이콘 하나라 이름은 VoiceOver 가 읽는다.
@@ -337,14 +309,6 @@ struct FinanceView: View {
                          label: "장부 바꾸기, 지금 \(ledger.name)") {
             showSwitcher = true
         }
-    }
-
-    /// 문장 안에 들어가는 금액은 만 단위로 줄인다 — 문장은 정확한 수를 읽는
-    /// 자리가 아니라 크기를 가늠하는 자리다. 정확한 수는 바로 위 두 칸에 있다.
-    private func abbreviated(_ amount: Int) -> String {
-        amount >= 10_000
-            ? "\((amount / 10_000).formatted())만원"
-            : "\(amount.formatted())원"
     }
 
     /// 날짜 셀렉터.

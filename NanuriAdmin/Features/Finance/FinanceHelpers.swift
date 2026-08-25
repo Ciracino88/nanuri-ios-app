@@ -239,6 +239,60 @@ struct DayGroup: Identifiable {
     var id: Date { day }
 }
 
+/// 지난달과 견준 한 문장. **요약 밴드와 분석 화면이 같은 문장을 쓴다.**
+///
+/// 밴드에서 한 줄로 흘려 읽던 문장을 눌러 크게 다시 보는 구조라, 두 화면이 문장을
+/// 각자 만들면 같은 달을 두고 다른 말을 하게 된다. 크기만 화면이 정하고
+/// **문장과 색은 여기 한 곳에서 나온다.**
+struct SpendingComparison {
+    /// 지난달 총 출금. **견줄 지난달이 아예 없으면 `nil`** 이다.
+    let previousWithdrawal: Int?
+    let totalWithdrawal: Int
+    let totalDeposit: Int
+
+    /// 견줄 지난달이 있는가. 없으면 선이 하나뿐이라 "견주는 그래프" 가 아니게 된다.
+    var hasPrevious: Bool { previousWithdrawal != nil }
+
+    /// **더 썼으면 빨강, 덜 썼으면 파랑.** 그래프의 이 달 선도 같은 색을 쓴다 —
+    /// 문장과 그림이 같은 것을 말하고 있다는 걸 색이 묶어 준다.
+    ///
+    /// 이 앱에서 빨강은 되돌릴 수 없는 것의 색이라 아껴 왔는데, 여기서는 예외로
+    /// 둔다. 지출이 늘어난 건 되돌릴 수 없는 일이 맞고, 견주는 자리라 색이
+    /// 없으면 문장이 그냥 흘러간다.
+    var color: Color {
+        guard let previousWithdrawal else { return DS.Ink.brand }
+        return totalWithdrawal > previousWithdrawal ? DS.Palette.danger : DS.Palette.deposit
+    }
+
+    /// 한 문장. 견줄 지난달이 없으면 이 달 수지를 대신 말한다.
+    ///
+    /// **금액 조각만 굵기와 색을 달리 준다.** 문장 전체를 강조하면 밴드에서
+    /// 제일 무거운 덩어리가 되는데, 그 자리는 위의 두 수 것이다. 크기는 붙이지
+    /// 않는다 — 밴드는 작게, 분석 화면은 크게 같은 문장을 그린다.
+    var text: Text {
+        guard let previousWithdrawal else {
+            let net = totalDeposit - totalWithdrawal
+            return net < 0
+                ? Text("\(amountPart(-net)) 더 나갔어요")
+                : Text("\(amountPart(net)) 남았어요")
+        }
+        let diff = totalWithdrawal - previousWithdrawal
+        if diff == 0 { return Text("지난달과 똑같이 썼어요") }
+        return diff > 0
+            ? Text("지난달보다 \(amountPart(diff)) 더 나갔어요")
+            : Text("지난달보다 \(amountPart(-diff)) 덜 나갔어요")
+    }
+
+    /// 문장 안에 들어가는 금액은 만 단위로 줄인다 — 문장은 정확한 수를 읽는
+    /// 자리가 아니라 크기를 가늠하는 자리다. 정확한 수는 요약 밴드 두 칸에 있다.
+    private func amountPart(_ amount: Int) -> Text {
+        let text = amount >= 10_000
+            ? "\((amount / 10_000).formatted())만원"
+            : "\(amount.formatted())원"
+        return Text(text).fontWeight(.bold).foregroundColor(color)
+    }
+}
+
 extension Int {
     /// 좁은 자리에 넣는 줄인 금액. 부호는 붙이지 않으므로 **절댓값을 넘긴다.**
     ///
