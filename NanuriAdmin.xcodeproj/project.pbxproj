@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FA10C0DE2FE1000000000001 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = FA10C0DE2FE1000000000002 /* Kingfisher */; };
 		FA286E9D2FE68AE500BB2CCE /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA286E9C2FE68AE500BB2CCE /* LocalAuthentication.framework */; };
 		FAB45B5C2FCF57E700601EFF /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = FAB45B5B2FCF57E700601EFF /* Supabase */; };
 		FAB45B702FCF651B00601EFF /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = FAB45B6F2FCF651B00601EFF /* GoogleSignIn */; };
 		FAB45B722FCF651B00601EFF /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = FAB45B712FCF651B00601EFF /* GoogleSignInSwift */; };
-		FA10C0DE2FE1000000000001 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = FA10C0DE2FE1000000000002 /* Kingfisher */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -389,6 +389,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		FA10C0DE2FE1000000000003 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 		FAB45B5A2FCF57E700601EFF /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
@@ -405,17 +413,14 @@
 				minimumVersion = 9.1.0;
 			};
 		};
-		FA10C0DE2FE1000000000003 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 8.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		FA10C0DE2FE1000000000002 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA10C0DE2FE1000000000003 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
 		FAB45B5B2FCF57E700601EFF /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FAB45B5A2FCF57E700601EFF /* XCRemoteSwiftPackageReference "supabase-swift" */;
@@ -430,11 +435,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FAB45B6E2FCF651B00601EFF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
-		};
-		FA10C0DE2FE1000000000002 /* Kingfisher */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = FA10C0DE2FE1000000000003 /* XCRemoteSwiftPackageReference "Kingfisher" */;
-			productName = Kingfisher;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

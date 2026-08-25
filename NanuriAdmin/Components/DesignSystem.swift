@@ -184,6 +184,26 @@ enum DS {
 
         /// 주요 동작. **화면당 하나만 쓴다** — 원문이 단일 강조색 정책을 못 박는다.
         static let accent = Ink.brand
+
+        /// 카테고리 비중 막대의 사다리. 큰 것부터 이 순서로 쓴다.
+        ///
+        /// ⚠️ **원문에 없는 값이다.** `blue500` 에서 명도만 올려 이 앱이 뜬 세 단이다.
+        ///
+        /// 레퍼런스는 이 자리에 파랑·주황·초록을 나란히 쓰는데, 여기서는 그럴 수
+        /// 없다 — 이 앱은 색마다 뜻이 붙어 있어서(파랑 입금 · 주황 주의 · 초록 완료)
+        /// 카테고리에 그 색들을 빌려 주면 뜻이 흐려진다. **한 색의 명도만 낮춰
+        /// 간다.** 막대에서 읽어야 하는 건 "어느 것이 제일 큰가" 지 색 이름이 아니다.
+        ///
+        /// 셋뿐인 건 목록도 셋까지만 이름을 적기 때문이다. 넷째부터는 `categoryRest`
+        /// 로 합쳐진다 — 사다리를 더 늘리면 아래 두 단이 서로 구별되지 않는다.
+        static let categorySeries: [Color] = [
+            Ink.brand,
+            .adaptive(light: 0x6BA6F8, dark: 0x3F76BF),
+            .adaptive(light: 0xA5CAFB, dark: 0x2E5586)
+        ]
+
+        /// 사다리 밖 나머지 ("그 외 N개"). 이름이 없으니 색도 뜻을 갖지 않는다.
+        static let categoryRest = Line.default
     }
 
     // MARK: - 색 쌍 (배지)
@@ -370,6 +390,15 @@ enum DS {
         static let thumbnail: CGFloat = 90
         /// 화면 가득 보는 사진(영수증)의 최대 변. 어느 아이폰 폭보다 넉넉하다.
         static let fullPhoto: CGFloat = 512
+
+        /// 분석 화면의 큰 그래프 높이.
+        ///
+        /// 요약 밴드의 작은 그래프(`SpendingSparkline` 의 `inline`)는 두 선이
+        /// 벌어졌다는 것만 말한다. 이 크기라야 **언제 벌어졌는지**가 읽힌다.
+        static let chart: CGFloat = 200
+
+        /// 카테고리 비중 막대 두께. 눈금도 축도 없는 띠 하나라 얇게 둔다.
+        static let barTrack: CGFloat = 12
     }
 
     // MARK: - 시트

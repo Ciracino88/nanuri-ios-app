@@ -139,6 +139,25 @@ struct ReportLineItem {
     let category: String?
     let memo: String?
     let sourceDescription: String?
+
+    /// 묶을 때 쓰는 카테고리 이름. 비어 있으면 **"미분류"** 다.
+    ///
+    /// 보고서(`FinanceReportExporter`)와 분석 화면(`SpendingDetailView`)이 같은
+    /// 이름으로 묶어야 두 곳의 합계가 어긋나지 않는다. 빈 카테고리를 버리지 않고
+    /// 한 덩어리로 모으는 것도 그래서다 — 분류가 덜 된 달일수록 그 덩어리가 커야
+    /// "아직 안 나눴다" 는 게 보인다.
+    var categoryLabel: String {
+        if let c = category?.trimmingCharacters(in: .whitespaces), !c.isEmpty { return c }
+        return "미분류"
+    }
+}
+
+/// 카테고리 하나에 묶인 합계. 분석 화면의 막대와 목록이 같이 쓴다.
+struct CategoryTotal: Identifiable {
+    let name: String
+    let amount: Int
+
+    var id: String { name }
 }
 
 /// 앱에 보관 중인 원본 거래내역서 PDF

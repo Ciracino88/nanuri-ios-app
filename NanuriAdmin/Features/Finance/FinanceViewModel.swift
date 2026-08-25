@@ -163,6 +163,31 @@ class FinanceViewModel: ObservableObject {
         return items.reduce(0) { $0 + abs($1.amount) }
     }
 
+    /// 지난달과 견준 한 문장·색. 요약 밴드와 분석 화면이 이걸 같이 쓴다.
+    var comparison: SpendingComparison {
+        SpendingComparison(previousWithdrawal: previousMonthWithdrawal,
+                           totalWithdrawal: totalWithdrawal,
+                           totalDeposit: totalDeposit)
+    }
+
+    /// 이 달 출금(또는 입금)을 카테고리로 묶어 **큰 것부터** 돌려준다.
+    ///
+    /// `reportItems` 로 센다 — 한 거래를 여러 항목으로 쪼갠 분할 거래는 조각마다
+    /// 카테고리가 다르므로, **거래 단위로 세면 통째로 첫 조각의 카테고리에 들어간다.**
+    /// 묶는 이름은 `ReportLineItem.categoryLabel` 이 정해서 보고서와 같은 규칙을 탄다.
+    ///
+    /// 금액이 같으면 이름순이다. 순서가 매번 흔들리면 같은 달을 다시 열었을 때
+    /// 막대의 색이 자리를 바꾼다.
+    func categoryTotals(deposit: Bool) -> [CategoryTotal] {
+        var sums: [String: Int] = [:]
+        for item in reportItems where item.isDeposit == deposit {
+            sums[item.categoryLabel, default: 0] += item.magnitude
+        }
+        return sums
+            .map { CategoryTotal(name: $0.key, amount: $0.value) }
+            .sorted { $0.amount == $1.amount ? $0.name < $1.name : $0.amount > $1.amount }
+    }
+
     /// 이 달에 있는 날들 (1일 → 말일). 날짜 셀렉터가 훑는 축이다.
     ///
     /// 거래가 없는 날도 뺀 자리를 남긴다 — 건너뛰면 날짜 간격이 들쭉날쭉해져서
