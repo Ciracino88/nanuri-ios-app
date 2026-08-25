@@ -9,34 +9,50 @@ struct FinanceView: View {
     @State private var isExporting = false
     @State private var exportMessage = "내보내는 중…"
     @State private var reportPreview: ReportPreview?
-    /// 헤더 가운데를 눌러 여는 장부 전환 시트.
-    @State private var showSwitcher = false
-    /// 전환 시트가 닫힌 **뒤에** 할 일. 시트 위에 시트를 겹치지 않으려고 한 박자 미룬다.
-    @State private var afterSwitcher: (() -> Void)?
-    @State private var showNewLedger = false
     /// 날짜 셀렉터에서 고른 날. `nil` 이면 이 달 전체다.
     @State private var selectedDay: Date?
     /// 요약 밴드의 "자세히 보기" 가 여는 분석 화면.
     @State private var showSpendingDetail = false
 
+    /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
+    /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
+    ///
+    /// 그래서 갈래가 셋이다 — **열어 둔 장부 / 정말 장부가 없음 / 아직 받는 중.**
+    /// 뒤의 둘을 안 가르면 받아 오는 사이에 "장부가 없어요" 가 깜빡 스친다.
     var body: some View {
-        if let ledger = viewModel.currentLedger {
-            content(ledger: ledger)
-        } else {
-            FinanceLedgerGateView(viewModel: viewModel)
+        Group {
+            if viewModel.currentLedger != nil {
+                content()
+            } else if viewModel.ledgersLoaded {
+                FinanceLedgerGateView(viewModel: viewModel)
+            } else {
+                loadingView
+            }
         }
+        .task { await viewModel.start() }
     }
 
-    private func content(ledger: Ledger) -> some View {
+    private var loadingView: some View {
+        VStack(spacing: 0) {
+            AdminHeaderView(title: "재정")
+            Spacer()
+            ProgressView()
+            Spacer()
+        }
+        .screenBackground(DS.Surface.card)
+    }
+
+    private func content() -> some View {
         VStack(spacing: 0) {
             // 가운데를 **달 넘김**에 내줬다. 탭 이름("재정")은 탭바가 이미 말하고
             // 있고, 이 화면에서 가장 자주 건드리는 건 달이다.
             //
-            // 장부를 고르는 길은 **왼쪽 슬롯**이 갖는다. 요약 밴드에 잠깐 뒀다가
-            // 그 자리가 "자세히 보기" 로 넘어가면서 헤더로 돌아왔다.
+            // 왼쪽 슬롯은 비어 있다. 장부를 고르는 버튼이 있었는데 통장이 하나라
+            // 고를 것이 없어졌다. 화면이 어느 장부인지도 말하지 않는다 — 하나뿐이라
+            // 말해 봐야 구별해 주는 게 없다.
             AdminHeaderView(
                 center: { monthStepper },
-                leading: { ledgerButton(ledger) },
+                leading: { EmptyView() },
                 trailing: { actionMenu() }
             )
 
@@ -88,36 +104,6 @@ struct FinanceView: View {
             }
             .sheet(isPresented: $showSpendingDetail) {
                 SpendingDetailView(viewModel: viewModel)
-            }
-            // 전환 시트가 완전히 닫힌 뒤에 다음 일을 한다. 같은 순간에 둘을
-            // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다 (`BillListView` 와 같다).
-            .sheet(isPresented: $showSwitcher, onDismiss: {
-                afterSwitcher?()
-                afterSwitcher = nil
-            }) {
-                LedgerSwitcherView(
-                    viewModel: viewModel,
-                    onSelect: { picked in
-                        // 보고 있던 장부를 다시 고르면 아무 일도 안 한다.
-                        // 다시 받아 오면 달 위치까지 처음으로 되돌아간다.
-                        if picked.id != viewModel.currentLedger?.id {
-                            afterSwitcher = { Task { await viewModel.selectLedger(picked) } }
-                        }
-                        showSwitcher = false
-                    },
-                    onCreate: {
-                        afterSwitcher = { showNewLedger = true }
-                        showSwitcher = false
-                    },
-                    onManage: {
-                        // 장부를 비우면 게이트 화면이 나온다 — 거기서 만들고 지운다.
-                        afterSwitcher = { viewModel.currentLedger = nil }
-                        showSwitcher = false
-                    }
-                )
-            }
-            .sheet(isPresented: $showNewLedger) {
-                NewLedgerView(viewModel: viewModel)
             }
         }
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
@@ -244,8 +230,8 @@ struct FinanceView: View {
     /// 문장은 **결과**를 말하고 그래프는 **언제 벌어졌는지**를 말한다. 둘이 같은
     /// 자리에 있어야 "왜 그런지" 까지 한눈에 읽힌다.
     ///
-    /// 장부를 고르는 자리가 잠깐 여기 있었는데, 그 자리를 "자세히 보기" 에 내주고
-    /// 헤더 왼쪽으로 돌아갔다 (`ledgerButton`).
+    /// 장부를 고르는 자리가 잠깐 여기 있었는데, 그 자리를 "자세히 보기" 에 내줬다.
+    /// (장부 고르기는 그 뒤 헤더로 갔다가, 통장이 하나라 아예 없어졌다.)
     private func insightRow() -> some View {
         HStack(alignment: .center, spacing: DS.Spacing.medium) {
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
@@ -290,14 +276,6 @@ struct FinanceView: View {
         }
         .padding(.horizontal, DS.Spacing.s4)
         .padding(.vertical, DS.Spacing.s4)
-    }
-
-    /// 헤더 왼쪽의 장부 전환. 아이콘 하나라 이름은 VoiceOver 가 읽는다.
-    private func ledgerButton(_ ledger: Ledger) -> some View {
-        HeaderIconButton(systemName: "calendar",
-                         label: "장부 바꾸기, 지금 \(ledger.name)") {
-            showSwitcher = true
-        }
     }
 
     /// 날짜 셀렉터.
