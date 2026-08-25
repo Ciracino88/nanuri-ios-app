@@ -63,3 +63,7 @@ fastlane/test_output
 
 # Cloudflare Worker 로컬 빌드 캐시
 worker/.wrangler/
+
+# 에이전트 도구 설정 (프로젝트 지식이 아니라 도구 상태다)
+.agents/
+skills-lock.json
