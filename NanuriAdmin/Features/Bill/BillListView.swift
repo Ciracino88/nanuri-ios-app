@@ -201,8 +201,9 @@ struct BillListView: View {
 
     /// 토스를 열고, 돌아왔을 때 물어볼 것을 걸어 둔다. 승인은 그 시트가 한다.
     private func send(_ bills: [Bill], to payee: Payee) {
-        pendingTransfer = TossTransfer(bills: bills, payee: payee)
-        viewModel.openToss(bills: bills, payee: payee)
+        let transfer = TossTransfer(bills: bills, payee: payee)
+        pendingTransfer = transfer
+        TossDeepLink.open(transfer)
     }
 
     /// 목록 아래에 고정되는 선택 요약. 내용이 여기서 잘리므로 위에 선을 긋는다

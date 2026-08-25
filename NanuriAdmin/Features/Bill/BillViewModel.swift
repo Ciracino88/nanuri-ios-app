@@ -1,20 +1,26 @@
-import SwiftUI
+import Foundation
 import Combine
 import Supabase
+import OSLog
 
+/// 청구서 목록의 상태를 갖는다. 조회 · 상태 변경 · 삭제 · 실시간 구독까지가 이 객체의 일이다.
+///
+/// 토스 송금은 여기 없다. URL 을 만드는 건 상태가 필요 없는 순수 로직이라
+/// `TossDeepLink` 로 나가 있다.
 @MainActor
 class BillViewModel: ObservableObject {
     @Published var bills: [Bill] = []
     @Published var isLoading = false
     @Published var error: String?
 
-    /// 실시간 구독을 돌리는 태스크와 그 채널. 화면이 아니라 이 객체가 들고 있는다.
+    /// 실시간 구독을 돌리는 태스크. **화면이 아니라 이 객체가 들고 있는다.**
     private var realtimeTask: Task<Void, Never>?
-    private var realtimeChannel: RealtimeChannelV2?
 
     deinit {
         realtimeTask?.cancel()
     }
+
+    // MARK: - 실시간 구독
 
     /// 실시간 구독. **뷰가 아니라 뷰모델이 갖는다.**
     ///
@@ -28,11 +34,20 @@ class BillViewModel: ObservableObject {
     ///
     /// 그래서 구독은 뷰 생명주기와 떼어 놓고 **앱을 켠 뒤 한 번만** 만든다.
     /// 두 번째부터는 아무 일도 안 한다.
+    ///
+    /// ## 끊는 함수는 일부러 없다
+    ///
+    /// 이 뷰모델은 청구서 탭이 사는 동안 = 앱이 켜져 있는 동안 산다. 끊을 시점이
+    /// 없는데 `stop()` 을 열어 두면 **"언제 부르지?"** 가 생기고, 잘못된 시점에
+    /// 불리면 위의 버그로 그대로 돌아간다.
+    ///
+    /// 정말 끊어야 할 날이 오면 태스크만 취소해서는 안 된다. `supabase.removeChannel`
+    /// 로 **채널까지 지워야** 한다 — 안 그러면 SDK 캐시에 구독된 채널이 남아서
+    /// 다음 구독이 또 조용히 죽는다.
     func subscribeToRealtime() {
         guard realtimeTask == nil else { return }
 
         let channel = supabase.channel("bills-realtime")
-        realtimeChannel = channel
 
         // 콜백은 subscribe() 보다 **먼저** 붙어야 한다. 순서가 바뀌면 조인 payload 에
         // postgres_changes 가 비어서 아무 이벤트도 안 온다.
@@ -43,6 +58,9 @@ class BillViewModel: ObservableObject {
         realtimeTask = Task { [weak self] in
             await channel.subscribe()
 
+            // 세 스트림 중 무엇이 오든 하는 일은 같다 — 목록을 다시 받는다.
+            // 이벤트의 payload 를 직접 반영하지 않는 이유는, 그러면 정렬·필터·
+            // RLS 결과를 클라이언트가 다시 계산해야 하고 그게 서버와 어긋날 수 있어서다.
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
                     for await _ in inserts { await self?.fetchBills(showLoading: false) }
@@ -57,17 +75,7 @@ class BillViewModel: ObservableObject {
         }
     }
 
-    /// 구독을 끊는다. 화면이 사라질 때가 아니라 **뷰모델이 없어질 때** 부른다.
-    func stopRealtime() {
-        realtimeTask?.cancel()
-        realtimeTask = nil
-
-        guard let channel = realtimeChannel else { return }
-        realtimeChannel = nil
-        // 채널은 SDK 가 토픽으로 캐시해 둔다. 지우지 않으면 다음에 같은 토픽으로
-        // 새 구독을 만들 때 죽은 채널이 그대로 나온다.
-        Task { await supabase.removeChannel(channel) }
-    }
+    // MARK: - 조회 / 변경
 
     func fetchBills(showLoading: Bool = true) async {
         if showLoading { isLoading = true }
@@ -79,8 +87,7 @@ class BillViewModel: ObservableObject {
                 .execute()
                 .value
         } catch {
-            self.error = error.localizedDescription
-            print("청구서 조회 실패: \(error)")
+            report(error, "청구서 조회")
         }
         isLoading = false
     }
@@ -90,7 +97,9 @@ class BillViewModel: ObservableObject {
     }
 
     /// 묶어서 송금한 여러 건을 한 번에 처리한다.
-    /// 한 요청으로 보내야 중간에 끊겨도 일부만 완료로 남는 일이 없다.
+    ///
+    /// **한 요청으로 보내야 한다.** 건별로 나눠 보내면 중간에 끊길 때 일부만 완료로
+    /// 남고, 나머지가 다시 청구된 것처럼 보인다.
     func updateStatus(billIds: [UUID], status: String) async {
         guard !billIds.isEmpty else { return }
         do {
@@ -101,19 +110,22 @@ class BillViewModel: ObservableObject {
                 .execute()
             await fetchBills(showLoading: false)
         } catch {
-            self.error = error.localizedDescription
-            print("상태 변경 실패: \(error)")
+            report(error, "상태 변경")
         }
     }
 
+    /// 청구서와 영수증 이미지를 같이 지운다.
+    ///
+    /// 이미지를 **먼저** 지운다. 순서를 바꾸면 DB 행이 사라진 뒤 이미지 삭제가
+    /// 실패했을 때 R2 에 주인 없는 파일이 남고, 그 URL 을 아는 사람이 없어서
+    /// 다시 지울 방법이 없다. 반대 순서면 최악이 "이미지는 지워졌는데 행이 남는"
+    /// 것이고, 그건 눈에 보여서 다시 지울 수 있다.
     func deleteBill(billId: UUID, receiptUrl: String?) async {
         do {
-            // 1. Cloudflare R2 이미지 삭제 (공용 서비스 재사용)
             if let receiptUrl, !receiptUrl.isEmpty {
                 await ReceiptStorage.delete(receiptUrl: receiptUrl)
             }
 
-            // 2. Supabase DB 삭제
             try await supabase
                 .from("bills")
                 .delete()
@@ -122,35 +134,19 @@ class BillViewModel: ObservableObject {
 
             await fetchBills(showLoading: false)
         } catch {
-            self.error = error.localizedDescription
-            print("청구서 삭제 실패: \(error)")
+            report(error, "청구서 삭제")
         }
     }
 
-    /// 계좌부에서 찾은 수취인으로 토스 송금 화면을 연다.
-    /// 이름이 계좌부에 없으면 호출되지 않는다 (UI에서 먼저 막는다).
+    // MARK: -
+
+    /// 화면에 띄울 문구와 로그를 한자리에서 처리한다.
     ///
-    /// 여러 건을 넘기면 **금액을 합쳐 한 번만** 연다. 토스 딥링크는 수취인 한 명에
-    /// 금액 하나라서, 사람이 여럿이면 묶을 수 없다 (같은 사람만 묶는 이유다).
-    func openToss(bills: [Bill], payee: Payee) {
-        let amount = bills.reduce(0) { $0 + $1.amount }
-        let accountNumber = payee.accountNumber.replacingOccurrences(of: "-", with: "")
-        let bankName = payee.bankName
-
-        guard amount > 0, !accountNumber.isEmpty, !bankName.isEmpty else {
-            print("계좌 정보 없음")
-            return
-        }
-
-        let urlString = "supertoss://send?bank=\(bankName)&accountNo=\(accountNumber)&amount=\(amount)"
-        print("토스 URL: \(urlString)")
-        guard let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: encoded) else {
-            print("URL 생성 실패")
-            return
-        }
-        UIApplication.shared.open(url) { success in
-            print("토스 앱 열기 결과: \(success)")
-        }
+    /// 무엇을 하다 실패했는지(`what`)는 `.public` 으로 남기고, 서버가 준 메시지는
+    /// 청구자 이름 같은 게 섞일 수 있어 기본값(가려짐) 그대로 둔다.
+    /// Xcode 로 붙어 있을 때는 가려진 값도 그대로 보인다.
+    private func report(_ error: Error, _ what: String) {
+        self.error = error.localizedDescription
+        Log.bill.error("\(what, privacy: .public) 실패: \(error.localizedDescription)")
     }
 }

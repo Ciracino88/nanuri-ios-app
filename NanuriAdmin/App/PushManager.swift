@@ -1,6 +1,7 @@
 import SwiftUI
 import UserNotifications
 import Supabase
+import OSLog
 
 /// APNs 디바이스 토큰 등록.
 ///
@@ -27,12 +28,12 @@ final class PushManager {
             let granted = try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
             guard granted else {
-                print("알림 권한 거부됨")
+                Log.push.notice("알림 권한 거부됨")
                 return
             }
             UIApplication.shared.registerForRemoteNotifications()
         } catch {
-            print("알림 권한 요청 실패: \(error)")
+            Log.push.error("알림 권한 요청 실패: \(error.localizedDescription)")
         }
     }
 
@@ -42,7 +43,7 @@ final class PushManager {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
 
         guard let user = try? await supabase.auth.user() else {
-            print("로그인 상태가 아니라 디바이스 토큰을 저장하지 못했다")
+            Log.push.notice("로그인 상태가 아니라 디바이스 토큰을 저장하지 못했다")
             return
         }
 
@@ -55,7 +56,7 @@ final class PushManager {
                 )
                 .execute()
         } catch {
-            print("디바이스 토큰 저장 실패: \(error)")
+            Log.push.error("디바이스 토큰 저장 실패: \(error.localizedDescription)")
         }
     }
 
@@ -106,7 +107,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         // Push Notifications capability 가 없으면 여기로 떨어진다.
-        print("APNs 등록 실패: \(error)")
+        Log.push.error("APNs 등록 실패: \(error.localizedDescription)")
     }
 
     /// 앱을 보고 있는 중에도 알림을 띄운다. 관리자 1인 전용이라 놓치면 곤란하다.
