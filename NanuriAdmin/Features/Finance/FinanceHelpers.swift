@@ -135,18 +135,14 @@ struct FinanceLedgerGateView: View {
     /// 원문 list-row 를 그대로 따른다 — 44pt 아바타 + 제목/부제 스택 + 우측 화살표.
     private func row(_ ledger: Ledger) -> some View {
         HStack(spacing: DS.Spacing.medium) {
-            Image(systemName: ledger.mode.icon)
+            Image(systemName: "calendar")
                 .font(DS.Icon.font(DS.Icon.l))
                 .foregroundColor(DS.Ink.brand)
                 .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
                 .background(DS.Surface.brandWeak)
                 .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
-            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                Text(ledger.name)
-                    .rowTitle()
-                Text(ledger.mode.title)
-                    .rowSubtext()
-            }
+            Text(ledger.name)
+                .rowTitle()
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(DS.Icon.font(DS.Icon.m))
@@ -157,12 +153,12 @@ struct FinanceLedgerGateView: View {
     }
 }
 
-/// 새 장부 생성 (이름 + 유형).
+/// 새 장부 생성. **이름만 받는다** — 장부 유형(월별/행사)을 고르던 자리가 있었는데
+/// 행사 결산을 안 쓰기로 하면서 고를 것이 하나만 남았다.
 struct NewLedgerView: View {
     @ObservedObject var viewModel: FinanceViewModel
     @Environment(\.dismiss) var dismiss
     @State private var name = ""
-    @State private var mode: FinanceReportMode = .monthly
     @State private var creating = false
 
     var body: some View {
@@ -170,16 +166,6 @@ struct NewLedgerView: View {
             Form {
                 Section("장부 이름") {
                     TextField("예: 나누리 상시, 2024 체육대회", text: $name)
-                }
-                Section("유형") {
-                    Picker("유형", selection: $mode) {
-                        Text("월별 회계").tag(FinanceReportMode.monthly)
-                        Text("행사 결산").tag(FinanceReportMode.event)
-                    }
-                    .pickerStyle(.segmented)
-                    Text(mode.subtitle)
-                        .typeStyle(DS.Typo.body3)
-                        .foregroundColor(DS.Ink.secondary)
                 }
             }
             .navigationTitle("새 장부")
@@ -192,7 +178,7 @@ struct NewLedgerView: View {
                     Button("만들기") {
                         Task {
                             creating = true
-                            if let ledger = await viewModel.createLedger(name: name, mode: mode) {
+                            if let ledger = await viewModel.createLedger(name: name) {
                                 dismiss()
                                 await viewModel.selectLedger(ledger)
                             }

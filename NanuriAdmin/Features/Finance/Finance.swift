@@ -1,42 +1,22 @@
 import Foundation
 
-/// 재정 보고서 종류. 탭 진입 시 작성자가 먼저 선택한다.
-enum FinanceReportMode: String, CaseIterable, Identifiable {
-    case monthly   // 월별 회계 보고서 (전월이월 → 누적 잔액)
-    case event     // 행사 결산 내역 (한 행사의 수입·지출 결산)
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .monthly: return "월별 회계 보고서"
-        case .event: return "행사 결산 내역"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .monthly: return "전월이월부터 이어지는 월 단위 장부"
-        case .event: return "한 행사의 수입·지출 결산"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .monthly: return "calendar"
-        case .event: return "flag.checkered"
-        }
-    }
-}
-
-/// 장부(통장). 상시 계좌는 월별, 행사 전용 통장은 행사 유형.
+/// 장부(통장).
+///
+/// 예전에는 `type` 이 `monthly` | `event` 두 가지였고 화면 골격이 그걸로 갈렸다
+/// (행사 결산은 달 개념이 없어서 날짜 축도 지난달 비교도 안 그렸다).
+/// **행사 결산을 쓰지 않기로 해서 `event` 를 걷어냈다.** 이제 장부는 전부 월별이다.
+///
+/// DB 의 `check (type in ('monthly','event'))` 는 그대로 두었다 — 제약을 좁히는
+/// 마이그레이션은 얻는 게 없고, 혹시 남아 있는 옛 행이 있으면 그것만 깨진다.
 struct Ledger: Identifiable, Codable {
     var id: UUID
     let name: String
-    let type: String            // "monthly" | "event"
+    /// 늘 `"monthly"` 다. DB 컬럼이 not null 이라 들고만 있는다.
+    let type: String
     let createdAt: Date?
 
-    var mode: FinanceReportMode { type == FinanceReportMode.event.rawValue ? .event : .monthly }
+    /// 앱이 만드는 장부의 `type`.
+    static let monthlyType = "monthly"
 
     enum CodingKeys: String, CodingKey {
         case id, name, type
@@ -46,7 +26,7 @@ struct Ledger: Identifiable, Codable {
 
 struct LedgerInsert: Encodable {
     let name: String
-    let type: String
+    let type = Ledger.monthlyType
 }
 
 struct BankTransaction: Identifiable, Codable {

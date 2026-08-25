@@ -25,7 +25,6 @@ import SwiftUI
 /// 여기서 달이 바뀌면 뒤에 남겨 둔 목록과 어긋난다.
 struct SpendingDetailView: View {
     @ObservedObject var viewModel: FinanceViewModel
-    let ledger: Ledger
 
     @Environment(\.dismiss) private var dismiss
     /// 0 이 출금, 1 이 입금. **출금이 먼저다** — 견주는 문장이 지출 이야기다.
@@ -85,9 +84,9 @@ struct SpendingDetailView: View {
         .padding(.top, DS.Spacing.medium)
     }
 
-    /// 월별 장부는 달 이름, 행사 장부는 행사 이름. 행사 통장에는 "이 달" 이 없다.
+    /// 어느 달을 보고 있는지. 장부가 전부 월별이라 늘 달 이름이다.
     private var periodLabel: String {
-        ledger.mode == .monthly ? viewModel.currentMonth.koreanYearMonthString : ledger.name
+        viewModel.currentMonth.koreanYearMonthString
     }
 
     // MARK: - 그래프
