@@ -15,10 +15,12 @@ import Combine
 /// 한쪽에 아이콘은 **하나까지**다. 둘 이상이면 `Menu` 하나로 묶는다 (재정 탭의
 /// `ellipsis.circle`). 아이콘이 늘어나면 가운데 이름이 밀린다.
 ///
-/// 가운데를 누를 일이 있는 화면(재정 탭의 장부 전환)은 `titleAction` 을 준다.
+/// 가운데를 눌러 무언가 **펼쳐지는** 화면은 `titleAction` 을 준다.
 /// 그러면 이름 옆에 `chevron.down` 이 붙어 눌리는 자리라는 게 보인다.
-/// **▾ 를 붙였으면 눌렀을 때 고를 것이 펼쳐져야 한다** — 뒤로 가는 동작을 걸면
-/// 화살표가 거짓말을 한다 (`LedgerSwitcherView`, DESIGN.md 1번).
+/// **▾ 를 붙였으면 눌렀을 때 고를 것이 펼쳐져야 한다** — 뒤로 가거나 새로고침하는
+/// 동작을 걸면 화살표가 거짓말을 한다 (DESIGN.md 1번).
+/// (지금은 `titleAction` 을 쓰는 화면이 없다. 재정 탭의 장부 전환이 마지막이었는데
+/// 통장이 하나라 고를 것이 없어졌다.)
 struct AdminHeaderView<Leading: View, Trailing: View>: View {
     let title: String
     /// 가운데 이름을 눌렀을 때. 주면 `chevron.down` 이 함께 그려진다.

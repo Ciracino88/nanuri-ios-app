@@ -26,6 +26,9 @@ class FinanceViewModel: ObservableObject {
     @Published var savedStatements: [StatementFile] = []
     @Published var splitsByTransaction: [UUID: [TransactionSplit]] = [:]
     @Published var ledgers: [Ledger] = []
+    /// 장부 목록을 한 번이라도 받아 봤는지. **"아직 모른다" 와 "정말 없다" 를 가른다.**
+    /// 이걸 안 두면 받아 오는 사이에 "장부가 없어요" 화면이 깜빡 스친다.
+    @Published private(set) var ledgersLoaded = false
     @Published var currentLedger: Ledger?
 
     /// 지금 보고 있는 달의 거래.
@@ -275,6 +278,24 @@ class FinanceViewModel: ObservableObject {
 
     // MARK: - 장부
 
+    /// 재정 탭이 열릴 때 부른다. 장부를 받아 **하나를 바로 연다.**
+    ///
+    /// 장부를 고르는 화면이 따로 없다. 통장이 하나라서 고를 것이 없고, 하나뿐인 걸
+    /// 매번 손으로 고르게 하는 건 아무 뜻이 없다. 그래서 목록을 받는 즉시 연다.
+    ///
+    /// 장부가 여럿이면 **가장 최근 것**을 연다 (`fetchLedgers` 가 `created_at desc`).
+    /// 지금은 그럴 일이 없지만, 그때 조용히 아무것도 안 여는 것보다는 낫다.
+    ///
+    /// 이미 열어 둔 장부가 있으면 아무 일도 안 한다 — 탭을 오갈 때마다 다시 받으면
+    /// 보고 있던 달이 처음으로 되돌아간다 (`selectLedger` 가 달 위치를 다시 잡는다).
+    func start() async {
+        guard currentLedger == nil else { return }
+        await fetchLedgers()
+        ledgersLoaded = true
+        guard let first = ledgers.first else { return }
+        await selectLedger(first)
+    }
+
     func fetchLedgers() async {
         do {
             ledgers = try await supabase
@@ -303,16 +324,6 @@ class FinanceViewModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
             return nil
-        }
-    }
-
-    func deleteLedger(_ ledger: Ledger) async {
-        do {
-            try await supabase.from("finance_ledgers").delete().eq("id", value: ledger.id).execute()
-            ledgers.removeAll { $0.id == ledger.id }
-            if currentLedger?.id == ledger.id { currentLedger = nil }
-        } catch {
-            self.error = error.localizedDescription
         }
     }
 
