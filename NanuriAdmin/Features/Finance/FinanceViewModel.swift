@@ -3,6 +3,7 @@ import Combine
 import PDFKit
 import UIKit
 import Supabase
+import OSLog
 
 @MainActor
 class FinanceViewModel: ObservableObject {
@@ -478,7 +479,7 @@ class FinanceViewModel: ObservableObject {
             await fetchTransactions()
         } catch {
             self.error = error.localizedDescription
-            print("저장 실패: \(error)")
+            Log.finance.error("거래 저장 실패: \(error.localizedDescription)")
             isLoading = false
         }
     }
@@ -582,7 +583,7 @@ class FinanceViewModel: ObservableObject {
             try fm.copyItem(at: url, to: dest)
             return dest
         } catch {
-            print("원본 PDF 보관 실패: \(error)")
+            Log.finance.error("원본 PDF 보관 실패: \(error.localizedDescription)")
             return nil
         }
     }

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import Supabase
+import OSLog
 
 /// 계좌부. 인원이 많아야 수십 명이라 전부 메모리에 올려두고 이름으로 찾는다.
 @MainActor
@@ -35,7 +36,7 @@ class PayeeViewModel: ObservableObject {
             )
         } catch {
             self.error = error.localizedDescription
-            print("계좌부 조회 실패: \(error)")
+            Log.payee.error("계좌부 조회 실패: \(error.localizedDescription)")
         }
         isLoading = false
     }
@@ -59,7 +60,7 @@ class PayeeViewModel: ObservableObject {
         } catch {
             // 유니크 인덱스 위반이면 이미 같은 이름이 있다는 뜻이다.
             self.error = "\(payee.name) 은(는) 이미 등록된 이름이거나, 저장에 실패했어요."
-            print("계좌부 저장 실패: \(error)")
+            Log.payee.error("계좌부 저장 실패: \(error.localizedDescription)")
             return false
         }
     }
@@ -74,7 +75,7 @@ class PayeeViewModel: ObservableObject {
             await fetchPayees(showLoading: false)
         } catch {
             self.error = error.localizedDescription
-            print("계좌부 삭제 실패: \(error)")
+            Log.payee.error("계좌부 삭제 실패: \(error.localizedDescription)")
         }
     }
 }
