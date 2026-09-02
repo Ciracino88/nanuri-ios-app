@@ -151,24 +151,28 @@ enum FinanceReportExporter {
         }
 
         // --- 상세 명세 (월 / 일 / 적요 / 수입 / 지출 / 잔액) ---
-        // 같은 날짜 + 같은 카테고리 + 같은 입출금 방향은 한 줄로 합산한다 (적요 = 카테고리).
-        // 카테고리가 없는 항목은 합치지 않고 거래 내용으로 개별 표시한다.
+        // 적요 칸의 이름과 묶는 규칙은 둘 다 `ReportLineItem` 이 정한다
+        // (`reportLabel` · `mergesInReport`) — 분석 화면과 규칙이 갈리지 않게.
+        //
+        // 같은 날짜 + 같은 방향 + 같은 이름은 한 줄로 합산한다. 다만 **사람이 이름을
+        // 준 줄만** 합친다. 분할 조각의 적요가 서로 다르면 안 합쳐지므로 예전보다
+        // 줄이 늘 수 있는데, 그게 맞다 — 묶어 보낸 출금의 다섯 조각은 서로 다른
+        // 사람에게 간 돈이라 한 줄로 뭉치면 누구에게 갔는지가 사라진다.
         var rows: [(label: String, isDeposit: Bool, amount: Int, day: Date)] = []
         var indexByKey: [String: Int] = [:]
         for it in sorted {
             let day = cal.startOfDay(for: it.datetime)
-            let category = it.category?.trimmingCharacters(in: .whitespaces) ?? ""
-            if category.isEmpty {
-                let desc = it.sourceDescription?.trimmingCharacters(in: .whitespaces) ?? ""
-                rows.append((desc.isEmpty ? "미분류" : desc, it.isDeposit, it.magnitude, day))
+            let label = it.reportLabel
+            guard it.mergesInReport else {
+                rows.append((label, it.isDeposit, it.magnitude, day))
+                continue
+            }
+            let key = "\(day.timeIntervalSince1970)|\(label)|\(it.isDeposit)"
+            if let idx = indexByKey[key] {
+                rows[idx].amount += it.magnitude
             } else {
-                let key = "\(day.timeIntervalSince1970)|\(category)|\(it.isDeposit)"
-                if let idx = indexByKey[key] {
-                    rows[idx].amount += it.magnitude
-                } else {
-                    indexByKey[key] = rows.count
-                    rows.append((category, it.isDeposit, it.magnitude, day))
-                }
+                indexByKey[key] = rows.count
+                rows.append((label, it.isDeposit, it.magnitude, day))
             }
         }
 

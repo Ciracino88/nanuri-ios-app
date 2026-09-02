@@ -118,6 +118,7 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 | **APNs 환경** | 워커의 `device_tokens.environment` ↔ 앱의 `#if DEBUG` |
 | **통장 이름** | DB `finance_accounts.name` (`'농협'`·`'모임'`) ↔ 앱 `account(named:)` 의 문자열 |
 | **중복 방지 제약** | DB `unique (ledger_id, datetime, amount)` ↔ 앱 `saveTransactions` 의 `upsert`/`insert` |
+| **분할 적요 칸 이름** | DB `finance_splits.description` ↔ 앱 `TransactionSplit`·`TransactionSplitInsert` 의 `CodingKeys` |
 
 맨 앞의 둘은 **한 세트**다. PG 의 `\s` 는 U+00A0 을 공백으로 안 보기 때문에
 저장 전에 미리 통일해야 인덱스와 앱의 판단이 일치한다.
@@ -127,6 +128,10 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 
 APNs 환경이 어긋나면 `BadDeviceToken` 이 나고 **화면에는 아무것도 안 뜬다.**
 Release 구성을 development 프로파일로 기기에 올릴 때 그렇게 된다.
+
+분할 적요는 2026-09-03 에 `memo` 에서 이름을 바꾼 칸이다. `CodingKeys` 를 같이 안
+고치면 **분할 저장이 통째로 실패한다** — 읽기는 조용히 `nil` 이 되고 쓰기는 없는
+열에 넣으려다 죽는다.
 
 ---
 
