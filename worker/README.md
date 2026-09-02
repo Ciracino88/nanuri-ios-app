@@ -8,8 +8,8 @@ POST /bill/receipt         영수증만 먼저 올린다 → { url, token }
 POST /bill/receipt/discard 접수까지 가지 않은 영수증을 지운다
 POST /bill/submit          검증 → bills INSERT → APNs 푸시
 
-POST /receipt/upload       앱이 영수증을 올린다 → { url }
-POST /receipt/delete       앱이 영수증을 지운다
+POST /receipt/upload       앱이 영수증을 올린다 → { url }   [관리자 인증]
+POST /receipt/delete       앱이 영수증을 지운다              [관리자 인증]
 ```
 
 `/bill/*` 은 공개 폼이 부르고, `/receipt/*` 은 앱이 부른다.
@@ -128,10 +128,12 @@ curl -s https://<배포주소>/ | head -20
   같은 규칙을 쓴다. 한쪽만 고치면 매칭이 어긋난다.
 - 계좌부에 없는 이름으로 청구가 들어오면 앱에서 "계좌 미등록"으로 표시되고,
   그 자리에서 계좌를 등록할 수 있다.
-- **`/receipt/*` 에는 인증이 없다.** 옛 `nanuri-bill` 워커가 그랬고 그대로 옮겨 온
-  것이라, 지금은 영수증 URL 을 아는 사람이 그 영수증을 지울 수 있다. 공개 폼이 쓰는
-  `/bill/*` 는 HMAC 서명으로 막혀 있지만 이쪽은 앱 전용이라 그게 없다.
-  **관리자 인증을 붙일 때 여기도 같이 막을 것.**
+- **`/receipt/*` 는 관리자만 부를 수 있다.** 앱이 Supabase access token 을
+  `Authorization: Bearer` 로 넘기고, `requireAdmin()` 이 토큰 주인을 확인한 뒤
+  `admins` 화이트리스트를 본다. 로그인만으로는 안 된다 — Google provider 는 아무
+  구글 계정이나 로그인시키므로 RLS 의 `is_admin()` 과 같은 표를 봐야 한다.
+  (공개 폼이 쓰는 `/bill/*` 는 다른 방식이다 — 사람을 알 수 없으므로 URL 에 HMAC
+  서명을 찍어 "이 워커가 준 URL 이 맞다" 만 확인한다.)
 - **`R2_PUBLIC_URL` 을 바꾸면 반쪽만 깨진다.** 삭제할 때 이 앞부분을 떼어 키를 얻기
   때문에, 새로 올리는 건 되는데 **옛 영수증만 안 지워진다.** 업로드가 되니까 맞게
   붙인 줄 알기 쉽다.

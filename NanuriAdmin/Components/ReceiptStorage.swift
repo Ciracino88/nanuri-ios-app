@@ -1,4 +1,5 @@
 import Foundation
+import Supabase
 
 /// Cloudflare Worker(R2) 기반 영수증 이미지 저장소.
 /// 청구서 영수증과 재정 영수증이 같은 버킷을 쓰고, `folder` 로만 갈린다.
@@ -14,16 +15,36 @@ enum ReceiptStorage {
     static let workerBaseUrl = "https://nanuri-form.nanuri.workers.dev"
 
     enum StorageError: LocalizedError {
+        case notSignedIn
         case invalidEndpoint
         case serverError
         case noURLInResponse
 
         var errorDescription: String? {
             switch self {
+            case .notSignedIn: return "로그인이 필요해요."
             case .invalidEndpoint: return "업로드 주소가 올바르지 않아요."
             case .serverError: return "서버 응답 오류로 업로드에 실패했어요."
             case .noURLInResponse: return "업로드 응답에서 URL을 찾지 못했어요."
             }
+        }
+    }
+
+    /// 워커에 넘길 Supabase access token.
+    ///
+    /// 워커가 이 토큰으로 "누구인가" 를 확인하고 `admins` 화이트리스트를 본다.
+    /// 없으면 401 이 오므로 부르기 전에 막는다.
+    ///
+    /// 여기서는 `auth.session` 을 쓴다. 만료됐으면 갱신해서 **쓸 수 있는** 토큰을
+    /// 줘야 하기 때문이다. `AuthViewModel.checkSession()` 이 네트워크를 안 타는
+    /// `currentSession` 만 보는 것과는 목적이 다르다 — 그쪽은 로그인 화면으로
+    /// 보낼지를 정하는 자리라 네트워크가 없다고 로그아웃시키면 안 된다.
+    /// **두 곳을 같게 만들지 말 것.**
+    private static func accessToken() async throws -> String {
+        do {
+            return try await supabase.auth.session.accessToken
+        } catch {
+            throw StorageError.notSignedIn
         }
     }
 
@@ -34,10 +55,13 @@ enum ReceiptStorage {
             throw StorageError.invalidEndpoint
         }
 
+        let token = try await accessToken()
+
         let boundary = "Boundary-\(UUID().uuidString)"
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         var body = Data()
         if let folder {
@@ -64,10 +88,12 @@ enum ReceiptStorage {
 
     /// R2에서 이미지를 삭제한다. (청구서 삭제 시 쓰던 로직과 동일)
     static func delete(receiptUrl: String) async {
-        guard let url = URL(string: "\(workerBaseUrl)/receipt/delete") else { return }
+        guard let url = URL(string: "\(workerBaseUrl)/receipt/delete"),
+              let token = try? await accessToken() else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try? JSONEncoder().encode(["receiptUrl": receiptUrl])
         _ = try? await URLSession.shared.data(for: request)
     }

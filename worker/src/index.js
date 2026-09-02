@@ -7,6 +7,7 @@
 //
 //   POST /receipt/upload   앱이 영수증을 올린다 (청구서 삭제 복구용 · 재정 영수증)
 //   POST /receipt/delete   앱이 영수증을 지운다
+//   (둘 다 관리자 인증 필요 — Supabase 토큰 + admins 화이트리스트)
 //
 // 폼은 공개 URL이다. 주소를 아는 사람은 누구나 청구를 넣을 수 있고,
 // 발신자를 식별할 방법이 없다. 그래서 이름만 받고, 계좌는 관리자가 앱의
@@ -339,16 +340,66 @@ async function handleReceiptDiscard(request, env) {
 // ---------------------------------------------------------------------------
 // 앱이 부르는 영수증 라우트
 //
-// **인증이 없다.** 예전 `nanuri-bill` 워커가 그랬고 그대로 옮겨 온 것이라, 지금은
-// 영수증 URL 을 아는 사람이 그 영수증을 지울 수 있다. 공개 폼이 쓰는 `/bill/*` 는
-// HMAC 서명(`verifyReceiptUrl`)으로 막혀 있지만 이쪽은 앱 전용이라 그게 없다.
-// **관리자 인증을 붙일 때 여기도 같이 막을 것.**
+// **관리자만 부를 수 있다.** 앱이 Supabase 세션의 access token 을
+// `Authorization: Bearer` 로 넘기고, 워커가 그걸 Supabase 에 물어 확인한 뒤
+// `admins` 화이트리스트에 있는 이메일인지 본다.
+//
+// 화이트리스트를 기준으로 삼는 이유는 RLS 와 같다 — Google provider 는 아무 구글
+// 계정이나 로그인시키므로 "로그인했다" 만으로는 아무것도 못 막는다. DB 의 RLS 가
+// `is_admin()` 을 쓰는 것과 **같은 판단을 같은 표로** 한다.
 //
 // CORS 헤더는 안 준다. 부르는 건 앱의 URLSession 뿐이라 브라우저 프리플라이트가
 // 없다. 공개 폼은 이 라우트를 안 쓰고 `/bill/receipt` 로 간다.
 // ---------------------------------------------------------------------------
 
+/**
+ * `Authorization: Bearer <supabase access token>` 을 확인한다.
+ *
+ * 통과하면 `null`, 막으면 그대로 돌려줄 `Response` 를 준다.
+ * 부르는 쪽이 `const denied = await requireAdmin(...); if (denied) return denied;`
+ * 로 쓴다.
+ *
+ * 토큰을 여기서 직접 열어보지 않는다. JWT 서명 검증을 손으로 하려면 Supabase 의
+ * 서명 키를 워커가 들고 있어야 하는데, 그건 비밀이 하나 더 느는 일이다.
+ * Supabase 에 물어보면 만료·폐기까지 한 번에 판정된다.
+ */
+async function requireAdmin(request, env) {
+    const header = request.headers.get('authorization') || '';
+    const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+    if (!token) return json({ error: '인증이 필요합니다.' }, 401);
+
+    // 1) 토큰이 진짜인가 → 누구인가
+    const userResponse = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+        headers: {
+            apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+            authorization: `Bearer ${token}`,
+        },
+    });
+    if (!userResponse.ok) return json({ error: '인증이 필요합니다.' }, 401);
+
+    const email = (await userResponse.json())?.email?.toLowerCase();
+    if (!email) return json({ error: '인증이 필요합니다.' }, 401);
+
+    // 2) 그 사람이 관리자인가 (RLS 의 is_admin() 과 같은 표를 본다)
+    const adminResponse = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/admins?select=email&email=eq.${encodeURIComponent(email)}`,
+        { headers: supabaseHeaders(env) },
+    );
+    if (!adminResponse.ok) {
+        console.error('admins 조회 실패', adminResponse.status);
+        return json({ error: '인증을 확인할 수 없습니다.' }, 503);
+    }
+    if ((await adminResponse.json()).length === 0) {
+        return json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    return null;
+}
+
 async function handleAppReceiptUpload(request, env) {
+    const denied = await requireAdmin(request, env);
+    if (denied) return denied;
+
     try {
         const form = await request.formData();
         const file = form.get('file');
@@ -364,6 +415,9 @@ async function handleAppReceiptUpload(request, env) {
 }
 
 async function handleAppReceiptDelete(request, env) {
+    const denied = await requireAdmin(request, env);
+    if (denied) return denied;
+
     try {
         const { receiptUrl } = await request.json();
         // 우리 버킷 URL 이 아니면 지운 것이 없다. 그래도 앱은 할 일이 없으므로
