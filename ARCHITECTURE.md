@@ -83,10 +83,23 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 `fetch` 하지 말 것. 같은 workers.dev 서브도메인이면 **요청이 자기 자신으로 되돌아와
 404 가 난다.** 실제로 모든 제출이 이걸로 실패했었다.
 
-앱이 부르는 `/receipt/upload` · `/receipt/delete` 에는 **인증이 없다.** 옛 워커가
-그랬고 그대로 옮겨 온 것이라, 지금은 영수증 URL 을 아는 사람이 그 영수증을 지울 수
-있다. 공개 폼이 쓰는 `/bill/*` 는 HMAC 서명으로 막혀 있지만 이쪽은 없다.
-**관리자 인증을 붙일 때 여기도 같이 막을 것.**
+### 앱 라우트는 admins 화이트리스트로 막는다
+
+앱이 부르는 `/receipt/upload` · `/receipt/delete` 는 **관리자만 부를 수 있다.**
+앱이 Supabase 세션의 access token 을 `Authorization: Bearer` 로 넘기고, 워커의
+`requireAdmin()` 이 ① Supabase 에 물어 토큰 주인을 확인하고 ② 그 이메일이
+`admins` 에 있는지 본다. 없으면 401/403 이다.
+
+**`authenticated` 로는 안 된다.** Google provider 는 아무 구글 계정이나
+로그인시키므로 "로그인했다" 는 아무것도 보장하지 않는다. RLS 가 `is_admin()` 을
+쓰는 것과 **같은 판단을 같은 표로** 해야 한다.
+
+토큰은 워커가 직접 열어보지 않는다. JWT 서명을 손으로 검증하려면 Supabase 서명 키를
+워커가 들고 있어야 하는데 그건 비밀이 하나 더 느는 일이다. Supabase 에 물으면
+만료·폐기까지 한 번에 판정된다. 왕복이 한 번 늘지만 영수증 업로드·삭제는 잦지 않다.
+
+옛 `nanuri-bill` 워커에는 이 검사가 없었고, 코드를 옮겨 올 때 그 상태로 한 번
+배포됐다가 곧바로 막았다.
 
 ---
 
@@ -101,6 +114,7 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 | **은행 목록** | `Features/Profile/Profile.swift` 의 `koreanBanks` ↔ `TossDeepLink` 가 이 문자열을 딥링크의 `bank` 값으로 그대로 넘긴다 |
 | **워커 주소** | `Components/ReceiptStorage.swift` ↔ 계정 서브도메인 |
 | **R2 공개 도메인** | `worker/wrangler.toml` 의 `R2_PUBLIC_URL` ↔ 이미 저장된 영수증 URL |
+| **영수증 라우트 인증** | 워커 `requireAdmin()` ↔ 앱 `ReceiptStorage.accessToken()` |
 | **APNs 환경** | 워커의 `device_tokens.environment` ↔ 앱의 `#if DEBUG` |
 
 맨 앞의 둘은 **한 세트**다. PG 의 `\s` 는 U+00A0 을 공백으로 안 보기 때문에
