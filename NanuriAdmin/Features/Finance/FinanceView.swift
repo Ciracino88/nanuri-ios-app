@@ -15,6 +15,8 @@ struct FinanceView: View {
     @State private var showSpendingDetail = false
     /// 헤더 왼쪽 통장 버튼이 여는 잔액 화면.
     @State private var showAccounts = false
+    /// ⋯ 메뉴가 여는 거래 추가 시트. 농협 거래를 옮겨 적는 자리다.
+    @State private var showAddTransaction = false
 
     /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
     /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
@@ -114,6 +116,9 @@ struct FinanceView: View {
             }
             .sheet(isPresented: $showAccounts) {
                 AccountBalanceView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showAddTransaction) {
+                AddTransactionView(viewModel: viewModel)
             }
         }
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
@@ -516,14 +521,27 @@ struct FinanceView: View {
         EmptyStateView(
             title: "거래내역이 없어요",
             icon: "doc.richtext",
-            message: "토스뱅크에서 거래내역서를 공유하면 저장돼요.\n우측 상단 ⋯ 에서 '저장된 거래내역서'를 열어\n'거래내역 불러오기'를 눌러주세요"
+            message: "우측 상단 ⋯ 에서 '거래 추가'로 직접 넣거나,\n토스뱅크 거래내역서를 앱으로 공유한 뒤\n'저장된 거래내역서'에서 불러올 수 있어요"
         )
         .pullToRefresh { await reload() }
     }
 
-    /// 헤더의 화면별 동작 자리는 하나뿐이라 내보내기·거래내역서를 한 메뉴로 묶는다.
+    /// 헤더의 화면별 동작 자리는 하나뿐이라 거래 추가·내보내기·거래내역서를 한 메뉴로 묶는다.
     private func actionMenu() -> some View {
         Menu {
+            // **맨 위다.** 장부를 쓰는 게 이 화면의 본업이고 나머지는 뽑는 일이다.
+            //
+            // 메뉴 안에 두면 한 단계 깊어지지만, 추가 화면이 **저장해도 닫히지 않아**
+            // 25건을 넣는 동안 이 메뉴는 한 번만 지난다. 헤더에 아이콘을 하나 더
+            // 두는 것보다(한쪽에 아이콘은 하나까지) 이쪽이 규칙에 맞는다.
+            Button {
+                showAddTransaction = true
+            } label: {
+                Label("거래 추가", systemImage: "plus.circle")
+            }
+
+            Divider()
+
             // 내보내기보다 먼저 둔다 — 확인하고 내보내는 순서가 자연스럽다.
             Button {
                 if let html = viewModel.reportHTML() {

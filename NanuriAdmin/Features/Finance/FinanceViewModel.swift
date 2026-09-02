@@ -586,7 +586,9 @@ class FinanceViewModel: ObservableObject {
                 datetime: $0.datetime,
                 type: $0.type,
                 amount: $0.amount,
-                description: $0.description
+                description: $0.description,
+                // 통장에 찍힌 기록이다. 이 표시가 금액·일시·통장을 편집에서 잠근다.
+                source: .statement
             )
         }
         do {
@@ -605,6 +607,85 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
+    // MARK: - 거래 쓰기
+
+    /// 거래를 손으로 넣는다.
+    ///
+    /// **농협은 이 길뿐이다.** 인터넷뱅킹이 없어 거래내역 파일이 안 나오므로 사람이
+    /// 앱 화면을 보고 옮겨 적는 수밖에 없다. 2026-08 기준 농협 25건 / 모임 22건이라
+    /// **절반은 영영 수기다** — 한 건 넣는 데 손이 많이 가면 안 쓰게 된다.
+    ///
+    /// 넣은 뒤 목록을 다시 받지 않고 **돌려받은 행을 그 자리에 꽂는다.** 연달아
+    /// 넣는 화면이라 한 건마다 273건을 다시 받으면 입력이 끊긴다.
+    @discardableResult
+    func addTransaction(
+        accountId: UUID,
+        counterAccountId: UUID? = nil,
+        datetime: Date,
+        amount: Int,
+        description: String?,
+        category: String?
+    ) async -> Bool {
+        guard let ledgerId = currentLedger?.id else {
+            error = "장부를 먼저 선택해주세요."
+            return false
+        }
+        let row = BankTransactionInsert(
+            ledgerId: ledgerId,
+            accountId: accountId,
+            counterAccountId: counterAccountId,
+            datetime: datetime,
+            // 토스가 주는 값(이자입금·체크카드결제·ATM출금…)과 달리 손으로 넣는 건
+            // 부호만으로 충분하다. 통장에 찍힌 유형이 아니라 사람이 적는 줄이다.
+            type: amount >= 0 ? "입금" : "출금",
+            amount: amount,
+            description: description,
+            category: category,
+            source: .manual
+        )
+        do {
+            let created: BankTransaction = try await supabase
+                .from("finance_transactions")
+                .insert(row)
+                .select()
+                .single()
+                .execute()
+                .value
+            transactions.append(created)
+            // `fetchTransactions` 가 datetime 내림차순으로 받으므로 같은 순서를 지킨다.
+            transactions.sort { $0.datetime > $1.datetime }
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("거래 추가 실패: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// 거래를 지운다. 분할은 `on delete cascade` 로 같이 사라진다.
+    ///
+    /// **영수증을 먼저 지운다.** 청구서 삭제와 같은 순서이고 이유도 같다 — 행이
+    /// 먼저 사라지면 이미지 삭제가 실패했을 때 R2 에 주인 없는 파일이 남고 그 URL 을
+    /// 아는 사람이 없어진다. 반대 순서면 최악이 "이미지는 지워졌는데 행이 남는"
+    /// 것이고, 그건 눈에 보여서 다시 지울 수 있다.
+    func deleteTransaction(_ transaction: BankTransaction) async {
+        for url in transaction.receipts {
+            await ReceiptStorage.delete(receiptUrl: url)
+        }
+        do {
+            try await supabase
+                .from("finance_transactions")
+                .delete()
+                .eq("id", value: transaction.id)
+                .execute()
+            transactions.removeAll { $0.id == transaction.id }
+            splitsByTransaction[transaction.id] = nil
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("거래 삭제 실패: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - 거래 편집 저장 (영수증 R2는 청구서와 동일한 저장소 재사용)
 
     /// 거래 편집을 한 번에 커밋한다.
@@ -615,6 +696,11 @@ class FinanceViewModel: ObservableObject {
     ///   - originalUrls: 편집 시작 시점의 영수증 목록 (제거분 계산용)
     func saveTransactionEdits(
         id: UUID,
+        datetime: Date,
+        amount: Int,
+        description: String?,
+        accountId: UUID,
+        counterAccountId: UUID?,
         category: String?,
         memo: String?,
         keptUrls: [String],
@@ -622,6 +708,15 @@ class FinanceViewModel: ObservableObject {
         originalUrls: [String],
         splits: [(category: String?, amount: Int, description: String?)] = []
     ) async {
+        // 거래내역서에서 온 거래는 **금액·일시·통장이 통장의 기록**이다. 화면이
+        // 그 칸을 잠그지만, 잠그는 판단은 여기서도 한 번 더 한다 — 규칙이 화면에만
+        // 있으면 화면이 하나 더 생길 때 조용히 새어 나간다.
+        let existing = transactions.first { $0.id == id }
+        let locked = existing?.isFromStatement ?? false
+        let finalDatetime = locked ? (existing?.datetime ?? datetime) : datetime
+        let finalAmount   = locked ? (existing?.amount ?? amount) : amount
+        let finalAccount  = locked ? (existing?.accountId ?? accountId) : accountId
+        let finalCounter  = locked ? existing?.counterAccountId : counterAccountId
         // 1. 새 이미지 업로드 (해상도 축소 후)
         var newlyUploaded: [String] = []
         for image in newImages {
@@ -637,14 +732,23 @@ class FinanceViewModel: ObservableObject {
 
         let finalUrls = keptUrls + newlyUploaded
 
-        // 2. DB 반영 (카테고리·메모·영수증 한 번에)
+        // 2. DB 반영 (한 번에)
         do {
             try await supabase
                 .from("finance_transactions")
-                .update(TransactionEditUpdate(category: category, memo: memo, receiptUrls: finalUrls))
+                .update(TransactionEditUpdate(
+                    datetime: finalDatetime, amount: finalAmount, description: description,
+                    category: category, memo: memo, receiptUrls: finalUrls,
+                    accountId: finalAccount, counterAccountId: finalCounter
+                ))
                 .eq("id", value: id)
                 .execute()
             if let idx = transactions.firstIndex(where: { $0.id == id }) {
+                transactions[idx].datetime = finalDatetime
+                transactions[idx].amount = finalAmount
+                transactions[idx].description = description
+                transactions[idx].accountId = finalAccount
+                transactions[idx].counterAccountId = finalCounter
                 transactions[idx].category = category
                 transactions[idx].memo = memo
                 transactions[idx].receiptUrls = finalUrls
