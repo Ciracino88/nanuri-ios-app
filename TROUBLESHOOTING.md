@@ -8,6 +8,42 @@
 
 ---
 
+## 2026-09-03 · `supabase db push` 가 `SASL auth (SQLSTATE 28P01)` 로 튕겼다
+
+**증상** — `supabase db push --linked` 가 풀러에 붙는 데까지는 가고 인증에서 죽었다.
+
+```
+failed SASL auth (FATAL: password authentication failed for user "postgres" (SQLSTATE 28P01))
+```
+
+**원인** — 비밀번호가 안 맞았다. `28P01` 은 `invalid_password` 라 네트워크·호스트·
+링크 설정 문제가 아니다. **DB 비밀번호는 프로젝트를 만들 때 한 번 보여주고 다시는
+안 보여준다** — 대시보드에 가도 값이 없고 `Reset database password` 버튼만 있다.
+그리고 Supabase **계정 로그인 비밀번호와 다른 값**이라 헷갈리기 쉽다.
+
+**해결** — 대시보드 `Project Settings > Database` 에서 **재설정**했다.
+새 값으로 다시 돌리니 바로 적용됐다.
+
+**재발 방지** — **재설정을 망설일 이유가 없다.** 이 프로젝트에서 DB 비밀번호를 쓰는
+곳은 `supabase db push` 하나뿐이다.
+
+| 쓰는 곳 | 값 |
+| --- | --- |
+| 워커 | `SUPABASE_SERVICE_ROLE_KEY` (다른 값) |
+| 앱 | anon key (다른 값) |
+| `db push` | **DB 비밀번호** |
+
+그래서 재설정해도 앱도 워커도 안 깨진다. 기억이 안 나면 되찾으려 애쓰지 말고 바로
+재설정한다. 비밀번호는 `SETUP.md` 1번대로 `read -rs` 로 받는다 — 명령줄에 직접
+적으면 `~/.zsh_history` 에 그대로 남는다.
+
+**대시보드 SQL Editor 로 우회할 수도 있지만 권하지 않는다.** 마이그레이션 SQL 을
+직접 붙여 넣으면 비밀번호가 필요 없는 대신 **CLI 의 적용 이력에 안 남아**, 다음
+`db push` 가 같은 마이그레이션을 또 적용하려다 실패한다. 굳이 그 길로 가야 하면
+`supabase_migrations.schema_migrations` 에 `version` 을 같이 넣어야 한다.
+
+---
+
 ## 2026-08-19 · 상세 시트가 "영수증 보기" 버튼을 반쯤 자른 채 열렸다
 
 **증상** — 청구서 카드를 눌러 시트가 올라오면 "영수증 보기" 버튼이 아래쪽에서
