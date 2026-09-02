@@ -13,6 +13,8 @@ struct FinanceView: View {
     @State private var selectedDay: Date?
     /// 요약 밴드의 "자세히 보기" 가 여는 분석 화면.
     @State private var showSpendingDetail = false
+    /// 헤더 왼쪽 통장 버튼이 여는 잔액 화면.
+    @State private var showAccounts = false
 
     /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
     /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
@@ -47,12 +49,17 @@ struct FinanceView: View {
             // 가운데를 **달 넘김**에 내줬다. 탭 이름("재정")은 탭바가 이미 말하고
             // 있고, 이 화면에서 가장 자주 건드리는 건 달이다.
             //
-            // 왼쪽 슬롯은 비어 있다. 장부를 고르는 버튼이 있었는데 통장이 하나라
-            // 고를 것이 없어졌다. 화면이 어느 장부인지도 말하지 않는다 — 하나뿐이라
+            // 왼쪽은 통장이다. 장부를 고르는 버튼이 있던 자리인데 장부가 하나라
+            // 고를 것이 없어졌고, 그 대신 **통장이 둘**이 되면서 잔액을 볼 자리가
+            // 필요해졌다. 화면이 어느 장부인지는 여전히 말하지 않는다 — 하나뿐이라
             // 말해 봐야 구별해 주는 게 없다.
             AdminHeaderView(
                 center: { monthStepper },
-                leading: { EmptyView() },
+                leading: {
+                    HeaderIconButton(systemName: "wallet.bifold", label: "통장 잔액") {
+                        showAccounts = true
+                    }
+                },
                 trailing: { actionMenu() }
             )
 
@@ -104,6 +111,9 @@ struct FinanceView: View {
             }
             .sheet(isPresented: $showSpendingDetail) {
                 SpendingDetailView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showAccounts) {
+                AccountBalanceView(viewModel: viewModel)
             }
         }
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
@@ -181,7 +191,9 @@ struct FinanceView: View {
     ///
     /// 내놓는 수는 **둘뿐이다** — 총 입금과 총 출금. 한때 잔액까지 셋을 세웠는데,
     /// 셋이 되는 순간 어느 것을 봐야 하는지가 흐려진다. 월 수지는 이 둘의 차라
-    /// 눈으로 읽을 수 있고, 통장의 실제 잔액은 거래 상세의 "거래 후 잔액" 에 있다.
+    /// 눈으로 읽을 수 있고, 통장 잔액은 헤더 왼쪽의 통장 화면(`AccountBalanceView`)
+    /// 에 있다 — 여기 두 수가 **이 달에 오간 돈**인 데 반해 잔액은 **쌓인 돈**이라
+    /// 나란히 서면 같은 종류의 수로 읽힌다.
     ///
     /// **라벨이 위, 숫자가 아래다.** 여기서는 "무엇의 수인지"를 먼저 알아야
     /// 수가 읽힌다.

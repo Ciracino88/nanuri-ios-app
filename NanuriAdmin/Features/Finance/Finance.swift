@@ -52,6 +52,24 @@ struct Account: Identifiable, Codable {
     }
 }
 
+/// 이 달에 한 방향으로 오간 내부 이체의 합.
+///
+/// 거래 한 줄이 양쪽 통장을 알고 있어서(`counter_account_id`) 방향은 **부호에서
+/// 나온다.** 표에 따로 적어 두는 값이 아니라 `FinanceViewModel.internalTransferFlows`
+/// 가 그때그때 세는 값이다.
+struct AccountFlow: Identifiable {
+    /// 보낸 통장 → 받은 통장. 같은 방향끼리 합치려고 키로 쓴다.
+    struct Direction: Hashable {
+        let from: UUID
+        let to: UUID
+    }
+
+    let direction: Direction
+    let amount: Int
+
+    var id: Direction { direction }
+}
+
 struct BankTransaction: Identifiable, Codable {
     var id: UUID
     var ledgerId: UUID?
