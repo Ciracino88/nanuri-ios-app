@@ -8,6 +8,15 @@ struct TransactionEditView: View {
 
     @State private var category: String
     @State private var memo: String
+    // 아래 다섯은 **손으로 넣은 거래에서만** 바뀐다. 거래내역서에서 온 거래는
+    // 금액·일시·통장이 통장의 기록이라 화면이 잠그고, 뷰모델이 한 번 더 막는다.
+    @State private var descriptionText: String
+    @State private var amountText: String
+    @State private var isDeposit: Bool
+    @State private var datetime: Date
+    @State private var accountId: UUID
+    @State private var counterAccountId: UUID?
+    @State private var showDeleteConfirm = false
     @State private var keptUrls: [String]           // 유지할 기존 영수증 (저장 시 확정)
     @State private var pendingImages: [PendingImage] // 새로 추가한, 아직 업로드 안 한 이미지
     @State private var photoItem: PhotosPickerItem?
@@ -25,6 +34,12 @@ struct TransactionEditView: View {
         self.viewModel = viewModel
         _category = State(initialValue: transaction.category ?? "")
         _memo = State(initialValue: transaction.memo ?? "")
+        _descriptionText = State(initialValue: transaction.description ?? "")
+        _amountText = State(initialValue: String(abs(transaction.amount)))
+        _isDeposit = State(initialValue: transaction.isDeposit)
+        _datetime = State(initialValue: transaction.datetime)
+        _accountId = State(initialValue: transaction.accountId)
+        _counterAccountId = State(initialValue: transaction.counterAccountId)
         _keptUrls = State(initialValue: transaction.receipts)
         _pendingImages = State(initialValue: [])
         _splitDrafts = State(initialValue: viewModel.splits(for: transaction.id).map {
@@ -49,22 +64,122 @@ struct TransactionEditView: View {
     }
 
     private var receiptCount: Int { keptUrls.count + pendingImages.count }
-    private var txMagnitude: Int { abs(transaction.amount) }
+
+    /// 입력된 금액(양수). 손으로 넣은 거래에서만 뜻이 있다.
+    private var editedMagnitude: Int { Int(amountText) ?? 0 }
+
+    /// 분할 합계와 견줄 거래액. **거래내역서에서 온 거래는 통장 값이 기준**이고,
+    /// 손으로 넣은 거래는 지금 입력 중인 값이 기준이다 — 금액을 고치면 분할도
+    /// 새 금액에 맞아야 한다.
+    private var txMagnitude: Int {
+        transaction.isFromStatement ? abs(transaction.amount) : editedMagnitude
+    }
+
+    /// 저장할 부호 붙은 금액.
+    private var signedAmount: Int {
+        guard !transaction.isFromStatement else { return transaction.amount }
+        return isDeposit ? editedMagnitude : -editedMagnitude
+    }
+
+    private var canSave: Bool {
+        transaction.isFromStatement || editedMagnitude > 0
+    }
     private var splitSum: Int { splitDrafts.reduce(0) { $0 + $1.amount } }
     private var splitRemaining: Int { txMagnitude - splitSum }
+
+    // MARK: - 거래 정보
+
+    /// **거래내역서에서 온 거래는 금액·일시·통장이 잠긴다.** 그 셋은 통장에 찍힌
+    /// 기록이라 고치면 통장과 어긋나 대조가 뜻을 잃는다.
+    ///
+    /// **적요는 둘 다 고칠 수 있다.** 통장이 주는 적요는 예금주나 가맹점 이름
+    /// (`이충성` · `우성볼링장` · `ATM현금`)이라 장부에 그대로 적을 수 없다.
+    /// 장부에 적히는 건 "아침식사" · "볼링 게임 16명" 같은 **뜻**이다.
+    private var infoSection: some View {
+        Section {
+            TextField("적요 (예: 아침식사, 8월 헌금)", text: $descriptionText)
+
+            if transaction.isFromStatement {
+                LabeledContent("금액", value: "\(transaction.amount.formatted())원")
+                LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
+                LabeledContent("통장", value: accountLabel)
+            } else {
+                DatePicker("일시", selection: $datetime, displayedComponents: [.date])
+
+                Picker("종류", selection: $isDeposit) {
+                    Text("입금").tag(true)
+                    Text("출금").tag(false)
+                }
+                .pickerStyle(.segmented)
+
+                HStack {
+                    Text("금액")
+                    Spacer()
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                    Text("원").foregroundColor(DS.Ink.secondary)
+                }
+
+                Picker("통장", selection: $accountId) {
+                    ForEach(viewModel.accounts) { Text($0.name).tag($0.id) }
+                }
+
+                transferRows
+            }
+        } header: {
+            Text("거래 정보")
+        } footer: {
+            if transaction.isFromStatement {
+                Text("거래내역서에서 불러온 거래예요. 금액·일시·통장은 통장에 찍힌 기록이라 고칠 수 없어요.")
+            }
+        }
+    }
+
+    /// 내부 이체 표시. **한 줄이 양쪽 통장을 안다** — 두 줄로 적으면 그 둘이 같은
+    /// 사건이라는 걸 따로 짝지어야 하고, 짝이 깨지면 조용히 틀어진다.
+    @ViewBuilder
+    private var transferRows: some View {
+        let others = viewModel.accounts.filter { $0.id != accountId }
+        if let fallback = others.first {
+            Toggle("통장 사이 이체", isOn: Binding(
+                get: { counterAccountId != nil },
+                set: { counterAccountId = $0 ? fallback.id : nil }
+            ))
+
+            if counterAccountId != nil {
+                Picker("상대 통장", selection: Binding(
+                    get: { counterAccountId ?? fallback.id },
+                    set: { counterAccountId = $0 }
+                )) {
+                    ForEach(others) { Text($0.name).tag($0.id) }
+                }
+            }
+        }
+    }
+
+    /// **되돌릴 수 없는 것이라 빨강이고, 확인을 한 번 받는다.**
+    private var deleteSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("이 거래 삭제")
+                    Spacer()
+                }
+            }
+            .disabled(isSaving)
+        } footer: {
+            Text("분할 항목과 영수증도 같이 지워져요. 되돌릴 수 없어요.")
+        }
+    }
 
     var body: some View {
         NavigationView {
             Form {
-                Section("거래 정보") {
-                    LabeledContent("내용", value: transaction.description ?? "-")
-                    LabeledContent("금액", value: "\(transaction.amount.formatted())원")
-                    LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
-                    // 예전에는 "거래 후 잔액" 이 여기 있었다. 통장이 둘이 되면서 그 값이
-                    // 어느 통장의 잔액도 아니게 되어 없앴다. 대신 **어느 통장인지**를
-                    // 보여준다 — 한 건을 들여다볼 때 정작 알아야 하는 건 그쪽이다.
-                    LabeledContent("통장", value: accountLabel)
-                }
+                infoSection
                 Section("분류") {
                     TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
                     CategorySuggestionChips(suggestions: suggestions, selected: $category)
@@ -73,6 +188,7 @@ struct TransactionEditView: View {
                 }
                 splitSection
                 receiptSection
+                deleteSection
             }
             .navigationTitle("거래 편집")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,7 +200,9 @@ struct TransactionEditView: View {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button("저장") { save() }.fontWeight(.semibold)
+                        Button("저장") { save() }
+                            .fontWeight(.semibold)
+                            .disabled(!canSave)
                     }
                 }
             }
@@ -131,6 +249,19 @@ struct TransactionEditView: View {
                     onDelete: { splitDrafts.removeAll { $0.id == draft.id } }
                 )
             }
+            .confirmationDialog("이 거래를 삭제할까요?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("삭제", role: .destructive) {
+                    Task {
+                        isSaving = true
+                        await viewModel.deleteTransaction(transaction)
+                        isSaving = false
+                        dismiss()
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("분할 항목과 영수증도 같이 지워져요. 되돌릴 수 없어요.")
+            }
             .interactiveDismissDisabled(isSaving)
         }
     }
@@ -145,6 +276,13 @@ struct TransactionEditView: View {
             isSaving = true
             await viewModel.saveTransactionEdits(
                 id: transaction.id,
+                datetime: datetime,
+                amount: signedAmount,
+                description: descriptionText.isEmpty ? nil : descriptionText,
+                accountId: accountId,
+                // 자기 자신과의 이체는 이체가 아니다 (DB 에도 check 가 걸려 있다).
+                // 통장을 바꾸면 상대 통장이 같아질 수 있어서 여기서 한 번 턴다.
+                counterAccountId: counterAccountId == accountId ? nil : counterAccountId,
                 category: category.isEmpty ? nil : category,
                 memo: memo.isEmpty ? nil : memo,
                 keptUrls: keptUrls,
