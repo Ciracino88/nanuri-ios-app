@@ -13,12 +13,20 @@ struct Bill: Identifiable, Decodable, Equatable {
     let receiptUrl: String
     let status: String
     let createdAt: Date
+    /// 상태를 바꾼 순간. 트리거(`touch_bill_processed_at`)가 `now()` 로 찍는다.
+    ///
+    /// **묶어 보내기로 같이 승인한 청구들은 이 값이 한 마이크로초까지 같다** —
+    /// `updateStatus(billIds:)` 가 한 요청에 처리하므로 `now()` 가 한 번만 불린다.
+    /// 그래서 이 값이 곧 **토스 송금 한 건**을 가리키는 열쇠다
+    /// (`StatementMatcher`). 대기중이면 `nil`.
+    let processedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, title, amount, status
         case submitterName = "submitter_name"
         case receiptUrl = "receipt_url"
         case createdAt = "created_at"
+        case processedAt = "processed_at"
     }
 }
 

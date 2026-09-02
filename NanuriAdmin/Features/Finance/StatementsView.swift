@@ -65,7 +65,8 @@ struct StatementDetailView: View {
     let statement: StatementFile
     @ObservedObject var viewModel: FinanceViewModel
     @Environment(\.dismiss) var dismiss
-    @State private var showReparseResult = false
+    @State private var showImport = false
+    @State private var missingAccount = false
 
     var body: some View {
         NavigationView {
@@ -79,17 +80,30 @@ struct StatementDetailView: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
-                            viewModel.reparseStatement(statement)
-                            showReparseResult = true
+                            // 곧바로 저장하지 않는다. 청구서와 맞춰 적요·분할까지
+                            // 만들어 내므로 사람이 한 번 보고 넘어가야 한다.
+                            if viewModel.account(named: "모임") == nil {
+                                missingAccount = true
+                            } else {
+                                showImport = true
+                            }
                         } label: {
                             Label("거래내역 불러오기", systemImage: "square.and.arrow.down")
                         }
                     }
                 }
-                .alert("거래내역 불러오기", isPresented: $showReparseResult) {
-                    Button("확인") { dismiss() }
+                // 토스에서 뽑은 내역서라 모임통장 것이다.
+                .sheet(isPresented: $showImport) {
+                    if let account = viewModel.account(named: "모임") {
+                        StatementImportView(viewModel: viewModel,
+                                            statement: statement,
+                                            account: account)
+                    }
+                }
+                .alert("모임통장을 찾을 수 없어요", isPresented: $missingAccount) {
+                    Button("확인") {}
                 } message: {
-                    Text("이 거래내역서를 파싱해 거래내역에 반영했어요.")
+                    Text("장부에 '모임' 통장이 있어야 거래내역서를 넣을 수 있어요.")
                 }
         }
     }
