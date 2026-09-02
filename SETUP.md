@@ -2,7 +2,7 @@
 
 관리자(사람)가 손으로 넣어야 하는 값만 모았다. 코드로 해결되는 건 여기 없다.
 
-마지막 확인: 2026-08-15
+마지막 확인: 2026-09-02
 
 ---
 
@@ -19,9 +19,12 @@
 | 5 | `APNS_P8` 시크릿 등록 | ✅ 완료 |
 | 6 | Xcode Push Notifications capability | ✅ 완료 (`NanuriAdmin.entitlements`) |
 | 7 | 실기기에서 푸시 수신 확인 | ✅ 완료 (2026-08-15) |
-| 8 | R2 영수증에 `Cache-Control` 붙이기 | ⬜ 안 함 (**앱에는 효과 없음**) |
+| 8 | R2 영수증에 `Cache-Control` 붙이기 | ✅ 완료 (새로 올리는 것만) |
+| 9 | R2 버킷을 청구 폼 워커에 직접 붙이기 | ✅ 완료 (`nanuri-bills`) |
 
-**푸시까지 끝났다.** 8번은 목록에 남겨 두지만 **앱 동작과는 무관하다** (8번 참고).
+**손으로 넣어야 할 것은 남지 않았다.** 8번은 9번과 같이 풀렸고, **앱 동작과는
+무관하다** (8번 참고). 9번은 값이 `worker/wrangler.toml` 에 들어가 있고 문서에는
+**그 값을 어떻게 알아내는지**를 남겼다 — 다른 계정에 새로 올릴 때 필요하다.
 아래는 다시 설정해야 할 때를 위한 절차와, 안 될 때 볼 곳이다.
 
 ---
@@ -192,14 +195,21 @@ cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler 
 | `APNS_TOPIC` | 앱 번들 ID |
 | `SUPABASE_URL` | 프로젝트 주소 |
 | 앱의 Supabase anon key | 공개 전제. 보호는 RLS + `is_admin()` 화이트리스트가 한다 |
+| `R2_PUBLIC_URL` | 영수증 이미지 주소. 앱이 URL 로 들고 다니고 브라우저도 연다 |
+| R2 `bucket_name` | 계정 안에서만 뜻이 있는 이름. 접근은 바인딩이 정한다 |
 
 진짜 비밀은 둘뿐이다 — `SUPABASE_SERVICE_ROLE_KEY`, `APNS_P8`.
 
 ---
 
-## 8. R2 영수증에 Cache-Control 붙이기 ⬜
+## 8. R2 영수증에 Cache-Control 붙이기 ✅
 
-**먼저: 앱에는 효과가 없다.** 이미지 캐시를 Kingfisher 로 옮기면서 그렇게 됐다.
+**2026-09-02 완료.** 9번으로 코드가 이 저장소에 들어오면서 같이 해결됐다.
+`worker/src/receipts.js` 의 `put` 이 `public, max-age=31536000, immutable` 을 붙인다.
+**이미 올라간 53개에는 소급되지 않는다** — 필요하면 같은 키로 다시 `put` 해야 하는데,
+아래 이유로 그럴 필요가 없다.
+
+**앱에는 효과가 없다.** 이미지 캐시를 Kingfisher 로 옮기면서 그렇게 됐다.
 Kingfisher 다운로더는 기본이 `URLSessionConfiguration.ephemeral` 이라 **URLCache 를 아예
 안 쓴다** (HTTP 캐시에 기대는 대신 자기 디스크 캐시로 관리하는 설계다). 그래서 이 헤더를
 붙여도 앱이 요청을 아끼는 일은 없다. 이득을 보는 건 **브라우저로 영수증 URL 을 직접 열
@@ -208,8 +218,8 @@ Kingfisher 다운로더는 기본이 `URLSessionConfiguration.ephemeral` 이라 
 **그래도 붙일 만한 이유** — 맞는 메타데이터를 넣어 두는 것 자체가 맞다. 나중에 영수증을
 웹에서 보여주거나 CDN 을 끼우면 그때부터 의미가 생긴다. **급하지 않다.**
 
-**왜 여기 있나** — 고칠 코드가 `nanuri-bill` 워커에 있는데 **그 소스는 이 저장소에 없다.**
-(이 저장소의 `worker/` 는 청구 폼 워커다) Cloudflare 대시보드나 그 워커를 둔 곳에서 고쳐야 한다.
+**왜 오래 안 됐나** — 고칠 코드가 `nanuri-bill` 워커에 있는데 그 소스가 어디에도
+없어서 손을 못 댔다. 9번으로 코드를 가져오면서 한 줄로 끝났다.
 
 영수증은 `pub-*.r2.dev` 에서 바로 나가므로, 응답 헤더는 **업로드할 때 오브젝트에
 저장한 메타데이터**가 그대로 쓰인다. 지금은 아무것도 안 넣고 있어서 캐시 지시가 없다.
@@ -235,3 +245,42 @@ curl -sI "<영수증_URL>" | grep -i "cache-control\|etag\|age"
 ```
 
 `cache-control` 줄이 안 나오면 아직 안 붙은 것이다.
+
+---
+
+## 9. R2 버킷을 청구 폼 워커에 직접 붙이기 ✅
+
+**2026-09-02 완료.** 값은 `worker/wrangler.toml` 에 들어가 있다. 여기 적어 두는 건
+**그 값을 어떻게 알아내는가**다 — 저장소를 새로 받아 다른 계정에 올릴 때 필요하다.
+
+예전에는 `nanuri-bill` 이라는 별도 워커가 영수증 버킷을 들고 있었고, 청구 폼 워커는
+서비스 바인딩으로 그쪽에 넘겼다. 그 워커는 **대시보드에서 만든 것이라 소스가 어디에도
+없었다.** 고칠 수도 되돌릴 수도 없어서, 버킷을 청구 폼 워커에 직접 붙이고 코드를
+가져왔다 (`worker/src/receipts.js`).
+
+넣어야 하는 값은 둘이다.
+
+| 값 | 현재 | 어디서 오나 |
+|---|---|---|
+| `bucket_name` | `nanuri-bills` | 계정의 R2 버킷 이름 |
+| `R2_PUBLIC_URL` | `https://pub-1ff72bbd269d4c6ebe9c8f4dcbce52dc.r2.dev` | 그 버킷의 공개 도메인 |
+
+둘 다 비밀이 아니다 (위 "비밀이 아닌 것" 표 참고).
+
+**알아내는 법:**
+
+```bash
+cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin/worker && npx wrangler r2 bucket list && npx wrangler r2 bucket dev-url get nanuri-bills
+```
+
+⚠️ **버킷을 잘못 고르면 조용히 반쪽만 깨진다.** 새로 올리는 건 되는데 **이미 올라간
+영수증을 못 지운다** — 옛 URL 의 키가 그 버킷에 없기 때문이다. 업로드가 되니까 맞게
+붙인 줄 알기 쉽다.
+
+계정에 버킷이 둘 있는데 (`nanuri-bills`, `church-files`) **`church-files` 는 공개
+접근이 꺼져 있다.** 영수증은 앱이 URL 로 직접 그리므로 공개 접근이 꺼진 버킷에는
+있을 수 없다. 그래서 `nanuri-bills` 다 (객체 53개 / 43.8MB, 2026-09-02 기준).
+
+**맞게 붙었는지 확인하는 법** — 기존 영수증 URL 하나가 `R2_PUBLIC_URL` 로 시작하면
+된다. 앱의 청구서 상세에서 영수증을 열어 URL 을 보거나, 대시보드 > R2 > nanuri-bills
+에서 객체 하나의 공개 URL 을 본다.

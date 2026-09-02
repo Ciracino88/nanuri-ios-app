@@ -22,11 +22,11 @@
 | | 주소 / 이름 |
 | --- | --- |
 | 청구 폼 (공개) | `https://nanuri-form.nanuri.workers.dev` |
-| 영수증 R2 워커 | 워커 이름 `nanuri-bill` |
+| 영수증 R2 버킷 | `nanuri-bills` (공개 도메인 `pub-1ff72bbd…r2.dev`) |
 | Supabase | `ciszaukmnglepvqpulya` |
 
 계정 서브도메인은 `nanuri.workers.dev` 다. 이걸 바꾸면 계정의 **모든** 워커 주소가
-같이 바뀌고, 앱이 하드코딩한 R2 주소(`Components/ReceiptStorage.swift`)도 고쳐야
+같이 바뀌고, 앱이 하드코딩한 워커 주소(`Components/ReceiptStorage.swift`)도 고쳐야
 한다. 안 고치면 영수증 업로드·삭제가 전부 깨진다.
 (이미 저장된 이미지 URL 은 `pub-*.r2.dev` 도메인이라 영향 없다)
 
@@ -69,12 +69,24 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 `/bill/receipt/discard` 로 지운다 (사진 교체 시 · `pagehide` 시).
 자세한 건 [worker/README.md](worker/README.md).
 
-### 워커 → R2 는 서비스 바인딩으로
+### R2 는 워커에 직접 붙어 있다
 
-워커에서 R2 워커를 부를 때는 반드시 `env.RECEIPT_WORKER.fetch()` 를 쓴다.
-공개 URL 로 `fetch` 하면 **요청이 자기 자신으로 되돌아와 404가 난다**
-(두 워커가 같은 workers.dev 서브도메인이라서). 실제로 모든 제출이 이걸로 실패했었다.
-서비스 바인딩은 DNS 도 공용 인터넷도 안 타므로 서브도메인 변경에도 안전하다.
+영수증 버킷은 `env.RECEIPT_BUCKET` 바인딩으로 이 워커에 직접 붙는다
+(`worker/src/receipts.js`). **HTTP 로 가지 않는다.**
+
+원래는 `nanuri-bill` 이라는 별도 워커가 버킷을 들고 있었고 여기서는 서비스
+바인딩(`env.RECEIPT_WORKER.fetch()`)으로 넘겼다. 그 워커는 대시보드에서 만든 것이라
+**소스가 어디에도 없어서** 고칠 수도 되돌릴 수도 없었다. 버킷을 여기 붙이고 코드를
+가져오면서 워커가 하나 줄었다.
+
+**그 시절의 교훈은 아직 유효하다** — 다른 워커를 부를 일이 생기면 공개 URL 로
+`fetch` 하지 말 것. 같은 workers.dev 서브도메인이면 **요청이 자기 자신으로 되돌아와
+404 가 난다.** 실제로 모든 제출이 이걸로 실패했었다.
+
+앱이 부르는 `/receipt/upload` · `/receipt/delete` 에는 **인증이 없다.** 옛 워커가
+그랬고 그대로 옮겨 온 것이라, 지금은 영수증 URL 을 아는 사람이 그 영수증을 지울 수
+있다. 공개 폼이 쓰는 `/bill/*` 는 HMAC 서명으로 막혀 있지만 이쪽은 없다.
+**관리자 인증을 붙일 때 여기도 같이 막을 것.**
 
 ---
 
@@ -87,11 +99,15 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 | **이름 정규화** | DB `payees_name_normalized_idx` (`lower(regexp_replace(name,'\s','','g'))`) ↔ 앱 `String.normalizedName` |
 | **저장 전 공백 통일** | 워커의 `submitterName` 처리 ↔ 앱 `String.whitespaceNormalized` |
 | **은행 목록** | `Features/Profile/Profile.swift` 의 `koreanBanks` ↔ `TossDeepLink` 가 이 문자열을 딥링크의 `bank` 값으로 그대로 넘긴다 |
-| **R2 워커 주소** | `Components/ReceiptStorage.swift` ↔ 계정 서브도메인 |
+| **워커 주소** | `Components/ReceiptStorage.swift` ↔ 계정 서브도메인 |
+| **R2 공개 도메인** | `worker/wrangler.toml` 의 `R2_PUBLIC_URL` ↔ 이미 저장된 영수증 URL |
 | **APNs 환경** | 워커의 `device_tokens.environment` ↔ 앱의 `#if DEBUG` |
 
-위 넷 중 앞의 둘은 **한 세트**다. PG 의 `\s` 는 U+00A0 을 공백으로 안 보기 때문에
+맨 앞의 둘은 **한 세트**다. PG 의 `\s` 는 U+00A0 을 공백으로 안 보기 때문에
 저장 전에 미리 통일해야 인덱스와 앱의 판단이 일치한다.
+
+`R2_PUBLIC_URL` 은 삭제할 때 URL 앞부분을 떼어 키를 얻는 데 쓴다. 바꾸면 **새로
+올리는 건 되는데 옛 영수증만 안 지워진다** — 반쪽만 깨져서 알아채기 어렵다.
 
 APNs 환경이 어긋나면 `BadDeviceToken` 이 나고 **화면에는 아무것도 안 뜬다.**
 Release 구성을 development 프로파일로 기기에 올릴 때 그렇게 된다.
@@ -244,4 +260,22 @@ RLS 가 실제로 막는지는 `set role anon;` 으로 직접 찔러보면 된�
 Google 로그인 벽에서 막힌다. 로그인된 상태를 만들어 주거나 실기기 스크린샷을
 받아야 화면을 볼 수 있다. 푸시도 시뮬레이터에서는 확인이 안 된다.
 
-빌드 명령은 [README.md](README.md#빌드) 에 있다.
+---
+
+## 빌드
+
+`xcode-select` 가 CommandLineTools 를 가리키고 있으면 `xcodebuild` 가 그냥은 안 된다.
+앞에 `DEVELOPER_DIR` 을 붙인다. (`xcode-select -p` 로 먼저 확인)
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project NanuriAdmin.xcodeproj -scheme NanuriAdmin -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build
+```
+
+워커는 `wrangler` 가 전역 설치돼 있지 않아 `npx` 로 쓴다. 배포 전에 설정만 검증할 수 있다 —
+바인딩과 변수가 의도대로 잡혔는지 여기서 보인다.
+
+```bash
+cd worker && npx wrangler deploy --dry-run
+```
+
+푸시는 시뮬레이터에서 확인이 안 된다. **실기기가 필요하다.**

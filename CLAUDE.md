@@ -50,7 +50,7 @@
 - `checkSession()` 을 `auth.session` 으로 되돌리는 것 (네트워크 없으면 로그아웃된다)
 - `bills` 에 INSERT 정책을 여는 것 (검증이 두 군데가 된다)
 - `PayeeViewModel` 을 탭마다 만드는 것 (계좌가 한쪽에만 보인다)
-- 워커에서 R2 를 공개 URL 로 `fetch` 하는 것 (자기 자신으로 되돌아와 404)
+- 워커끼리 공개 URL 로 `fetch` 하는 것 (자기 자신으로 되돌아와 404)
 - `updateStatus` 를 건별로 나눠 보내는 것 (끊기면 일부만 완료로 남는다)
 
 ---
@@ -63,7 +63,7 @@
   권한 오류로 실패한다. `SUPABASE_DB_PASSWORD` 를 넘겨 직접 접속해야 한다
   (SETUP.md 1번). **비밀번호는 사용자가 직접 입력하게 한다.**
 - `xcode-select` 는 2026-08-21 에 Xcode 를 가리키도록 고쳤다. 빌드가 안 되면
-  `xcode-select -p` 부터 확인한다. 빌드 명령은 [README.md](README.md#빌드).
+  `xcode-select -p` 부터 확인한다. 빌드 명령은 [ARCHITECTURE.md](ARCHITECTURE.md#빌드).
 - **화면 확인과 푸시 확인은 사람이 해야 한다.** 시뮬레이터는 Google 로그인 벽에서
   막히고, 인증은 대신 진행하지 않는다.
 
