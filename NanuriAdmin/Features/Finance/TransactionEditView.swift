@@ -28,7 +28,7 @@ struct TransactionEditView: View {
         _keptUrls = State(initialValue: transaction.receipts)
         _pendingImages = State(initialValue: [])
         _splitDrafts = State(initialValue: viewModel.splits(for: transaction.id).map {
-            SplitDraft(category: $0.category ?? "", amount: $0.amount, memo: $0.memo ?? "")
+            SplitDraft(category: $0.category ?? "", amount: $0.amount, description: $0.description ?? "")
         })
     }
 
@@ -153,7 +153,7 @@ struct TransactionEditView: View {
                 splits: splitDrafts.map {
                     (category: $0.category.isEmpty ? nil : $0.category,
                      amount: $0.amount,
-                     memo: $0.memo.isEmpty ? nil : $0.memo)
+                     description: $0.description.isEmpty ? nil : $0.description)
                 }
             )
             isSaving = false
@@ -166,7 +166,9 @@ struct TransactionEditView: View {
             if splitDrafts.isEmpty {
                 Button {
                     // 전액짜리 첫 항목을 만들고 바로 편집 시트를 연다.
-                    let first = SplitDraft(category: category, amount: txMagnitude, memo: memo)
+                    // 카테고리·금액만 물려준다. 거래의 **메모**를 조각의 **적요**로
+                    // 옮기면 성격이 다른 두 칸이 섞인다 (메모는 거래에 남는다).
+                    let first = SplitDraft(category: category, amount: txMagnitude, description: "")
                     splitDrafts = [first]
                     activeSplit = first
                 } label: {
@@ -182,8 +184,8 @@ struct TransactionEditView: View {
                                 Text(draft.category.isEmpty ? "미분류" : draft.category)
                                     .typeStyle(DS.Typo.body2)
                                     .foregroundColor(DS.Ink.primary)
-                                if !draft.memo.isEmpty {
-                                    Text(draft.memo)
+                                if !draft.description.isEmpty {
+                                    Text(draft.description)
                                         .rowSubtext()
                                 }
                             }
@@ -204,7 +206,7 @@ struct TransactionEditView: View {
                 }
 
                 Button {
-                    activeSplit = SplitDraft(category: "", amount: max(splitRemaining, 0), memo: "")
+                    activeSplit = SplitDraft(category: "", amount: max(splitRemaining, 0), description: "")
                 } label: {
                     Label("항목 추가", systemImage: "plus")
                 }
@@ -324,11 +326,14 @@ struct PendingImage: Identifiable {
 }
 
 /// 편집 중인 분할 항목 (저장 시 finance_splits로 반영).
+///
+/// `description` 이 **이 조각의 적요**다 — 보고서 상세 명세의 적요 칸에 그대로 찍힌다.
+/// 거래의 `memo` 와 다른 칸이다.
 struct SplitDraft: Identifiable {
     var id = UUID()
     var category: String
     var amount: Int
-    var memo: String
+    var description: String
 }
 
 /// 분할 항목 하나를 입력·편집하는 바텀 시트.
@@ -344,7 +349,7 @@ struct SplitEditSheet: View {
     @Environment(\.dismiss) var dismiss
     @State private var category: String
     @State private var amount: Int
-    @State private var memo: String
+    @State private var itemDescription: String
 
     init(initial: SplitDraft, isNew: Bool, suggestions: [String], txMagnitude: Int, otherSum: Int,
          onSave: @escaping (SplitDraft) -> Void, onDelete: @escaping () -> Void) {
@@ -357,7 +362,7 @@ struct SplitEditSheet: View {
         self.onDelete = onDelete
         _category = State(initialValue: initial.category)
         _amount = State(initialValue: initial.amount)
-        _memo = State(initialValue: initial.memo)
+        _itemDescription = State(initialValue: initial.description)
     }
 
     private var remainingForFull: Int { max(txMagnitude - otherSum, 0) }
@@ -383,8 +388,10 @@ struct SplitEditSheet: View {
                             .foregroundColor(DS.Ink.brand)
                     }
                 }
-                Section("내용") {
-                    TextField("메모", text: $memo, axis: .vertical)
+                // 이 칸이 보고서의 적요다 — 묶어 보낸 출금을 쪼갤 때 조각마다
+                // 받는 사람이 다르므로, 여기가 비면 그 줄은 카테고리로만 불린다.
+                Section("적요") {
+                    TextField("예: 8월 수련회 식대 (홍길동)", text: $itemDescription, axis: .vertical)
                         .lineLimit(2...4)
                 }
                 if !isNew {
@@ -406,7 +413,8 @@ struct SplitEditSheet: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(isNew ? "추가" : "완료") {
-                        onSave(SplitDraft(id: initial.id, category: category, amount: amount, memo: memo))
+                        onSave(SplitDraft(id: initial.id, category: category,
+                                          amount: amount, description: itemDescription))
                         dismiss()
                     }
                     .fontWeight(.semibold)

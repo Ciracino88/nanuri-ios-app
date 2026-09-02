@@ -174,14 +174,16 @@ class FinanceViewModel: ObservableObject {
         filteredExternal.flatMap { tx -> [ReportLineItem] in
             let splits = splits(for: tx.id)
             guard !splits.isEmpty else {
+                // 거래 자체는 적요가 은행이 준 값이라 `lineDescription` 이 없다.
+                // 그 값은 `sourceDescription` 으로 간다 (`ReportLineItem.reportLabel` 참고).
                 return [ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
                                        magnitude: abs(tx.amount), category: tx.category,
-                                       memo: tx.memo, sourceDescription: tx.description)]
+                                       lineDescription: nil, sourceDescription: tx.description)]
             }
             return splits.map {
                 ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
                                magnitude: $0.amount, category: $0.category,
-                               memo: $0.memo, sourceDescription: tx.description)
+                               lineDescription: $0.description, sourceDescription: tx.description)
             }
         }
     }
@@ -618,7 +620,7 @@ class FinanceViewModel: ObservableObject {
         keptUrls: [String],
         newImages: [UIImage],
         originalUrls: [String],
-        splits: [(category: String?, amount: Int, memo: String?)] = []
+        splits: [(category: String?, amount: Int, description: String?)] = []
     ) async {
         // 1. 새 이미지 업로드 (해상도 축소 후)
         var newlyUploaded: [String] = []
@@ -666,12 +668,14 @@ class FinanceViewModel: ObservableObject {
             } else {
                 let inserts = splits.enumerated().map { index, s in
                     TransactionSplitInsert(transactionId: id, amount: s.amount,
-                                           category: s.category, memo: s.memo, sortOrder: index)
+                                           category: s.category, description: s.description,
+                                           sortOrder: index)
                 }
                 try await supabase.from("finance_splits").insert(inserts).execute()
                 splitsByTransaction[id] = splits.enumerated().map { index, s in
                     TransactionSplit(id: UUID(), transactionId: id, amount: s.amount,
-                                     category: s.category, memo: s.memo, sortOrder: index)
+                                     category: s.category, description: s.description,
+                                     sortOrder: index)
                 }
             }
         } catch {

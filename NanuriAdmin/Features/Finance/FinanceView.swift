@@ -611,17 +611,21 @@ struct TransactionRowView: View {
         .padding(.vertical, DS.Spacing.medium)
     }
 
-    /// 금액 아래 한 줄. 거래 이름이 주고, 카테고리가 있으면 가운뎃점으로 잇는다.
+    /// 금액 아래 한 줄. 거래 이름이 주고, 분류가 있으면 가운뎃점으로 잇는다.
     private var subtitle: String {
         let name = transaction.description ?? "-"
-        guard let first = categories.first else { return name }
-        let category = categories.count > 1 ? "\(first) 외 \(categories.count - 1)" : first
-        return "\(name) · \(category)"
+        guard let first = labels.first else { return name }
+        let label = labels.count > 1 ? "\(first) 외 \(labels.count - 1)" : first
+        return "\(name) · \(label)"
     }
 
-    /// 분할이 있으면 그 카테고리들을, 없으면 거래 자체의 카테고리를 쓴다.
-    /// 같은 선물비 여러 개는 하나로 합친다.
-    private var categories: [String] {
+    /// 가운뎃점 뒤에 오는 이름들. 같은 이름 여러 개는 하나로 합친다.
+    ///
+    /// 분할이 있으면 조각마다 **적요를 먼저** 쓴다 — 묶어 보낸 출금에서 정작 알고
+    /// 싶은 건 "누구에게" 지 카테고리가 아니다. 적요를 안 적은 조각만 카테고리로
+    /// 대신한다. 분할이 없으면 거래 자체의 카테고리다 (거래의 적요는 이미 `name`
+    /// 자리에 있어서 여기 또 쓰면 같은 말이 두 번 나온다).
+    private var labels: [String] {
         if splits.isEmpty {
             let c = transaction.category?.trimmingCharacters(in: .whitespaces) ?? ""
             return c.isEmpty ? [] : [c]
@@ -629,8 +633,9 @@ struct TransactionRowView: View {
         var seen = Set<String>()
         var result: [String] = []
         for split in splits {
+            let d = split.description?.trimmingCharacters(in: .whitespaces) ?? ""
             let c = split.category?.trimmingCharacters(in: .whitespaces) ?? ""
-            let label = c.isEmpty ? "미분류" : c
+            let label = !d.isEmpty ? d : (c.isEmpty ? "미분류" : c)
             if seen.insert(label).inserted { result.append(label) }
         }
         return result
