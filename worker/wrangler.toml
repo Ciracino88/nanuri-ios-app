@@ -2,18 +2,27 @@ name = "nanuri-form"
 main = "src/index.js"
 compatibility_date = "2026-08-13"
 
-# 영수증 업로드를 위임할 기존 R2 워커.
+# 영수증 이미지 버킷.
 #
-# 공개 URL로 fetch 하면 안 된다. 두 워커가 같은 workers.dev 서브도메인에 있어서
-# 요청이 자기 자신으로 되돌아오고, 이 워커에는 /upload 라우트가 없으므로 404가 난다.
-# 서비스 바인딩은 공용 인터넷도 DNS도 타지 않고 워커끼리 직접 연결하므로,
-# 계정 서브도메인을 바꿔도 영향받지 않는다.
-[[services]]
-binding = "RECEIPT_WORKER"
-service = "nanuri-bill"
+# 예전에는 `nanuri-bill` 이라는 별도 워커가 이 버킷을 들고 있었고 여기서는 서비스
+# 바인딩으로 넘겼다. 그 워커는 대시보드에서 만든 것이라 **소스가 어디에도 없어서**
+# 고칠 수도 되돌릴 수도 없었다. 버킷을 직접 붙이고 코드를 가져왔다 (`src/receipts.js`).
+#
+# ⚠️ 이 버킷은 `nanuri-bill` 이 쓰던 것과 **같은 것**이어야 한다. 다른 버킷을 적으면
+#    이미 올라간 영수증을 못 지운다 (새로 올리는 건 되는데 옛 URL 의 키가 여기 없다).
+#    계정에 R2 버킷이 둘 있는데 `church-files` 는 공개 접근이 꺼져 있어 영수증을
+#    서빙할 수 없다. 영수증은 `nanuri-bills` 다. (SETUP.md 9번)
+[[r2_buckets]]
+binding = "RECEIPT_BUCKET"
+bucket_name = "nanuri-bills"
 
 [vars]
 SUPABASE_URL = "https://ciszaukmnglepvqpulya.supabase.co"
+
+# 영수증 버킷의 공개 도메인. 저장된 영수증 URL 이 전부 이걸로 시작하고,
+# 삭제할 때 이 앞부분을 떼어 키를 얻는다. **바꾸면 옛 영수증을 못 지운다.**
+# 비밀이 아니다 — 이 주소는 앱이 이미지 URL 로 들고 다닌다.
+R2_PUBLIC_URL = "https://pub-1ff72bbd269d4c6ebe9c8f4dcbce52dc.r2.dev"
 
 # APNs 토픽 = 앱 번들 ID
 APNS_TOPIC = "com.ciracino88.NanuriAdmin"

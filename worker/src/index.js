@@ -5,15 +5,22 @@
 //   POST /bill/receipt/discard  올렸지만 접수까지 가지 않은 영수증을 지운다
 //   POST /bill/submit   검증 → bills INSERT → 관리자에게 푸시
 //
+//   POST /receipt/upload   앱이 영수증을 올린다 (청구서 삭제 복구용 · 재정 영수증)
+//   POST /receipt/delete   앱이 영수증을 지운다
+//
 // 폼은 공개 URL이다. 주소를 아는 사람은 누구나 청구를 넣을 수 있고,
 // 발신자를 식별할 방법이 없다. 그래서 이름만 받고, 계좌는 관리자가 앱의
 // 계좌부(payees)에 등록해 둔 값을 이름으로 대조해서 쓴다.
 //
-// 영수증 이미지는 청구서·재정에서 이미 쓰고 있는 기존 R2 워커(/upload)에 위임한다.
-// 저장되는 URL 형식이 앱이 아는 형식과 같아야 하므로 여기서 직접 R2를 다루지 않는다.
+// 영수증 이미지는 R2에 직접 넣는다 (`receipts.js`). 예전에는 `nanuri-bill` 이라는
+// 별도 워커에 서비스 바인딩으로 넘겼는데, 그 워커는 소스가 어디에도 없어서 고칠 수도
+// 되돌릴 수도 없었다. 버킷을 여기 붙이고 코드를 가져왔다.
+//
+// `/receipt/*` 는 앱이 부르고 `/bill/*` 은 공개 폼이 부른다.
 
 import { sendBillNotification } from './apns.js';
 import { renderForm } from './form.js';
+import { putReceipt, deleteReceiptByUrl } from './receipts.js';
 
 const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 
@@ -73,41 +80,12 @@ async function fetchDeviceTokens(env) {
 // ---------------------------------------------------------------------------
 
 async function uploadReceipt(env, file) {
-    const body = new FormData();
-    body.append('folder', 'receipts');
-    body.append('file', file, file.name || 'receipt.jpg');
-
-    // 서비스 바인딩으로 부른다. 공개 URL로 fetch 하면 같은 workers.dev 서브도메인이라
-    // 요청이 이 워커로 되돌아와서 404가 난다. (호스트명은 바인딩에선 의미 없고 경로만 쓴다)
-    const response = await env.RECEIPT_WORKER.fetch(
-        'https://receipt-worker/upload',
-        { method: 'POST', body },
-    );
-    if (!response.ok) throw new Error(`영수증 업로드 실패: ${response.status}`);
-
-    // 기존 워커는 JSON({url|imageUrl|receiptUrl}) 또는 URL 문자열을 돌려준다. (앱과 동일한 처리)
-    const text = await response.text();
-    try {
-        const parsed = JSON.parse(text);
-        for (const key of ['url', 'imageUrl', 'receiptUrl']) {
-            if (typeof parsed[key] === 'string') return parsed[key];
-        }
-    } catch {
-        // JSON이 아니면 본문이 곧 URL
-    }
-    const trimmed = text.trim();
-    if (trimmed.startsWith('http')) return trimmed;
-    throw new Error('영수증 업로드 응답에서 URL을 찾지 못했습니다.');
+    return putReceipt(env, file, 'receipts');
 }
 
-/** 올려둔 영수증을 R2에서 지운다. (앱의 ReceiptStorage.delete 와 같은 라우트) */
+/** 올려둔 영수증을 R2에서 지운다. */
 async function deleteReceipt(env, receiptUrl) {
-    const response = await env.RECEIPT_WORKER.fetch('https://receipt-worker/delete', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ receiptUrl }),
-    });
-    if (!response.ok) throw new Error(`영수증 삭제 실패: ${response.status}`);
+    await deleteReceiptByUrl(env, receiptUrl);
 }
 
 /** 이 URL이 이미 접수된 청구서에 붙어 있는지. 확정된 영수증은 지우면 안 된다. */
@@ -358,6 +336,46 @@ async function handleReceiptDiscard(request, env) {
     return new Response(null, { status: 204 });
 }
 
+// ---------------------------------------------------------------------------
+// 앱이 부르는 영수증 라우트
+//
+// **인증이 없다.** 예전 `nanuri-bill` 워커가 그랬고 그대로 옮겨 온 것이라, 지금은
+// 영수증 URL 을 아는 사람이 그 영수증을 지울 수 있다. 공개 폼이 쓰는 `/bill/*` 는
+// HMAC 서명(`verifyReceiptUrl`)으로 막혀 있지만 이쪽은 앱 전용이라 그게 없다.
+// **관리자 인증을 붙일 때 여기도 같이 막을 것.**
+//
+// CORS 헤더는 안 준다. 부르는 건 앱의 URLSession 뿐이라 브라우저 프리플라이트가
+// 없다. 공개 폼은 이 라우트를 안 쓰고 `/bill/receipt` 로 간다.
+// ---------------------------------------------------------------------------
+
+async function handleAppReceiptUpload(request, env) {
+    try {
+        const form = await request.formData();
+        const file = form.get('file');
+        if (!file || typeof file === 'string') return json({ error: '파일 없음' }, 400);
+
+        const folder = form.get('folder');
+        const url = await putReceipt(env, file, typeof folder === 'string' && folder ? folder : 'receipts');
+        return json({ url });
+    } catch (error) {
+        console.error('앱 영수증 업로드 실패', error);
+        return json({ error: '업로드에 실패했습니다.' }, 500);
+    }
+}
+
+async function handleAppReceiptDelete(request, env) {
+    try {
+        const { receiptUrl } = await request.json();
+        // 우리 버킷 URL 이 아니면 지운 것이 없다. 그래도 앱은 할 일이 없으므로
+        // 실패로 만들지 않는다 — 앱은 이 응답을 보지 않는다.
+        await deleteReceiptByUrl(env, receiptUrl);
+        return json({ success: true });
+    } catch (error) {
+        console.error('앱 영수증 삭제 실패', error);
+        return json({ error: '삭제에 실패했습니다.' }, 500);
+    }
+}
+
 export default {
     async fetch(request, env, ctx) {
         const { pathname } = new URL(request.url);
@@ -374,6 +392,12 @@ export default {
         }
         if (method === 'POST' && pathname === '/bill/submit') {
             return handleSubmit(request, env, ctx);
+        }
+        if (method === 'POST' && pathname === '/receipt/upload') {
+            return handleAppReceiptUpload(request, env);
+        }
+        if (method === 'POST' && pathname === '/receipt/delete') {
+            return handleAppReceiptDelete(request, env);
         }
 
         return new Response('Not Found', { status: 404 });
