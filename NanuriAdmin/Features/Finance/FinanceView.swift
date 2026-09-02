@@ -492,7 +492,10 @@ struct FinanceView: View {
     }
 
     /// 당겨서 새로고침. 헤더에 새로고침 버튼이 없다 (DESIGN.md 1번).
+    /// 통장도 같이 다시 받는다. 통장이 안 받아졌으면 개시잔액이 0이 되어 잔액과
+    /// 전월이월이 통째로 틀리는데, 그때 사람이 하는 동작이 당겨서 새로고침이다.
     private func reload() async {
+        await viewModel.fetchAccounts()
         await viewModel.fetchTransactions()
         viewModel.loadSavedStatements()
     }

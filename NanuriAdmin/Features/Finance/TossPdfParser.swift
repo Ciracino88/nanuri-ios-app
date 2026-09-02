@@ -1,5 +1,18 @@
 import Foundation
 
+/// 거래내역서에서 읽어낸 한 줄. **DB 에 넣을 것이 아니라 통장에서 읽어낸 것**이다.
+///
+/// `balance` 를 그대로 들고 있는 게 중요하다. 앱은 잔액을 저장하지 않고 유도하므로
+/// **은행이 계산한 잔액은 여기서만 산다.** 장부와 통장을 대조할 때 기준이 되는 값이라
+/// 파싱 결과에서 버리면 안 된다.
+struct ParsedStatementLine {
+    let datetime: Date
+    let type: String
+    let amount: Int
+    let balance: Int
+    let description: String?
+}
+
 /// 토스뱅크 거래내역서 PDF에서 추출한 텍스트를 거래 목록으로 파싱한다.
 /// 상태가 없는 순수 로직 — 텍스트를 넣으면 거래 배열이 나온다 (단위 테스트 용이).
 enum TossPdfParser {
@@ -13,7 +26,7 @@ enum TossPdfParser {
     private static let headerPattern =
         #"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+([가-힣A-Za-z]+)\s+(-?[\d,]+)\s+([\d,]+)\s*(.*)$"#
 
-    static func parse(_ text: String) -> [BankTransactionInsert] {
+    static func parse(_ text: String) -> [ParsedStatementLine] {
         // 물리적 줄 단위로 처리한다.
         // - 날짜로 시작하는 줄 = 새 거래 (줄 안의 공백은 정당한 공백이므로 보존)
         // - 날짜로 시작하지 않는 줄 = 앞 거래 description의 줄바꿈 연속 → 공백 없이 이어붙임
@@ -27,13 +40,13 @@ enum TossPdfParser {
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "ko_KR")
 
-        var result: [BankTransactionInsert] = []
+        var result: [ParsedStatementLine] = []
         var pending: (datetime: Date, type: String, amount: Int, balance: Int, desc: String)?
 
         func flush() {
             guard let p = pending else { return }
             let cleaned = p.desc.trimmingCharacters(in: .whitespaces)
-            result.append(BankTransactionInsert(
+            result.append(ParsedStatementLine(
                 datetime: p.datetime,
                 type: p.type,
                 amount: p.amount,
