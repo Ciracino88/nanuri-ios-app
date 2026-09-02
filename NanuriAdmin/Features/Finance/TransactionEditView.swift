@@ -32,6 +32,22 @@ struct TransactionEditView: View {
         })
     }
 
+    private func accountName(_ id: UUID) -> String {
+        viewModel.accounts.first { $0.id == id }?.name ?? "알 수 없음"
+    }
+
+    /// 어느 통장의 거래인가. **내부 이체면 방향까지 보여준다** ("농협 → 모임").
+    ///
+    /// `amount` 는 `accountId` 기준이라, 음수면 거기서 나가 상대 통장으로 들어간 것이다.
+    private var accountLabel: String {
+        guard let counter = transaction.counterAccountId else {
+            return accountName(transaction.accountId)
+        }
+        return transaction.amount < 0
+            ? "\(accountName(transaction.accountId)) → \(accountName(counter))"
+            : "\(accountName(counter)) → \(accountName(transaction.accountId))"
+    }
+
     private var receiptCount: Int { keptUrls.count + pendingImages.count }
     private var txMagnitude: Int { abs(transaction.amount) }
     private var splitSum: Int { splitDrafts.reduce(0) { $0 + $1.amount } }
@@ -44,9 +60,10 @@ struct TransactionEditView: View {
                     LabeledContent("내용", value: transaction.description ?? "-")
                     LabeledContent("금액", value: "\(transaction.amount.formatted())원")
                     LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
-                    // 목록 행에서 내려온 값이다. 훑을 때 읽는 수가 아니라
-                    // 한 건을 들여다볼 때 확인하는 수라 여기가 제자리다.
-                    LabeledContent("거래 후 잔액", value: "\(transaction.balance.formatted())원")
+                    // 예전에는 "거래 후 잔액" 이 여기 있었다. 통장이 둘이 되면서 그 값이
+                    // 어느 통장의 잔액도 아니게 되어 없앴다. 대신 **어느 통장인지**를
+                    // 보여준다 — 한 건을 들여다볼 때 정작 알아야 하는 건 그쪽이다.
+                    LabeledContent("통장", value: accountLabel)
                 }
                 Section("분류") {
                     TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)

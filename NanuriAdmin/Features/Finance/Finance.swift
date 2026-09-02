@@ -29,13 +29,43 @@ struct LedgerInsert: Encodable {
     let type = Ledger.monthlyType
 }
 
+/// 통장. **장부는 하나인데 통장은 둘이다.**
+///
+/// 헌금을 받는 교회법인 농협통장과, 청구를 실시간으로 처리하는 토스 모임통장.
+/// 매달 농협에서 모임으로 예산을 넘기고 월말 결산 때 남은 잔액을 돌려보낸다.
+///
+/// 이 표가 있는 이유는 **개시잔액이 살 곳**이 필요해서다. 거래마다 잔액을 저장하지
+/// 않고 유도하므로 출발점이 어딘가에 있어야 한다.
+struct Account: Identifiable, Codable {
+    var id: UUID
+    let ledgerId: UUID
+    let name: String
+    /// 장부가 이 통장을 적기 시작하는 시점에 이미 들어 있던 돈.
+    let openingBalance: Int
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case ledgerId = "ledger_id"
+        case openingBalance = "opening_balance"
+        case sortOrder = "sort_order"
+    }
+}
+
 struct BankTransaction: Identifiable, Codable {
     var id: UUID
     var ledgerId: UUID?
+    /// 이 거래가 일어난 통장.
+    var accountId: UUID
+    /// 내부 이체일 때 **상대 통장**. 비어 있으면 실제 수입·지출이다.
+    ///
+    /// 농협에서 모임으로 돈을 옮기는 건 **한 사건인데 통장 둘에 걸친다.** 두 줄로
+    /// 적으면 그 둘이 같은 사건이라는 걸 따로 짝지어야 하고, 짝이 깨지면 조용히
+    /// 틀어진다. 한 줄이 양쪽을 알면 그런 일이 없다.
+    var counterAccountId: UUID?
     let datetime: Date
     let type: String
     let amount: Int
-    let balance: Int
     let description: String?
     var category: String?
     var memo: String?
@@ -43,12 +73,22 @@ struct BankTransaction: Identifiable, Codable {
     let createdAt: Date?
 
     var isDeposit: Bool { amount > 0 }
+
+    /// 통장 사이를 옮긴 돈인가. **합계·보고서·그래프에서 빼야 하는 거래다** —
+    /// 장부 전체로 보면 나간 돈도 들어온 돈도 아니다.
+    ///
+    /// 안 빼면 그 달이 부풀어 보인다. 2026-08 이 실제로 그랬다: 장부상 지출
+    /// 4,974,200 중 4,000,000 이 내부 이체라 진짜 지출(974,200)의 5.1배로 보였다.
+    var isInternalTransfer: Bool { counterAccountId != nil }
+
     /// nil 안전 접근용.
     var receipts: [String] { receiptUrls ?? [] }
 
     enum CodingKeys: String, CodingKey {
-        case id, datetime, type, amount, balance, description, category, memo
+        case id, datetime, type, amount, description, category, memo
         case ledgerId = "ledger_id"
+        case accountId = "account_id"
+        case counterAccountId = "counter_account_id"
         case receiptUrls = "receipt_urls"
         case createdAt = "created_at"
     }
@@ -56,15 +96,18 @@ struct BankTransaction: Identifiable, Codable {
 
 struct BankTransactionInsert: Encodable {
     var ledgerId: UUID? = nil
+    var accountId: UUID? = nil
+    var counterAccountId: UUID? = nil
     let datetime: Date
     let type: String
     let amount: Int
-    let balance: Int
     let description: String?
 
     enum CodingKeys: String, CodingKey {
-        case datetime, type, amount, balance, description
+        case datetime, type, amount, description
         case ledgerId = "ledger_id"
+        case accountId = "account_id"
+        case counterAccountId = "counter_account_id"
     }
 }
 

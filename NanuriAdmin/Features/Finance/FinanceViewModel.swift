@@ -30,16 +30,53 @@ class FinanceViewModel: ObservableObject {
     /// 이걸 안 두면 받아 오는 사이에 "장부가 없어요" 화면이 깜빡 스친다.
     @Published private(set) var ledgersLoaded = false
     @Published var currentLedger: Ledger?
+    /// 이 장부의 통장들 (농협·모임). 잔액을 유도하는 출발점이라 거래보다 먼저 있어야 한다.
+    @Published var accounts: [Account] = []
 
-    /// 지금 보고 있는 달의 거래.
+    /// 지금 보고 있는 달의 거래 **전부**. 목록이 쓴다 — 내부 이체도 보여야 한다.
+    /// 400만원을 옮긴 사실이 화면에서 사라지면 그게 더 이상하다.
     var filtered: [BankTransaction] {
         transactions.filter {
             $0.datetime >= startDate && $0.datetime <= endDate
         }
     }
 
-    var deposits: [BankTransaction] { filtered.filter { $0.isDeposit } }
-    var withdrawals: [BankTransaction] { filtered.filter { !$0.isDeposit } }
+    /// 그중 **실제 수입·지출만.** 합계·보고서·그래프는 전부 이걸 쓴다.
+    ///
+    /// 통장 사이를 옮긴 돈은 장부 전체로 보면 나간 것도 들어온 것도 아니다.
+    /// 안 빼면 그 달이 부풀어 보인다 (`BankTransaction.isInternalTransfer` 참고).
+    var filteredExternal: [BankTransaction] { filtered.filter { !$0.isInternalTransfer } }
+
+    var deposits: [BankTransaction] { filteredExternal.filter { $0.isDeposit } }
+    var withdrawals: [BankTransaction] { filteredExternal.filter { !$0.isDeposit } }
+
+    // MARK: - 잔액은 저장하지 않고 유도한다
+
+    /// 한 통장의 잔액. 개시잔액에서 시작해 그 통장을 지나간 돈을 전부 더한다.
+    ///
+    /// **내부 이체는 한 줄이 양쪽 통장에 걸친다.** `accountId` 쪽은 적힌 부호 그대로,
+    /// `counterAccountId` 쪽은 **부호를 뒤집어** 더해야 두 통장 잔액이 모두 맞는다.
+    /// (농협에서 −400만이면 모임에서는 +400만이다)
+    func balance(of account: Account, asOf date: Date? = nil) -> Int {
+        var sum = account.openingBalance
+        for tx in transactions {
+            if let date, tx.datetime > date { continue }
+            if tx.accountId == account.id {
+                sum += tx.amount
+            } else if tx.counterAccountId == account.id {
+                sum -= tx.amount
+            }
+        }
+        return sum
+    }
+
+    /// 총 재정 = 모든 통장의 잔액 합.
+    ///
+    /// 내부 이체는 한쪽에서 빠지고 다른 쪽에 더해져 **저절로 상쇄된다.**
+    /// 그래서 따로 걸러낼 필요가 없다.
+    func totalBalance(asOf date: Date? = nil) -> Int {
+        accounts.reduce(0) { $0 + balance(of: $1, asOf: date) }
+    }
 
     // MARK: - 달 넘기기
 
@@ -110,8 +147,9 @@ class FinanceViewModel: ObservableObject {
     }
 
     /// 보고서용 항목: 분할이 있으면 분할들, 없으면 거래 자체.
+    /// **내부 이체는 여기 안 들어온다** (`filteredExternal`).
     var reportItems: [ReportLineItem] {
-        filtered.flatMap { tx -> [ReportLineItem] in
+        filteredExternal.flatMap { tx -> [ReportLineItem] in
             let splits = splits(for: tx.id)
             guard !splits.isEmpty else {
                 return [ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
@@ -126,10 +164,21 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    /// 기간 첫 거래 직전 잔액 (월별 보고서 전월이월).
+    /// 이 달이 시작될 때의 총 잔액 (= 월별 보고서의 전월이월).
+    ///
+    /// 예전에는 `첫거래.balance − 첫거래.amount` 로 구했다. 거래마다 은행이 계산한
+    /// 잔액이 박혀 있던 시절의 방법인데, **두 통장을 한 장부에 적으면서 그 칸이
+    /// 어느 통장의 잔액도 아니게 되어** 없앴다.
+    ///
+    /// 지금은 **통장 개시잔액 합 + 그 달 이전의 실제 수입·지출**로 유도한다.
+    /// 내부 이체는 더하지 않는다 — 한 통장에서 나가 다른 통장으로 들어가므로
+    /// 장부 전체로는 0이고, 더하면 한쪽만 세어 이월액이 틀어진다.
     var openingBalance: Int {
-        let sorted = filtered.sorted { $0.datetime < $1.datetime }
-        return sorted.first.map { $0.balance - $0.amount } ?? 0
+        let opening = accounts.reduce(0) { $0 + $1.openingBalance }
+        let before = transactions
+            .filter { $0.datetime < startDate && !$0.isInternalTransfer }
+            .reduce(0) { $0 + $1.amount }
+        return opening + before
     }
 
     /// 지금까지 입력된 카테고리를 사용 빈도순으로 반환 (편집 시 추천용). 분할 카테고리도 포함.
@@ -159,7 +208,8 @@ class FinanceViewModel: ObservableObject {
         let start = cal.startOfMonth(previous)
         let end = cal.endOfMonth(previous)
         let items = transactions.filter {
-            $0.datetime >= start && $0.datetime <= end && !$0.isDeposit
+            $0.datetime >= start && $0.datetime <= end
+                && !$0.isDeposit && !$0.isInternalTransfer
         }
         guard !items.isEmpty else { return nil }
         return items.reduce(0) { $0 + abs($1.amount) }
@@ -248,7 +298,8 @@ class FinanceViewModel: ObservableObject {
         let start = cal.startOfMonth(month)
         let end = cal.endOfMonth(month)
         let items = transactions.filter {
-            $0.datetime >= start && $0.datetime <= end && !$0.isDeposit
+            $0.datetime >= start && $0.datetime <= end
+                && !$0.isDeposit && !$0.isInternalTransfer
         }
         guard !items.isEmpty else { return [] }
 
@@ -269,7 +320,7 @@ class FinanceViewModel: ObservableObject {
     var dailyNet: [Date: Int] {
         let cal = Calendar.current
         var result: [Date: Int] = [:]
-        for tx in filtered {
+        for tx in filteredExternal {
             let day = cal.startOfDay(for: tx.datetime)
             result[day, default: 0] += tx.isDeposit ? tx.amount : -abs(tx.amount)
         }
@@ -327,11 +378,39 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    /// 장부를 선택하고 그 장부의 거래를 불러온다.
+    /// 장부를 선택하고 그 장부의 통장과 거래를 불러온다.
+    ///
+    /// **통장을 거래보다 먼저 받는다.** 잔액이 저장값이 아니라 개시잔액에서 유도되는
+    /// 값이라, 통장이 없으면 거래가 다 있어도 잔액이 전부 0에서 시작한 것처럼 보인다.
     func selectLedger(_ ledger: Ledger) async {
         currentLedger = ledger
         needsInitialMonth = true   // 장부가 바뀌면 그 장부의 마지막 달로 다시 맞춘다
+        await fetchAccounts()
         await fetchTransactions()
+    }
+
+    func fetchAccounts() async {
+        guard let ledgerId = currentLedger?.id else {
+            accounts = []
+            return
+        }
+        do {
+            accounts = try await supabase
+                .from("finance_accounts")
+                .select()
+                .eq("ledger_id", value: ledgerId)
+                .order("sort_order", ascending: true)
+                .execute()
+                .value
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("통장 조회 실패: \(error.localizedDescription)")
+        }
+    }
+
+    /// 이름으로 통장 찾기. 통장이 둘뿐이라 이름이 곧 식별자 노릇을 한다.
+    func account(named name: String) -> Account? {
+        accounts.first { $0.name == name }
     }
 
     // MARK: - 내보내기
@@ -456,21 +535,43 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    private func saveTransactions(_ items: [BankTransactionInsert]) async {
+    /// 파싱한 거래내역서를 거래로 저장한다.
+    ///
+    /// **거래내역서는 모임통장 것이다** — 토스뱅크에서 뽑는 것이고, 농협은 종이
+    /// 거래내역을 보고 손으로 적는다. 그래서 모임 통장에 붙인다.
+    ///
+    /// 이 경로는 앞으로 **대조**로 바뀔 자리다. 지금처럼 거래를 만들어 넣으면 앱이
+    /// 통장을 그대로 베끼는 셈이라 통장과 대조해 봐야 늘 같다 — 검증이 아니라 복사다.
+    /// 사람이 적은 장부와 통장이 따로 있어야 어긋난 곳이 드러난다.
+    /// (`ParsedStatementLine` 이 은행 잔액을 들고 있는 게 그때 쓰인다)
+    private func saveTransactions(_ items: [ParsedStatementLine]) async {
         guard let ledgerId = currentLedger?.id else {
             error = "장부를 먼저 선택해주세요."
             isLoading = false
             return
         }
-        let scoped = items.map { item -> BankTransactionInsert in
-            var copy = item
-            copy.ledgerId = ledgerId
-            return copy
+        guard let account = account(named: "모임") else {
+            error = "모임통장을 찾을 수 없어요."
+            isLoading = false
+            return
+        }
+        let rows = items.map {
+            BankTransactionInsert(
+                ledgerId: ledgerId,
+                accountId: account.id,
+                datetime: $0.datetime,
+                type: $0.type,
+                amount: $0.amount,
+                description: $0.description
+            )
         }
         do {
+            // upsert 가 아니라 insert 다. 중복을 막던 `unique (ledger_id, datetime,
+            // amount)` 제약을 뺐다 — 그건 PDF 재파싱용이었고, 수기 입력에서는 같은 날
+            // 같은 금액 거래 둘(8월 모임통장의 볼링장 결제 같은)이 서로를 막았다.
             try await supabase
                 .from("finance_transactions")
-                .upsert(scoped, onConflict: "ledger_id,datetime,amount")
+                .insert(rows)
                 .execute()
             await fetchTransactions()
         } catch {
