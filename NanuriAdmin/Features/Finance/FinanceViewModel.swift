@@ -78,6 +78,28 @@ class FinanceViewModel: ObservableObject {
         accounts.reduce(0) { $0 + balance(of: $1, asOf: date) }
     }
 
+    /// 이 달에 **통장 사이를 오간 돈.** 보낸 통장 → 받은 통장 방향별로 합친다.
+    ///
+    /// `filtered` 에서 내부 이체만 골라 낸 것이라 합계·보고서가 쓰는
+    /// `filteredExternal` 의 **여집합**이다. 통장 화면만 이걸 본다 — 통장별 잔액과
+    /// 그 달 합계가 왜 다른지를 설명하는 게 이 수의 유일한 쓸모다.
+    ///
+    /// 부호가 방향을 정한다. `amount` 가 음수면 적힌 통장에서 나간 것이고,
+    /// 양수면 상대 통장에서 들어온 것이다.
+    var internalTransferFlows: [AccountFlow] {
+        var sums: [AccountFlow.Direction: Int] = [:]
+        for tx in filtered {
+            guard let counter = tx.counterAccountId else { continue }
+            let direction = tx.amount < 0
+                ? AccountFlow.Direction(from: tx.accountId, to: counter)
+                : AccountFlow.Direction(from: counter, to: tx.accountId)
+            sums[direction, default: 0] += abs(tx.amount)
+        }
+        return sums
+            .map { AccountFlow(direction: $0.key, amount: $0.value) }
+            .sorted { $0.amount > $1.amount }
+    }
+
     // MARK: - 달 넘기기
 
     /// 넘겨 볼 수 있는 달들 (과거 → 현재). 거래가 한 건도 없는 중간 달도 포함한다 —
