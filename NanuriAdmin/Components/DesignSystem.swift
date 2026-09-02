@@ -94,8 +94,19 @@ enum DS {
         static let tertiary = Color.adaptive(light: Ramp.grey600, dark: Ramp.grey500)
         static let placeholder = Color.adaptive(light: Ramp.grey400, dark: Ramp.grey600)
         static let disabled = Color.adaptive(light: Ramp.grey400, dark: Ramp.grey600)
-        /// 채운 버튼 위의 글자.
-        static let inverse = Color.adaptive(light: Ramp.white, dark: Ramp.white)
+        /// **`Ink.primary` 로 채운 자리** 위의 글자 (선택된 칩, 날짜 셀렉터의 선택 칸).
+        ///
+        /// 이름 그대로 `primary` 의 반대라서 **모드를 따라 같이 뒤집힌다.** 어두운
+        /// 화면에서 `primary` 가 흰색에 가까워지므로 여기는 검정 쪽으로 가야 한다.
+        /// 예전에는 양쪽 다 흰색이어서 **다크 모드의 선택된 칩이 흰 바탕에 흰
+        /// 글자로 사라졌다.**
+        static let inverse = Color.adaptive(light: Ramp.white, dark: Ramp.grey900)
+        /// **유채색으로 채운 자리** 위의 글자 (파랑 주요 버튼, 빨강 파괴적 버튼).
+        ///
+        /// 이쪽은 두 모드 모두 흰색이다 — 파랑·빨강 채움은 무채색 사다리와 달리
+        /// 어두운 화면에서 밝기가 뒤집히지 않는다. `inverse` 와 갈라 둔 이유가
+        /// 이것이고, 둘을 하나로 합치면 한쪽이 반드시 안 읽힌다.
+        static let onAccent = Color.adaptive(light: Ramp.white, dark: Ramp.white)
         static let brand = Color.adaptive(light: Ramp.blue500, dark: 0x5A9CF8)
         static let danger = Color.adaptive(light: Ramp.red500, dark: 0xF56273)
     }

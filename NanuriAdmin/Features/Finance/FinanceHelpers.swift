@@ -100,7 +100,7 @@ struct FinanceLedgerGateView: View {
                         .padding(.horizontal, DS.Spacing.section)
                         .frame(height: DS.Size.buttonM)
                         .background(DS.Palette.accent)
-                        .foregroundColor(DS.Ink.inverse)
+                        .foregroundColor(DS.Ink.onAccent)
                         .clipShape(Capsule())
                 }
             }
