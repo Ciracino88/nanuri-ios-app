@@ -174,11 +174,18 @@ class FinanceViewModel: ObservableObject {
         filteredExternal.flatMap { tx -> [ReportLineItem] in
             let splits = splits(for: tx.id)
             guard !splits.isEmpty else {
-                // 거래 자체는 적요가 은행이 준 값이라 `lineDescription` 이 없다.
-                // 그 값은 `sourceDescription` 으로 간다 (`ReportLineItem.reportLabel` 참고).
+                // **손으로 넣은 거래의 적요는 사람이 쓴 값이다.** 그래서 분할 조각과
+                // 같은 자리(`lineDescription`)에 놓아 이름으로도 쓰이고 같은 날 같은
+                // 적요끼리 합쳐지기도 한다 — ATM 에서 세 번 나눠 뽑은 18만원이
+                // 장부에서 한 줄이 되는 게 그것이다.
+                //
+                // 거래내역서에서 온 거래는 다르다. 그 적요는 은행이 준 값
+                // (`이충성`·`우성볼링장`)이라 줄마다 달라서, 이름으로 쓰면 묶음이
+                // 통째로 무너진다. `sourceDescription` 에만 둔다.
+                let written = tx.source == .manual ? tx.description : nil
                 return [ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
                                        magnitude: abs(tx.amount), category: tx.category,
-                                       lineDescription: nil, sourceDescription: tx.description)]
+                                       lineDescription: written, sourceDescription: tx.description)]
             }
             return splits.map {
                 ReportLineItem(datetime: tx.datetime, isDeposit: tx.isDeposit,
@@ -526,84 +533,112 @@ class FinanceViewModel: ObservableObject {
         loadSavedStatements()
     }
 
-    /// 보관된 거래내역서를 다시 파싱해 거래내역을 갱신한다 (원본은 이미 로컬에 있으므로 재보관하지 않음).
-    func reparseStatement(_ statement: StatementFile) {
-        isLoading = true
-        error = nil
-        processPDF(at: statement.url)
+
+    // MARK: - 거래내역서 불러오기 (청구 매칭)
+
+    /// 승인된 청구를 전부 받아 묶음으로 만든다.
+    ///
+    /// 기간을 안 자른다 — 청구는 한 달에 스무 건 남짓이라 다 받아도 가볍고,
+    /// 자르면 **승인이 다음 달로 넘어간 건**(체크카드는 26시간까지 벌어진다)을
+    /// 놓친다.
+    func fetchBillGroups() async -> [BillGroup] {
+        do {
+            let bills: [Bill] = try await supabase
+                .from("bills")
+                .select()
+                .eq("status", value: "approved")
+                .execute()
+                .value
+            return StatementMatcher.groups(from: bills)
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("청구 조회 실패: \(error.localizedDescription)")
+            return []
+        }
     }
 
-    /// PDF에서 텍스트를 추출·파싱해 Supabase에 저장한다.
-    private func processPDF(at url: URL) {
-        guard let pdf = PDFDocument(url: url) else {
+    /// 거래내역서를 파싱하고 청구와 맞춰 본다. **아직 아무것도 저장하지 않는다** —
+    /// 사람이 확인하고 고칠 자리를 준 뒤에 넣는다.
+    func prepareStatementImport(from statement: StatementFile) async -> [StatementMatch] {
+        guard let pdf = PDFDocument(url: statement.url) else {
             error = "PDF 파일을 열 수 없습니다."
-            isLoading = false
-            return
+            return []
         }
-
         var fullText = ""
         for i in 0..<pdf.pageCount {
-            guard let page = pdf.page(at: i) else { continue }
-            fullText += (page.string ?? "") + "\n"
+            fullText += (pdf.page(at: i)?.string ?? "") + "\n"
         }
-
-        let parsed = TossPdfParser.parse(fullText)
-        if parsed.isEmpty {
+        let lines = TossPdfParser.parse(fullText)
+        guard !lines.isEmpty else {
             error = "거래내역을 파싱할 수 없습니다."
-            isLoading = false
-            return
+            return []
         }
-
-        Task {
-            await saveTransactions(parsed)
-        }
+        let groups = await fetchBillGroups()
+        return StatementMatcher.matches(lines: lines, groups: groups, existing: transactions)
     }
 
-    /// 파싱한 거래내역서를 거래로 저장한다.
+    /// 확인이 끝난 것을 장부에 넣는다.
     ///
-    /// **거래내역서는 모임통장 것이다** — 토스뱅크에서 뽑는 것이고, 농협은 종이
-    /// 거래내역을 보고 손으로 적는다. 그래서 모임 통장에 붙인다.
+    /// 거래는 **통장에 찍힌 그대로** 넣고(적요도 은행 값 그대로), 장부에 적힐 줄은
+    /// **분할**로 만든다. 청구가 하나뿐일 때도 분할을 만든다 — 그래야 은행 적요를
+    /// 덮어쓰지 않고 장부 줄에 제 이름을 줄 수 있다.
     ///
-    /// 이 경로는 앞으로 **대조**로 바뀔 자리다. 지금처럼 거래를 만들어 넣으면 앱이
-    /// 통장을 그대로 베끼는 셈이라 통장과 대조해 봐야 늘 같다 — 검증이 아니라 복사다.
-    /// 사람이 적은 장부와 통장이 따로 있어야 어긋난 곳이 드러난다.
-    /// (`ParsedStatementLine` 이 은행 잔액을 들고 있는 게 그때 쓰인다)
-    private func saveTransactions(_ items: [ParsedStatementLine]) async {
+    /// 거래를 한 번에 넣고 돌려받은 행을 **금액·시각으로 되찾아** 분할을 붙인다.
+    /// 돌아오는 순서를 믿지 않는다.
+    func importStatement(_ matches: [StatementMatch], into account: Account) async {
         guard let ledgerId = currentLedger?.id else {
             error = "장부를 먼저 선택해주세요."
-            isLoading = false
             return
         }
-        guard let account = account(named: "모임") else {
-            error = "모임통장을 찾을 수 없어요."
-            isLoading = false
-            return
-        }
-        let rows = items.map {
+        let todo = matches.filter { !$0.alreadyImported }
+        guard !todo.isEmpty else { return }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        let rows = todo.map { match in
             BankTransactionInsert(
                 ledgerId: ledgerId,
                 accountId: account.id,
-                datetime: $0.datetime,
-                type: $0.type,
-                amount: $0.amount,
-                description: $0.description,
-                // 통장에 찍힌 기록이다. 이 표시가 금액·일시·통장을 편집에서 잠근다.
+                datetime: match.line.datetime,
+                type: match.line.type,
+                amount: match.line.amount,
+                description: match.line.description,
                 source: .statement
             )
         }
         do {
-            // upsert 가 아니라 insert 다. 중복을 막던 `unique (ledger_id, datetime,
-            // amount)` 제약을 뺐다 — 그건 PDF 재파싱용이었고, 수기 입력에서는 같은 날
-            // 같은 금액 거래 둘(8월 모임통장의 볼링장 결제 같은)이 서로를 막았다.
-            try await supabase
+            let created: [BankTransaction] = try await supabase
                 .from("finance_transactions")
                 .insert(rows)
+                .select()
                 .execute()
+                .value
+
+            var splitInserts: [TransactionSplitInsert] = []
+            for match in todo {
+                guard let group = match.chosen else { continue }
+                guard let tx = created.first(where: {
+                    $0.amount == match.line.amount
+                        && abs($0.datetime.timeIntervalSince(match.line.datetime)) < 1
+                }) else { continue }
+                for (index, line) in group.ledgerLines.enumerated() {
+                    splitInserts.append(TransactionSplitInsert(
+                        transactionId: tx.id,
+                        amount: line.amount,
+                        category: nil,          // 분류는 사람이 붙인다. 청구엔 없는 값이다.
+                        description: line.title,
+                        sortOrder: index
+                    ))
+                }
+            }
+            if !splitInserts.isEmpty {
+                try await supabase.from("finance_splits").insert(splitInserts).execute()
+            }
             await fetchTransactions()
         } catch {
             self.error = error.localizedDescription
-            Log.finance.error("거래 저장 실패: \(error.localizedDescription)")
-            isLoading = false
+            Log.finance.error("거래내역서 반영 실패: \(error.localizedDescription)")
         }
     }
 
