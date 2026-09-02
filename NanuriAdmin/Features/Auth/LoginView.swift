@@ -35,7 +35,7 @@ struct LoginView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: DS.Size.buttonXL)
                 .background(DS.Palette.accent)
-                .foregroundColor(DS.Ink.inverse)
+                .foregroundColor(DS.Ink.onAccent)
             }
             .buttonStyle(PressOverlayButtonStyle(
                 shape: AnyShape(RoundedRectangle(cornerRadius: DS.Radius.xl))

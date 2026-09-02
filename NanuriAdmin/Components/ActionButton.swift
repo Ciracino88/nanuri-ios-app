@@ -93,7 +93,7 @@ struct ActionButton: View {
 
     private var foreground: Color {
         switch kind {
-        case .primary, .destructive: return DS.Ink.inverse
+        case .primary, .destructive: return DS.Ink.onAccent
         case .secondary: return DS.Ink.primary
         case .tinted: return DS.Ink.brand
         }
@@ -128,7 +128,7 @@ struct BottomCTA: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: DS.Size.buttonXL)
                     .background(DS.Palette.accent)
-                    .foregroundColor(DS.Ink.inverse)
+                    .foregroundColor(DS.Ink.onAccent)
             }
             .buttonStyle(PressOverlayButtonStyle(
                 shape: AnyShape(RoundedRectangle(cornerRadius: DS.Radius.xl))
