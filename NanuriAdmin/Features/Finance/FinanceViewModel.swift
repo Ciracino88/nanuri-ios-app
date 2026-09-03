@@ -57,6 +57,36 @@ class FinanceViewModel: ObservableObject {
     var deposits: [BankTransaction] { filteredExternal.filter { $0.isDeposit } }
     var withdrawals: [BankTransaction] { filteredExternal.filter { !$0.isDeposit } }
 
+    /// 목록이 그리는 **장부 줄들.** 분할이 있으면 조각마다 한 줄이다.
+    ///
+    /// 칩의 개수도 이걸 센다 — 엑셀 장부의 줄 수와 같은 수가 나와야 한다.
+    var ledgerRows: [LedgerRow] { ledgerRows(of: filtered) }
+    var depositRows: [LedgerRow] { ledgerRows(of: deposits) }
+    var withdrawalRows: [LedgerRow] { ledgerRows(of: withdrawals) }
+
+    /// **분류가 비어 있는 장부 줄.** 목록에서 골라 한 번에 붙이라고 모아 준다.
+    ///
+    /// 내부 이체는 뺀다 — 분류를 붙일 줄이 아니고, 앞으로도 안 붙는다.
+    /// 그걸 세면 "아직 12줄 남았다" 가 영영 0이 안 된다.
+    var uncategorizedRows: [LedgerRow] {
+        ledgerRows.filter {
+            !$0.isInternalTransfer
+                && ($0.category?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+        }
+    }
+
+    /// 거래를 장부 줄로 편다. **내부 이체는 안 쪼갠다** — 장부 줄이 아니라서
+    /// 조각이 애초에 없고, 그 사실이 화면에서도 한 줄로 남아야 한다.
+    private func ledgerRows(of items: [BankTransaction]) -> [LedgerRow] {
+        items.flatMap { tx -> [LedgerRow] in
+            let pieces = splits(for: tx.id)
+            guard !pieces.isEmpty, !tx.isInternalTransfer else {
+                return [LedgerRow(transaction: tx, split: nil)]
+            }
+            return pieces.map { LedgerRow(transaction: tx, split: $0) }
+        }
+    }
+
     // MARK: - 잔액은 저장하지 않고 유도한다
 
     /// 한 통장의 잔액. 개시잔액에서 시작해 그 통장을 지나간 돈을 전부 더한다.
@@ -668,6 +698,53 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
+    /// 고른 장부 줄들에 **분류를 한 번에 붙인다.** 빈 문자열이면 지운다.
+    ///
+    /// **건별로 나눠 보내지 않는다.** 조각은 조각끼리, 거래는 거래끼리 한 요청씩
+    /// 두 번이다. 나눠 보내면 중간에 끊겼을 때 일부만 붙은 채로 남는다.
+    func applyCategory(_ category: String, to rows: [LedgerRow]) async {
+        let trimmed = category.trimmingCharacters(in: .whitespaces)
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        let splitIds = rows.compactMap { $0.split?.id }
+        let txIds = rows.filter { $0.split == nil }.map { $0.transaction.id }
+        guard !splitIds.isEmpty || !txIds.isEmpty else { return }
+
+        do {
+            if !splitIds.isEmpty {
+                try await supabase.from("finance_splits")
+                    .update(CategoryPatch(category: value))
+                    .in("id", values: splitIds.map(\.uuidString))
+                    .execute()
+            }
+            if !txIds.isEmpty {
+                try await supabase.from("finance_transactions")
+                    .update(CategoryPatch(category: value))
+                    .in("id", values: txIds.map(\.uuidString))
+                    .execute()
+            }
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("분류 붙이기 실패: \(error.localizedDescription)")
+            return
+        }
+
+        // 목록을 다시 받지 않고 그 자리에 꽂는다. 스무 줄에 붙이고 나서 화면이
+        // 통째로 다시 그려지면 어디를 보고 있었는지를 잃는다.
+        let splitSet = Set(splitIds)
+        for (txId, pieces) in splitsByTransaction {
+            guard pieces.contains(where: { splitSet.contains($0.id) }) else { continue }
+            splitsByTransaction[txId] = pieces.map { piece in
+                var copy = piece
+                if splitSet.contains(piece.id) { copy.category = value }
+                return copy
+            }
+        }
+        let txSet = Set(txIds)
+        for idx in transactions.indices where txSet.contains(transactions[idx].id) {
+            transactions[idx].category = value
+        }
+    }
+
     // MARK: - 거래 쓰기
 
     /// 거래를 손으로 넣는다.
@@ -684,8 +761,7 @@ class FinanceViewModel: ObservableObject {
         counterAccountId: UUID? = nil,
         datetime: Date,
         amount: Int,
-        description: String?,
-        category: String?
+        description: String?
     ) async -> Bool {
         guard let ledgerId = currentLedger?.id else {
             error = "장부를 먼저 선택해주세요."
@@ -701,7 +777,10 @@ class FinanceViewModel: ObservableObject {
             type: amount >= 0 ? "입금" : "출금",
             amount: amount,
             description: description,
-            category: category,
+            // **분류는 여기서 안 받는다.** 넣을 때마다 고르는 건 스무 번 넘게
+            // 반복하기에 무거운 동작이고, 그 자리에서는 무엇으로 묶을지 정하기도
+            // 어렵다. 목록을 훑으며 붙이는 편이 낫다 — 비슷한 줄이 나란히 보이니
+            // 이름이 저절로 정해진다.
             source: .manual
         )
         do {
