@@ -31,7 +31,30 @@
 
 ## 1. Supabase 마이그레이션 ✅
 
-적용 완료. 재적용이 필요해지면:
+**원격에 다 올라가 있다** (2026-09-03 확인). `supabase/migrations/` 의 다섯 개가
+전부 적용된 상태다.
+
+| 마이그레이션 | 적용 |
+| --- | --- |
+| `20260813120000_reset_schema` | ✅ |
+| `20260815090000_public_bill_form_and_payees` | ✅ |
+| `20260815130000_restore_public_grants` | ✅ |
+| `20260902120000_two_accounts_derived_balance` | ✅ 2026-09-03 |
+| `20260903120000_split_description` | ✅ 2026-09-03 |
+| `20260903140000_transaction_source` | ✅ 2026-09-03 |
+
+**적용됐는지는 비밀번호 없이 확인된다.** anon key 로 REST probe 하면 없는 컬럼은
+`42703`, 없는 테이블은 `PGRST205` 가 온다 (ARCHITECTURE.md "검증하는 법").
+
+```bash
+curl -s "https://ciszaukmnglepvqpulya.supabase.co/rest/v1/finance_transactions?select=source&limit=1" \
+     -H "apikey: <앱의 anon key>"
+```
+
+`[]` 가 오면 있는 것이다 (행은 RLS 가 막아서 안 보이는 게 정상).
+
+⚠️ **DB 비밀번호를 2026-09-03 에 재설정했다.** 옛 값으로는 `28P01` 이 난다
+(TROUBLESHOOTING.md 참고). 재적용이 필요해지면:
 
 ```bash
 cd /Users/ciracino88/Desktop/SwiftUI-Project/NanuriAdmin && read -rs "?DB 비밀번호: " SUPABASE_DB_PASSWORD && export SUPABASE_DB_PASSWORD && supabase db push --linked
