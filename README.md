@@ -1,9 +1,9 @@
 # 나누리 회계
 
 <p align="center">
-  <img width="324" height="680" alt="nanuri-ios-app" src="https://github.com/user-attachments/assets/5104a724-4f7d-4d54-bebd-5da0a69db321" />
+  <img width="240" height="520" alt="nanuri-ios-app" src="https://github.com/user-attachments/assets/5104a724-4f7d-4d54-bebd-5da0a69db321" />
+  <img width="240" height="520" alt="거래내역서 내보내" src="https://github.com/user-attachments/assets/ae401468-ddef-4528-bcb7-c28cae0ee629" />
 </p>
-
 
 ## 배경
 
