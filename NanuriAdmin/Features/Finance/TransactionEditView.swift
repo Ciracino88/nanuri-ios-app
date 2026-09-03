@@ -7,7 +7,6 @@ struct TransactionEditView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
     @State private var category: String
-    @State private var memo: String
     // 아래 다섯은 **손으로 넣은 거래에서만** 바뀐다. 거래내역서에서 온 거래는
     // 금액·일시·통장이 통장의 기록이라 화면이 잠그고, 뷰모델이 한 번 더 막는다.
     @State private var descriptionText: String
@@ -33,7 +32,6 @@ struct TransactionEditView: View {
         self.suggestions = suggestions
         self.viewModel = viewModel
         _category = State(initialValue: transaction.category ?? "")
-        _memo = State(initialValue: transaction.memo ?? "")
         _descriptionText = State(initialValue: transaction.description ?? "")
         _amountText = State(initialValue: String(abs(transaction.amount)))
         _isDeposit = State(initialValue: transaction.isDeposit)
@@ -180,11 +178,12 @@ struct TransactionEditView: View {
         NavigationView {
             Form {
                 infoSection
+                // 메모 칸이 여기 있었는데 **어디에도 안 보이는 값**이었다 —
+                // 목록 줄도 보고서도 분석 화면도 안 읽었다. 적을 말이 있으면
+                // 분할 조각의 적요에 적는다. 그건 실제로 장부에 남는다.
                 Section("분류") {
                     TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
                     CategorySuggestionChips(suggestions: suggestions, selected: $category)
-                    TextField("메모", text: $memo, axis: .vertical)
-                        .lineLimit(3...6)
                 }
                 splitSection
                 receiptSection
@@ -284,7 +283,6 @@ struct TransactionEditView: View {
                 // 통장을 바꾸면 상대 통장이 같아질 수 있어서 여기서 한 번 턴다.
                 counterAccountId: counterAccountId == accountId ? nil : counterAccountId,
                 category: category.isEmpty ? nil : category,
-                memo: memo.isEmpty ? nil : memo,
                 keptUrls: keptUrls,
                 newImages: pendingImages.map(\.image),
                 originalUrls: transaction.receipts,
@@ -466,7 +464,7 @@ struct PendingImage: Identifiable {
 /// 편집 중인 분할 항목 (저장 시 finance_splits로 반영).
 ///
 /// `description` 이 **이 조각의 적요**다 — 보고서 상세 명세의 적요 칸에 그대로 찍힌다.
-/// 거래의 `memo` 와 다른 칸이다.
+/// 거래에는 이런 자유 입력 칸이 없다 — 있었지만 어디에도 안 보여서 걷어냈다.
 struct SplitDraft: Identifiable {
     var id = UUID()
     var category: String
