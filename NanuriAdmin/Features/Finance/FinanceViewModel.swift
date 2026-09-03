@@ -581,7 +581,8 @@ class FinanceViewModel: ObservableObject {
             return []
         }
         let groups = await fetchBillGroups()
-        return StatementMatcher.matches(lines: lines, groups: groups, existing: transactions)
+        return StatementMatcher.matches(lines: lines, groups: groups,
+                                        existing: transactions, accounts: accounts)
     }
 
     /// 확인이 끝난 것을 장부에 넣는다.
@@ -607,6 +608,10 @@ class FinanceViewModel: ObservableObject {
             BankTransactionInsert(
                 ledgerId: ledgerId,
                 accountId: account.id,
+                // 통장 사이 이체면 상대 통장을 적는다. **한 줄이 양쪽을 안다** —
+                // 이 칸이 차 있으면 합계·보고서에서 저절로 빠지고, 상대 통장 잔액도
+                // 부호를 뒤집어 여기서 유도된다.
+                counterAccountId: match.isInternalTransfer ? match.counterAccountId : nil,
                 datetime: match.line.datetime,
                 type: match.line.type,
                 amount: match.line.amount,
@@ -625,18 +630,29 @@ class FinanceViewModel: ObservableObject {
                 .execute()
                 .value
 
+            // 장부에 적힐 줄은 **분할**로 만든다. 무엇이 조각이 되는지는
+            // `StatementMatch.ledgerLines` 가 정한다 — 청구 묶음의 제목들이거나,
+            // 사람이 적은 적요 한 줄이거나, 내부 이체면 없다. 화면이 미리 보여준
+            // 것과 저장되는 것이 같아야 해서 그 계산을 한 곳에 뒀다.
+            //
+            // **청구가 하나뿐일 때도 조각을 만든다.** 그래야 은행 적요를 덮어쓰지
+            // 않고 장부 줄에 제 이름을 줄 수 있다.
             var splitInserts: [TransactionSplitInsert] = []
             for match in todo {
-                guard let group = match.chosen else { continue }
+                let lines = match.ledgerLines
+                guard !lines.isEmpty else { continue }
                 guard let tx = created.first(where: {
                     $0.amount == match.line.amount
                         && abs($0.datetime.timeIntervalSince(match.line.datetime)) < 1
                 }) else { continue }
-                for (index, line) in group.ledgerLines.enumerated() {
+                // 분류는 이 줄에서 나온 **모든 조각에 같이** 붙는다. 청구엔 없는
+                // 값이라 사람이 확인 화면에서 준 것뿐이다.
+                let category = match.manualCategory.trimmingCharacters(in: .whitespaces)
+                for (index, line) in lines.enumerated() {
                     splitInserts.append(TransactionSplitInsert(
                         transactionId: tx.id,
                         amount: line.amount,
-                        category: nil,          // 분류는 사람이 붙인다. 청구엔 없는 값이다.
+                        category: category.isEmpty ? nil : category,
                         description: line.title,
                         sortOrder: index
                     ))

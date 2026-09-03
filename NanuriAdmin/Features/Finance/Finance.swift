@@ -42,12 +42,19 @@ struct Account: Identifiable, Codable {
     let name: String
     /// 장부가 이 통장을 적기 시작하는 시점에 이미 들어 있던 돈.
     let openingBalance: Int
+    /// **이 통장이 상대 내역서의 적요에 찍히는 이름**(예금주).
+    ///
+    /// 농협↔모임 이체는 반드시 모임통장을 지나므로 토스 내역서에 찍히는데, 토스는
+    /// 상대 예금주 이름을 적요에 넣는다. 그래서 **적요가 이 이름이면 내부 이체다.**
+    /// `name`('농협'·'모임')은 사람이 부르는 이름이라 이 자리에 못 쓴다.
+    let statementAlias: String?
     let sortOrder: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case ledgerId = "ledger_id"
         case openingBalance = "opening_balance"
+        case statementAlias = "statement_alias"
         case sortOrder = "sort_order"
     }
 }
