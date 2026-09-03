@@ -38,6 +38,9 @@
 4. **화면 코드에 숫자를 직접 적지 않는다.** `DS` 시맨틱 층만 쓴다.
 5. **`@Published`/`@StateObject`/`ObservableObject` 쓰는 파일엔 `import Combine`.**
 6. **커밋 메시지는 제목·본문 모두 한국어로 쓴다.**
+7. **마이그레이션이 원격에 적용된 걸 확인하면 [SETUP.md](SETUP.md) 1번 표에 남긴다.**
+   저장소만 봐서는 원격 스키마 상태를 알 수 없다 — 파일이 있다고 적용된 게 아니다.
+   확인은 비밀번호 없이 된다 (anon key REST probe, SETUP.md 1번).
 
 ---
 
