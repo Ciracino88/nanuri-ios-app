@@ -621,32 +621,44 @@ struct TransactionRowView: View {
         .padding(.vertical, DS.Spacing.medium)
     }
 
-    /// 금액 아래 한 줄. 거래 이름이 주고, 분류가 있으면 가운뎃점으로 잇는다.
+    /// 금액 아래 한 줄. **장부 적요 · 카테고리** 순이다.
+    ///
+    /// 은행이 찍은 적요를 앞에 두던 적이 있는데(`홍길동 · 볼링 게임 우승 상품`),
+    /// 그건 **장부를 훑는 사람이 알고 싶은 순서가 아니다.** 이 목록은 통장이 아니라
+    /// 장부고, 장부에 적힌 이름이 먼저 와야 한다. 은행 적요는 상세에 있다.
+    ///
+    /// 분할이 있으면 조각의 적요가 곧 장부 적요다. 분할이 없으면 그 거래의 적요는
+    /// 은행이 준 것 하나뿐이라 그게 온다.
     private var subtitle: String {
-        let name = transaction.description ?? "-"
-        guard let first = labels.first else { return name }
-        let label = labels.count > 1 ? "\(first) 외 \(labels.count - 1)" : first
-        return "\(name) · \(label)"
+        let head = ledgerLabels.first.map {
+            ledgerLabels.count > 1 ? "\($0) 외 \(ledgerLabels.count - 1)" : $0
+        } ?? (transaction.description ?? "-")
+        guard let tail = categoryLabels.first.map({
+            categoryLabels.count > 1 ? "\($0) 외 \(categoryLabels.count - 1)" : $0
+        }) else { return head }
+        return "\(head) · \(tail)"
     }
 
-    /// 가운뎃점 뒤에 오는 이름들. 같은 이름 여러 개는 하나로 합친다.
-    ///
-    /// 분할이 있으면 조각마다 **적요를 먼저** 쓴다 — 묶어 보낸 출금에서 정작 알고
-    /// 싶은 건 "누구에게" 지 카테고리가 아니다. 적요를 안 적은 조각만 카테고리로
-    /// 대신한다. 분할이 없으면 거래 자체의 카테고리다 (거래의 적요는 이미 `name`
-    /// 자리에 있어서 여기 또 쓰면 같은 말이 두 번 나온다).
-    private var labels: [String] {
-        if splits.isEmpty {
-            let c = transaction.category?.trimmingCharacters(in: .whitespaces) ?? ""
-            return c.isEmpty ? [] : [c]
-        }
+    /// 앞자리 — 장부에 적힌 이름. 분할이 없으면 비어 있고, 그때는 은행 적요가 대신한다.
+    private var ledgerLabels: [String] {
+        splits.isEmpty ? [] : dedup(splits.map { $0.description })
+    }
+
+    /// 뒷자리 — 분류. 분할이 있으면 조각의 것을, 없으면 거래 자체의 것을 쓴다.
+    /// **비어 있으면 가운뎃점째로 안 나온다** — 아직 안 붙인 분류 자리에
+    /// "미분류" 를 적으면 목록이 그 글자로 뒤덮인다.
+    private var categoryLabels: [String] {
+        splits.isEmpty ? dedup([transaction.category]) : dedup(splits.map { $0.category })
+    }
+
+    /// 빈 값을 걷어내고 같은 이름을 하나로 합친다. 처음 나온 순서를 지킨다.
+    private func dedup(_ values: [String?]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for split in splits {
-            let d = split.description?.trimmingCharacters(in: .whitespaces) ?? ""
-            let c = split.category?.trimmingCharacters(in: .whitespaces) ?? ""
-            let label = !d.isEmpty ? d : (c.isEmpty ? "미분류" : c)
-            if seen.insert(label).inserted { result.append(label) }
+        for value in values {
+            let v = value?.trimmingCharacters(in: .whitespaces) ?? ""
+            guard !v.isEmpty, seen.insert(v).inserted else { continue }
+            result.append(v)
         }
         return result
     }
