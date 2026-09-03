@@ -611,6 +611,9 @@ class FinanceViewModel: ObservableObject {
                 type: match.line.type,
                 amount: match.line.amount,
                 description: match.line.description,
+                // 고른 청구 묶음의 영수증을 그대로 물려준다. 청구가 이미 갖고 있는
+                // 것을 거래가 다시 받는 것이라 사람이 다시 찍어 올릴 일이 없다.
+                receiptUrls: match.chosen?.receiptUrls ?? [],
                 source: .statement
             )
         }
