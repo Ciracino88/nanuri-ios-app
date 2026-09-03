@@ -776,7 +776,12 @@ class FinanceViewModel: ObservableObject {
         let finalDatetime = locked ? (existing?.datetime ?? datetime) : datetime
         let finalAmount   = locked ? (existing?.amount ?? amount) : amount
         let finalAccount  = locked ? (existing?.accountId ?? accountId) : accountId
-        let finalCounter  = locked ? existing?.counterAccountId : counterAccountId
+        // **상대 통장은 잠그지 않는다.** 금액·일시·통장은 은행이 말해 주는 사실이지만
+        // "이게 통장 사이 이체인가" 는 **은행이 말해 줄 수 없는 회계 판단**이다 —
+        // 거래내역서에는 그 정보가 없고, 적요를 보고 사람이 정한다. 매처가 대신
+        // 해 주지만 못 잡을 수도 있고, 판정이 생기기 전에 들어온 줄은 아예 못 만난다.
+        // 잠그면 그런 줄을 앱 안에서 고칠 길이 없어진다 (2026-09-03 에 실제로 그랬다).
+        let finalCounter  = counterAccountId
         // 1. 새 이미지 업로드 (해상도 축소 후)
         var newlyUploaded: [String] = []
         for image in newImages {

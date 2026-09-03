@@ -101,6 +101,9 @@ struct TransactionEditView: View {
                 LabeledContent("금액", value: "\(transaction.amount.formatted())원")
                 LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
                 LabeledContent("통장", value: accountLabel)
+                // **이체 표시는 잠기지 않는다.** 은행은 이게 통장 사이 이체인지
+                // 말해 주지 않는다 — 적요를 보고 사람이 정하는 회계 판단이다.
+                transferRows
             } else {
                 DatePicker("일시", selection: $datetime, displayedComponents: [.date])
 
@@ -129,7 +132,7 @@ struct TransactionEditView: View {
             Text("거래 정보")
         } footer: {
             if transaction.isFromStatement {
-                Text("거래내역서에서 불러온 거래예요. 금액·일시·통장은 통장에 찍힌 기록이라 고칠 수 없어요.")
+                Text("거래내역서에서 불러온 거래예요. 금액·일시·통장은 통장에 찍힌 기록이라 고칠 수 없어요. 통장 사이 이체인지는 통장이 말해 주지 않아서 여기서 정해요.")
             }
         }
     }
