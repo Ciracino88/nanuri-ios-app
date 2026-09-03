@@ -18,7 +18,15 @@ struct ParsedStatementLine {
 enum TossPdfParser {
 
     /// 거래 사이에 끼는 표 머리글/발급 정보 등은 description으로 붙이지 않는다.
-    private static let footerPrefixes = ["거래일자", "발급일자", "페이지", "토스뱅크", "계좌번호"]
+    ///
+    /// `단위` 는 쪽 바닥의 "단위: 원" 이다. 2026-09-03 실제 발급본(2쪽, 23건)에서
+    /// **1쪽 마지막 거래의 적요에 `박영훈단위: 원1 / 21 / 2` 로 붙었다.**
+    /// 쪽이 하나면 안 나오므로 한 쪽짜리로만 시험하면 안 걸린다.
+    private static let footerPrefixes = ["거래일자", "발급일자", "페이지", "토스뱅크", "계좌번호", "단위"]
+
+    /// 쪽 번호(`1 / 2`). 접두사로는 못 거른다 — 숫자로 시작해서 쪽마다 다르다.
+    /// PDFKit 이 쪽마다 두 번씩 뱉는 것도 실물에서 확인했다.
+    private static let pageNumberPattern = #"^\d+\s*/\s*\d+$"#
 
     /// 한 줄 = [날짜][구분][금액][잔액] (그 뒤 description은 줄 끝까지 또는 다음 줄로 이어짐)
     /// 구분값은 특정 단어로 열거하지 않고 "한글/영문 글자 토큰"이면 무엇이든 받는다.
@@ -75,8 +83,9 @@ enum TossPdfParser {
                     inlineDesc = String(line[dR])
                 }
                 pending = (datetime, String(line[tyR]), amount, balance, inlineDesc)
-            } else if footerPrefixes.contains(where: { line.hasPrefix($0) }) {
-                // 표 머리글·발급 정보 등 → 현재 거래를 확정하고 무시
+            } else if footerPrefixes.contains(where: { line.hasPrefix($0) })
+                        || line.range(of: pageNumberPattern, options: .regularExpression) != nil {
+                // 표 머리글·발급 정보·쪽 바닥 → 현재 거래를 확정하고 무시
                 flush()
             } else if pending != nil {
                 // description 줄바꿈 연속 → 공백 없이 이어붙임 (예: "후원" + "금" = "후원금")
