@@ -118,7 +118,6 @@ URL 은 클라이언트를 거쳐 오므로 그대로 믿으면 안 된다. 워�
 | **APNs 환경** | 워커의 `device_tokens.environment` ↔ 앱의 `#if DEBUG` |
 | **통장 이름** | DB `finance_accounts.name` (`'농협'`·`'모임'`) ↔ 앱 `account(named:)` 의 문자열 |
 | **거래 출처** | DB `finance_transactions.source` 의 `check (manual\|statement)` ↔ 앱 `TransactionSource` |
-| **중복 방지 제약** | DB `unique (ledger_id, datetime, amount)` ↔ 앱 `saveTransactions` 의 `upsert`/`insert` |
 | **분할 적요 칸 이름** | DB `finance_splits.description` ↔ 앱 `TransactionSplit`·`TransactionSplitInsert` 의 `CodingKeys` |
 
 맨 앞의 둘은 **한 세트**다. PG 의 `\s` 는 U+00A0 을 공백으로 안 보기 때문에
@@ -359,8 +358,12 @@ Release 구성을 development 프로파일로 기기에 올릴 때 그렇게 된
 "앱이 PDF 재파싱 시 이 조합으로 upsert 한다" 였는데, 그 경로는 **한 번도 쓰인 적이
 없다** — 거래 273건이 전부 수기 이관분이고 PDF 로 들어온 건 0건이었다. 반면 수기
 입력에서는 사람이 시각을 고르지 않아 **같은 날 같은 금액 거래 둘**(8월 모임통장의
-볼링장 결제 같은)이 서로를 막았다. `saveTransactions` 도 `upsert` 에서 `insert` 로
-같이 바꿨다 — **한쪽만 되돌리면 런타임에 깨진다.**
+볼링장 결제 같은)이 서로를 막았다.
+
+**중복 방지는 이제 불러오기 경로에만 있다.** `StatementMatcher` 가 같은 시각·같은
+금액이 이미 있으면 `alreadyImported` 로 표시해 건너뛴다. 손으로 넣는 쪽은 일부러
+막지 않는다 — 같은 날 같은 금액을 두 번 적는 건 사람이 판단할 일이다.
+**제약을 되살리면 그 수기 입력이 다시 막힌다.**
 
 ## 장부는 전부 월별이다
 
