@@ -4,7 +4,11 @@ import Combine
 /// 모든 탭이 쓰는 헤더. 앱의 상단은 항상 이 모양이다.
 ///
 /// 슬롯은 넷이다 — **왼쪽 화면별 동작 · 가운데 화면 이름 · 오른쪽 화면별 동작 · 알림**.
-/// 알림만 헤더가 직접 갖고 어느 탭에서나 같은 자리에 있다.
+/// 알림만 헤더가 직접 갖고 **알림이 뜻을 갖는 탭에서** 같은 자리에 있다.
+///
+/// `showsNotifications: false` 로 끌 수 있다. 재정 탭이 그렇다 — 알림은 **청구가
+/// 들어왔다**는 소식이라 청구서 탭의 것이고, 재정 탭에서는 그 자리를 매달 스무 번
+/// 넘게 누르는 **거래 추가**가 쓴다. 자리를 지키자고 안 쓰는 버튼을 두지 않는다.
 ///
 /// **새로고침 버튼은 없다.** 목록을 아래로 당기면 새로고침된다(`.refreshable`).
 /// 예전에는 왼쪽 자리가 새로고침 고정이었는데, 청구서 탭이 실시간으로 들어오게
@@ -31,6 +35,8 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
     /// 내준다. 대신 **화면이 무엇인지 다른 데서 반드시 말해야 한다** —
     /// 재정 탭은 요약 밴드의 장부 이름이 그 몫을 한다.
     var center: AnyView?
+    /// 알림 종을 그릴지. 끄면 그 자리를 `trailing` 이 가져간다.
+    var showsNotifications: Bool = true
     @ViewBuilder let leading: () -> Leading
     @ViewBuilder let trailing: () -> Trailing
 
@@ -52,6 +58,7 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
 
     /// 가운데를 직접 그리는 변형.
     init<C: View>(
+        showsNotifications: Bool = true,
         @ViewBuilder center: () -> C,
         @ViewBuilder leading: @escaping () -> Leading,
         @ViewBuilder trailing: @escaping () -> Trailing
@@ -59,6 +66,7 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
         self.title = ""
         self.titleAction = nil
         self.center = AnyView(center())
+        self.showsNotifications = showsNotifications
         self.leading = leading
         self.trailing = trailing
     }
@@ -70,7 +78,7 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
                 leading()
                 Spacer(minLength: 0)
                 trailing()
-                notificationButton
+                if showsNotifications { notificationButton }
             }
         }
         .frame(height: DS.Size.headerButton)

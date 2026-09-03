@@ -248,7 +248,10 @@ struct StatementImportView: View {
                     Text("\(match.line.amount.formatted())원")
                         .typeStyle(DS.Typo.body2)
                         .tabularAmount()
-                        .foregroundColor(match.line.amount > 0 ? DS.Palette.deposit : DS.Ink.primary)
+                        // 목록과 같은 규칙이다 — 통장 사이 이체는 수입도 지출도
+                        // 아니라서 셋째 색을 쓴다. 넣기 전에 그 성격이 보여야 한다.
+                        .foregroundColor(match.isInternalTransfer ? DS.Ink.tertiary
+                                         : (match.line.amount > 0 ? DS.Palette.deposit : DS.Ink.primary))
                     if canPick {
                         Image(systemName: "chevron.right")
                             .font(DS.Icon.font(DS.Icon.m))

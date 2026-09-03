@@ -54,14 +54,23 @@ struct FinanceView: View {
             // 고를 것이 없어졌고, 그 대신 **통장이 둘**이 되면서 잔액을 볼 자리가
             // 필요해졌다. 화면이 어느 장부인지는 여전히 말하지 않는다 — 하나뿐이라
             // 말해 봐야 구별해 주는 게 없다.
+            // **알림 종을 안 그린다.** 알림은 "청구가 들어왔다" 는 소식이라 청구서
+            // 탭의 것이고, 이 자리는 매달 스무 번 넘게 누르는 거래 추가가 쓴다.
+            // 농협은 수기 입력이 유일한 입구라 메뉴 두 단계 안에 둘 자리가 아니다.
             AdminHeaderView(
+                showsNotifications: false,
                 center: { monthStepper },
                 leading: {
                     HeaderIconButton(systemName: "wallet.bifold", label: "통장 잔액") {
                         showAccounts = true
                     }
                 },
-                trailing: { actionMenu() }
+                trailing: {
+                    actionMenu()
+                    HeaderIconButton(systemName: "plus", label: "거래 추가") {
+                        showAddTransaction = true
+                    }
+                }
             )
 
             VStack(spacing: 0) {
@@ -521,27 +530,18 @@ struct FinanceView: View {
         EmptyStateView(
             title: "거래내역이 없어요",
             icon: "doc.richtext",
-            message: "우측 상단 ⋯ 에서 '거래 추가'로 직접 넣거나,\n토스뱅크 거래내역서를 앱으로 공유하면 돼요"
+            message: "우측 상단 ＋ 로 직접 넣거나,\n토스뱅크 거래내역서를 앱으로 공유하면 돼요"
         )
         .pullToRefresh { await reload() }
     }
 
-    /// 헤더의 화면별 동작 자리는 하나뿐이라 거래 추가·내보내기·거래내역서를 한 메뉴로 묶는다.
+    /// 내보내는 것들만 모은 메뉴. **거래 추가는 여기 없다** — 헤더로 나갔다.
+    ///
+    /// 예전에는 이 메뉴 맨 위에 있었다. 알림 종이 오른쪽 자리를 늘 차지하고 있어서
+    /// 헤더에 아이콘을 하나 더 둘 수 없었기 때문인데, 재정 탭에서 그 종을 빼면서
+    /// 자리가 났다. **장부를 쓰는 게 이 화면의 본업이고 나머지는 뽑는 일이다.**
     private func actionMenu() -> some View {
         Menu {
-            // **맨 위다.** 장부를 쓰는 게 이 화면의 본업이고 나머지는 뽑는 일이다.
-            //
-            // 메뉴 안에 두면 한 단계 깊어지지만, 추가 화면이 **저장해도 닫히지 않아**
-            // 25건을 넣는 동안 이 메뉴는 한 번만 지난다. 헤더에 아이콘을 하나 더
-            // 두는 것보다(한쪽에 아이콘은 하나까지) 이쪽이 규칙에 맞는다.
-            Button {
-                showAddTransaction = true
-            } label: {
-                Label("거래 추가", systemImage: "plus.circle")
-            }
-
-            Divider()
-
             // 내보내기보다 먼저 둔다 — 확인하고 내보내는 순서가 자연스럽다.
             Button {
                 if let html = viewModel.reportHTML() {
@@ -603,12 +603,16 @@ struct TransactionRowView: View {
         VStack(alignment: .leading, spacing: DS.Spacing.s1 / 2) {
             // 입금은 브랜드 파랑, 출금은 본문 검정이다. 장부에서 지출은 사고가
             // 아니라 일상이라 경고색을 주지 않는다.
+            //
+            // **통장 사이 이체는 셋째 색이다.** 수입도 지출도 아니라서 — 장부
+            // 전체로 보면 나간 돈도 들어온 돈도 아니고 합계·보고서에서도 빠진다.
+            // 파랑이나 검정을 주면 그 줄이 다른 줄과 같은 종류의 수로 읽힌다.
             Text(transaction.isDeposit
                  ? "+\(transaction.amount.formatted())원"
                  : "\(transaction.amount.formatted())원")
                 .typeStyle(DS.Typo.title2)
                 .tabularAmount()
-                .foregroundColor(transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal)
+                .foregroundColor(amountColor)
                 .lineLimit(1)
 
             Text(subtitle)
@@ -621,6 +625,12 @@ struct TransactionRowView: View {
         .padding(.vertical, DS.Spacing.medium)
     }
 
+    /// 금액의 색. 입금 파랑 · 출금 검정 · **통장 사이 이체는 회색**이다.
+    private var amountColor: Color {
+        if transaction.isInternalTransfer { return DS.Ink.tertiary }
+        return transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal
+    }
+
     /// 금액 아래 한 줄. **장부 적요 · 카테고리** 순이다.
     ///
     /// 은행이 찍은 적요를 앞에 두던 적이 있는데(`홍길동 · 볼링 게임 우승 상품`),
@@ -630,6 +640,8 @@ struct TransactionRowView: View {
     /// 분할이 있으면 조각의 적요가 곧 장부 적요다. 분할이 없으면 그 거래의 적요는
     /// 은행이 준 것 하나뿐이라 그게 온다.
     private var subtitle: String {
+        // 내부 이체에는 장부 줄(분할)이 없다. 대신 어느 통장 사이인지를 말한다.
+        if transaction.isInternalTransfer { return "통장 사이 이체" }
         let head = ledgerLabels.first.map {
             ledgerLabels.count > 1 ? "\($0) 외 \(ledgerLabels.count - 1)" : $0
         } ?? (transaction.description ?? "-")
