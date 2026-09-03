@@ -23,7 +23,14 @@ class FinanceViewModel: ObservableObject {
     /// 보고 있는 달의 시작·끝. 보고서와 영수증 부록도 이걸 그대로 쓴다.
     var startDate: Date { currentMonth }
     var endDate: Date { Calendar.current.endOfMonth(currentMonth) }
-    @Published var savedStatements: [StatementFile] = []
+    /// 공유로 막 들어온 거래내역서. **비어 있지 않으면 확인 화면이 떠 있다는 뜻이다.**
+    ///
+    /// 예전에는 파일을 `Documents/Statements` 에 보관하고 목록에서 골라 불러왔다.
+    /// 그 목록은 "보고서 모드를 고른 뒤에 불러온다" 는 게이트 때문에 있던 대기실인데,
+    /// **행사 모드(`abb7989`)와 장부 고르는 화면(`a0ebef7`)이 없어지면서 고를 게
+    /// 사라졌다.** 재파싱도 `f503bd0` 에서 지웠고, 원본은 파일 앱에 그대로 있다.
+    /// 그래서 사본을 쌓지 않고 **들어오는 즉시 확인 화면으로 보낸다.**
+    @Published var incomingStatement: IncomingStatement?
     @Published var splitsByTransaction: [UUID: [TransactionSplit]] = [:]
     @Published var ledgers: [Ledger] = []
     /// 장부 목록을 한 번이라도 받아 봤는지. **"아직 모른다" 와 "정말 없다" 를 가른다.**
@@ -522,15 +529,13 @@ class FinanceViewModel: ObservableObject {
         isLoading = false
     }
 
-    /// 공유로 들어온 토스뱅크 PDF는 로컬(저장된 거래내역서)에 보관만 한다.
-    /// 파싱·거래 반영은 사용자가 보고서 모드를 고른 뒤 '저장된 거래내역서'에서 직접 불러온다.
-    /// (가져오기는 월별/행사 모드와 무관하므로 게이트와 분리)
+    /// 공유로 들어온 토스뱅크 PDF를 **곧바로 확인 화면으로 보낸다.**
+    ///
+    /// 보관하지 않는다. 원본은 파일 앱에 있으므로 다시 필요하면 다시 공유하면 된다
+    /// (`incomingStatement` 주석 참고).
     func handleIncomingPDF(url: URL) {
         error = nil
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        _ = persistOriginalPDF(from: url)
-        loadSavedStatements()
+        incomingStatement = IncomingStatement(url: url)
     }
 
 
@@ -559,8 +564,10 @@ class FinanceViewModel: ObservableObject {
 
     /// 거래내역서를 파싱하고 청구와 맞춰 본다. **아직 아무것도 저장하지 않는다** —
     /// 사람이 확인하고 고칠 자리를 준 뒤에 넣는다.
-    func prepareStatementImport(from statement: StatementFile) async -> [StatementMatch] {
-        guard let pdf = PDFDocument(url: statement.url) else {
+    func prepareStatementImport(from url: URL) async -> [StatementMatch] {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard let pdf = PDFDocument(url: url) else {
             error = "PDF 파일을 열 수 없습니다."
             return []
         }
@@ -822,57 +829,5 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 원본 PDF 보관
-
-    /// 보관 폴더 (Documents/Statements)
-    private var statementsDirectory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dir = docs.appendingPathComponent("Statements", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    /// 들어온 PDF 원본을 보관 폴더에 복사하고 저장된 URL을 반환한다.
-    private func persistOriginalPDF(from url: URL) -> URL? {
-        let fm = FileManager.default
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyyyMMdd_HHmmss"
-        let originalName = url.deletingPathExtension().lastPathComponent
-        let filename = "\(stamp.string(from: Date()))_\(originalName).pdf"
-        let dest = statementsDirectory.appendingPathComponent(filename)
-        do {
-            if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-            try fm.copyItem(at: url, to: dest)
-            return dest
-        } catch {
-            Log.finance.error("원본 PDF 보관 실패: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    /// 보관된 거래내역서 목록을 최신순으로 불러온다.
-    func loadSavedStatements() {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(
-            at: statementsDirectory,
-            includingPropertiesForKeys: [.creationDateKey]
-        ) else {
-            savedStatements = []
-            return
-        }
-        savedStatements = files
-            .filter { $0.pathExtension.lowercased() == "pdf" }
-            .map { fileURL in
-                let created = (try? fileURL.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
-                return StatementFile(url: fileURL, importedAt: created)
-            }
-            .sorted { $0.importedAt > $1.importedAt }
-    }
-
-    /// 보관된 거래내역서 삭제.
-    func deleteStatement(_ statement: StatementFile) {
-        try? FileManager.default.removeItem(at: statement.url)
-        loadSavedStatements()
-    }
 
 }
