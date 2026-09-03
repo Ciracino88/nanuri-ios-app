@@ -439,6 +439,19 @@ Release 구성을 development 프로파일로 기기에 올릴 때 그렇게 된
 캐시해 두고 **이미 구독된 채널에는 콜백을 못 붙인다.** 그래서 돌아와 다시
 구독하면 조용히 죽는다. **되돌리지 말 것.** (경위는 TROUBLESHOOTING.md)
 
+### 밖에서 들어온 파일은 루트가 받아 둔다
+
+`onOpenURL` 은 **`NanuriAdminApp` 루트에만 있다.** PDF 면 `IncomingFile` 에 담고
+아니면 `GIDSignIn` 으로 넘긴다. `ContentView` 는 담긴 것을 꺼내 갈 뿐이다.
+
+화면에 달면 안 되는 이유가 둘이다. **공유로 앱이 켜지는 순간엔 `authState` 가
+`.loading` 이라 탭이 계층에 없어서** URL 을 받을 자리가 없고, SwiftUI 는
+`onOpenURL` 이 여럿이면 **하나에만 주므로** 항상 붙어 있는 루트가 삼킨다.
+2026-09-03 에 실제로 그렇게 깨졌다 (TROUBLESHOOTING.md).
+
+꺼내 가는 자리가 둘인 것도 도착 시점이 둘이라서다 — 켜지면서 들어오면
+`onAppear` 때 이미 담겨 있고, 떠 있는 채로 들어오면 `onChange` 로 온다.
+
 ### 알림함은 기기에만 있다
 
 헤더 종 버튼이 여는 목록(`Features/Notification/`)은 **DB 를 안 본다.** 이 기기가
