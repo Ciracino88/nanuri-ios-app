@@ -7,6 +7,7 @@ struct ContentView: View {
     @StateObject private var payeeViewModel = PayeeViewModel()
     @State private var selectedTab = 0
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var incomingFile = IncomingFile.shared
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -23,11 +24,11 @@ struct ContentView: View {
                 .tabItem { Label("프로필", systemImage: "person.crop.circle") }
                 .tag(3)
         }
-        .onOpenURL { url in
-            guard url.pathExtension.lowercased() == "pdf" else { return }
-            selectedTab = 1
-            financeViewModel.handleIncomingPDF(url: url)
-        }
+        // 루트가 받아 둔 파일을 꺼내 간다. 두 자리에서 부르는 이유는 도착 시점이
+        // 둘이라서다 — 앱이 켜지면서 들어오면 이 화면이 뜰 때(`onAppear`) 이미
+        // 담겨 있고, 앱이 떠 있는 채로 들어오면 그때 바뀐다(`onChange`).
+        .onAppear { consumeIncomingPDF() }
+        .onChange(of: incomingFile.pendingPDF) { _, _ in consumeIncomingPDF() }
         // 로그인한 뒤에 부른다. 토큰을 저장하려면 auth.uid() 가 필요하다.
         .task {
             await PushManager.shared.requestAuthorizationAndRegister()
@@ -38,5 +39,12 @@ struct ContentView: View {
             guard phase == .active else { return }
             Task { await NotificationStore.shared.syncFromNotificationCenter() }
         }
+    }
+
+    /// 들어온 거래내역서를 재정 탭으로 데려간다. 담긴 게 없으면 아무 일도 안 한다.
+    private func consumeIncomingPDF() {
+        guard let url = incomingFile.consume() else { return }
+        selectedTab = 1
+        financeViewModel.handleIncomingPDF(url: url)
     }
 }
