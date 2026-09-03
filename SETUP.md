@@ -31,7 +31,7 @@
 
 ## 1. Supabase 마이그레이션 ✅
 
-**원격에 다 올라가 있다** (2026-09-03 확인). `supabase/migrations/` 의 여섯 개가
+**원격에 다 올라가 있다** (2026-09-03 확인). `supabase/migrations/` 의 일곱 개가
 전부 적용된 상태다.
 
 | 마이그레이션 | 적용 |
@@ -42,6 +42,7 @@
 | `20260902120000_two_accounts_derived_balance` | ✅ 2026-09-03 |
 | `20260903120000_split_description` | ✅ 2026-09-03 |
 | `20260903140000_transaction_source` | ✅ 2026-09-03 |
+| `20260903160000_account_statement_alias` | ✅ 2026-09-03 |
 
 **적용됐는지는 비밀번호 없이 확인된다.** anon key 로 REST probe 하면 없는 컬럼은
 `42703`, 없는 테이블은 `PGRST205` 가 온다 (ARCHITECTURE.md "검증하는 법").

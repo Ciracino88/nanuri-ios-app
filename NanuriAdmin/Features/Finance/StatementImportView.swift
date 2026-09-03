@@ -35,13 +35,19 @@ struct StatementImportView: View {
     @State private var showSkipped = false
 
     private var needsChoice: [StatementMatch] {
-        matches.filter { !$0.alreadyImported && $0.chosenId == nil && !$0.candidates.isEmpty }
+        matches.filter { !$0.alreadyImported && !$0.isInternalTransfer
+                          && $0.chosenId == nil && !$0.candidates.isEmpty }
     }
     private var matched: [StatementMatch] {
-        matches.filter { !$0.alreadyImported && $0.chosenId != nil }
+        matches.filter { !$0.alreadyImported && !$0.isInternalTransfer && $0.chosenId != nil }
     }
     private var unmatched: [StatementMatch] {
-        matches.filter { !$0.alreadyImported && $0.chosenId == nil && $0.candidates.isEmpty }
+        matches.filter { !$0.alreadyImported && !$0.isInternalTransfer
+                          && $0.chosenId == nil && $0.candidates.isEmpty }
+    }
+    /// 통장 사이 이체. **장부 줄이 아니라 합계에서 빠지는 줄이다.**
+    private var internalTransfers: [StatementMatch] {
+        matches.filter { !$0.alreadyImported && $0.isInternalTransfer }
     }
     private var skipped: [StatementMatch] {
         matches.filter { $0.alreadyImported }
@@ -86,9 +92,10 @@ struct StatementImportView: View {
                 Text("이 거래내역서는 앱에 보관하지 않아요. 다시 넣으려면 파일 앱에서 한 번 더 공유하면 돼요.")
             }
             .sheet(item: $picking) { match in
-                CandidatePickerView(match: match) { chosenId in
-                    if let idx = matches.firstIndex(where: { $0.id == match.id }) {
-                        matches[idx].chosenId = chosenId
+                StatementRowEditView(match: match,
+                                     counterAccountName: counterName(match)) { updated in
+                    if let idx = matches.firstIndex(where: { $0.id == updated.id }) {
+                        matches[idx] = updated
                     }
                 }
             }
@@ -107,8 +114,10 @@ struct StatementImportView: View {
             LazyVStack(spacing: 0) {
                 section("확인이 필요해요", needsChoice)
                 section("청구서와 맞았어요", matched)
-                section("청구 없이 넣어요", unmatched,
-                        note: "적요와 분류는 넣은 뒤에 손으로 적으면 돼요.")
+                section("청구가 없어요", unmatched,
+                        note: "눌러서 적요와 분류를 적어 두면 넣을 때 같이 들어가요.")
+                section("통장 사이 이체예요", internalTransfers,
+                        note: "합계·보고서에서 빠져요. 아니면 눌러서 끌 수 있어요.")
                 skippedSection
             }
             .padding(.bottom, DS.Spacing.s8)
@@ -220,7 +229,9 @@ struct StatementImportView: View {
     /// 한 줄. **누를 수 있는 줄에만 화살표를 준다** — 네 섹션이 겉으로 같아 보이면
     /// 어디를 눌러 고칠 수 있는지 알 길이 없다. 화살표가 없으면 읽는 줄이다.
     private func row(_ match: StatementMatch) -> some View {
-        let canPick = !match.alreadyImported && !match.candidates.isEmpty
+        // **아직 안 들어간 줄은 전부 누를 수 있다.** 예전에는 후보가 있는 줄만
+        // 눌렸는데, 이제 어느 줄이든 적요와 분류를 적을 수 있다.
+        let canPick = !match.alreadyImported
         return Button {
             guard canPick else { return }
             picking = match
@@ -245,10 +256,14 @@ struct StatementImportView: View {
                     }
                 }
 
-                if let group = match.chosen {
+                if match.isInternalTransfer {
+                    Text("\(counterName(match)) ↔ 모임 · 합계에서 빠져요")
+                        .typeStyle(DS.Typo.body3)
+                        .foregroundColor(DS.Ink.tertiary)
+                } else if !match.ledgerLines.isEmpty {
                     // 장부에 실제로 적힐 줄들. **이게 이 화면의 요점이다** —
                     // "이충성 −946,501" 이 아니라 "아침식사 414,000 …" 이 장부에 남는다.
-                    ForEach(Array(group.ledgerLines.enumerated()), id: \.offset) { _, line in
+                    ForEach(Array(match.ledgerLines.enumerated()), id: \.offset) { _, line in
                         HStack(spacing: DS.Spacing.tight) {
                             Text("·")
                             Text(line.title).lineLimit(1)
@@ -257,6 +272,11 @@ struct StatementImportView: View {
                         }
                         .typeStyle(DS.Typo.body3)
                         .foregroundColor(DS.Ink.secondary)
+                    }
+                    if !match.manualCategory.isEmpty {
+                        Text(match.manualCategory)
+                            .typeStyle(DS.Typo.body3)
+                            .foregroundColor(DS.Ink.tertiary)
                     }
                 } else if !match.candidates.isEmpty {
                     Text("청구 묶음 \(match.candidates.count)개가 금액이 같아요")
@@ -272,6 +292,12 @@ struct StatementImportView: View {
         }
         .buttonStyle(.plain)
         .disabled(!canPick)
+    }
+
+    /// 내부 이체의 상대 통장 이름. 없으면 빈 문자열.
+    private func counterName(_ match: StatementMatch) -> String {
+        guard let id = match.counterAccountId else { return "" }
+        return viewModel.accounts.first { $0.id == id }?.name ?? ""
     }
 
     /// 넣을 게 남아 있으면 물어보고, 없으면 그냥 닫는다.
@@ -294,63 +320,146 @@ struct StatementImportView: View {
     }
 }
 
-/// 금액이 같은 청구 묶음이 여럿일 때 사람이 고르는 시트.
+/// 내역서 한 줄을 손보는 시트.
+///
+/// 여기서 정할 수 있는 게 셋이다 — **어느 청구인지 · 장부에 뭐라고 적을지 ·
+/// 어떤 분류인지.** 예전에는 첫째만 있었고, 그래서 청구가 없는 줄
+/// (`우성볼링장`·`ATM현금`·`통장 이자`)은 은행 적요 그대로 들어간 뒤에 거래를
+/// 하나씩 열어 고쳐야 했다. **같은 일을 두 번 하는 자리였다.**
 ///
 /// **"청구 없이 넣기" 도 답이다.** 금액이 우연히 같을 뿐 관계없는 거래일 수 있다.
-private struct CandidatePickerView: View {
+private struct StatementRowEditView: View {
     let match: StatementMatch
-    let onPick: (String?) -> Void
+    /// 내부 이체일 때 상대 통장 이름. 사람에게 "무엇과 무엇 사이인지" 를 보여준다.
+    let counterAccountName: String
+    let onSave: (StatementMatch) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
+    @State private var draft: StatementMatch
+
+    init(match: StatementMatch, counterAccountName: String,
+         onSave: @escaping (StatementMatch) -> Void) {
+        self.match = match
+        self.counterAccountName = counterAccountName
+        self.onSave = onSave
+        _draft = State(initialValue: match)
+    }
+
     var body: some View {
         NavigationView {
-            List {
+            Form {
                 Section {
-                    ForEach(match.candidates) { group in
-                        Button {
-                            onPick(group.id)
-                            dismiss()
-                        } label: {
-                            VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                                HStack {
-                                    Text(group.submitterName).rowTitle()
-                                    Spacer()
-                                    if group.id == match.chosenId {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(DS.Ink.brand)
-                                    }
-                                }
-                                Text("\(group.processedAt.koreanDateTimeString) 승인 · \(group.bills.count)건")
-                                    .rowSubtext()
-                                ForEach(Array(group.ledgerLines.enumerated()), id: \.offset) { _, line in
-                                    Text("· \(line.title) \(line.amount.formatted())원")
-                                        .typeStyle(DS.Typo.body3)
-                                        .foregroundColor(DS.Ink.secondary)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    LabeledContent("일시", value: match.line.datetime.koreanDateTimeString)
+                    LabeledContent("금액", value: "\(match.line.amount.formatted())원")
+                    LabeledContent("은행 적요", value: match.line.description ?? "-")
                 } header: {
-                    Text("금액이 같은 청구 묶음")
+                    Text("통장에 찍힌 것")
+                } footer: {
+                    Text("통장의 기록이라 고치지 않아요. 장부에 적을 이름은 아래에서 정해요.")
                 }
 
-                Section {
-                    Button("청구 없이 넣기") {
-                        onPick(nil)
-                        dismiss()
+                // 상대 통장을 알아낸 줄에만 나온다. 이름이 우연히 같을 수 있어서
+                // 잠그지 않는다.
+                if match.counterAccountId != nil {
+                    Section {
+                        Toggle("통장 사이 이체", isOn: $draft.isInternalTransfer)
+                    } footer: {
+                        Text("\(counterAccountName) 통장과 주고받은 돈이에요. 켜 두면 합계·보고서에서 빠지고, 그쪽 통장 잔액도 여기서 같이 맞춰져요.")
                     }
-                } footer: {
-                    Text("금액이 우연히 같을 뿐 관계없는 거래라면 이쪽이에요. 적요는 나중에 손으로 적으면 돼요.")
+                }
+
+                if !draft.isInternalTransfer {
+                    if !match.candidates.isEmpty { candidateSection }
+                    ledgerSection
                 }
             }
             .navigationTitle(match.line.description ?? "거래")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("닫기") { dismiss() }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("취소") { dismiss() }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("완료") {
+                        onSave(draft)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private var candidateSection: some View {
+        Section {
+            ForEach(match.candidates) { group in
+                Button {
+                    draft.chosenId = group.id
+                } label: {
+                    VStack(alignment: .leading, spacing: DS.Spacing.tight) {
+                        HStack {
+                            Text(group.submitterName).rowTitle()
+                            Spacer()
+                            if group.id == draft.chosenId {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(DS.Ink.brand)
+                            }
+                        }
+                        Text("\(group.processedAt.koreanDateTimeString) 승인 · \(group.bills.count)건")
+                            .rowSubtext()
+                        ForEach(Array(group.ledgerLines.enumerated()), id: \.offset) { _, line in
+                            Text("· \(line.title) \(line.amount.formatted())원")
+                                .typeStyle(DS.Typo.body3)
+                                .foregroundColor(DS.Ink.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button("청구 없이 넣기") { draft.chosenId = nil }
+                .foregroundColor(draft.chosenId == nil ? DS.Ink.brand : DS.Ink.primary)
+        } header: {
+            Text("금액이 같은 청구 묶음")
+        } footer: {
+            Text("금액이 우연히 같을 뿐 관계없는 거래라면 '청구 없이 넣기' 예요.")
+        }
+    }
+
+    /// 장부에 적힐 이름과 분류.
+    ///
+    /// 청구를 골랐으면 **적요는 청구 제목이 되므로 적는 자리를 안 준다** — 두 곳에서
+    /// 오면 어느 것이 맞는지가 매번 흔들린다. 분류는 청구에 없는 값이라 늘 열려 있다.
+    @ViewBuilder
+    private var ledgerSection: some View {
+        if draft.chosen == nil {
+            Section {
+                TextField(match.line.description ?? "적요", text: $draft.manualDescription)
+            } header: {
+                Text("적요")
+            } footer: {
+                Text("장부에 적힐 이름이에요. 비워 두면 은행 적요가 그대로 들어가요.")
+            }
+        }
+
+        Section("분류") {
+            TextField("카테고리 (예: 회비, 식대, 시상품)", text: $draft.manualCategory)
+        }
+
+        if !draft.ledgerLines.isEmpty {
+            Section {
+                ForEach(Array(draft.ledgerLines.enumerated()), id: \.offset) { _, line in
+                    HStack {
+                        Text(line.title.isEmpty ? "(적요 없음)" : line.title)
+                        Spacer()
+                        Text("\(line.amount.formatted())원").tabularAmount()
+                            .foregroundColor(DS.Ink.secondary)
+                    }
+                    .typeStyle(DS.Typo.body2)
+                }
+            } header: {
+                Text("장부에 이렇게 적혀요")
             }
         }
     }

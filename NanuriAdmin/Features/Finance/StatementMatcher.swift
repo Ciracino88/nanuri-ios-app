@@ -60,8 +60,33 @@ struct StatementMatch: Identifiable {
     /// 사람이 고른(또는 자동으로 정해진) 묶음. 비어 있으면 청구 없이 그냥 넣는다.
     var chosenId: String?
 
+    /// **통장 사이 이체로 보이는 줄인가.** 적요가 다른 통장의 `statementAlias` 와
+    /// 같으면 켜진다. 사람이 끌 수 있다 — 이름이 우연히 같을 수 있고, 그때
+    /// 잠가 두면 빠져나갈 길이 없다.
+    var isInternalTransfer: Bool
+    /// 내부 이체일 때 상대 통장. 판정과 함께 정해진다.
+    let counterAccountId: UUID?
+
+    /// 사람이 적은 적요. **비어 있으면 은행 적요 그대로 들어간다.**
+    ///
+    /// 적으면 조각 하나짜리 분할이 된다 — 거래의 적요(은행 값)를 덮어쓰지 않는다.
+    /// 청구 묶음을 골랐으면 그 제목들이 적요라 이 칸은 안 쓴다.
+    var manualDescription: String = ""
+    /// 사람이 적은 분류. 이 줄에서 생기는 **모든 조각**에 같이 붙는다.
+    var manualCategory: String = ""
+
     var id: String { "\(line.datetime.timeIntervalSince1970)|\(line.amount)" }
     var chosen: BillGroup? { candidates.first { $0.id == chosenId } }
+
+    /// 이 줄이 장부에 만들 조각들. **화면과 저장이 같은 답을 쓰도록 여기 한 벌만 둔다.**
+    var ledgerLines: [(title: String, amount: Int)] {
+        if isInternalTransfer { return [] }          // 내부 이체는 장부 줄이 아니다
+        if let group = chosen { return group.ledgerLines }
+        let d = manualDescription.trimmingCharacters(in: .whitespaces)
+        let c = manualCategory.trimmingCharacters(in: .whitespaces)
+        guard !d.isEmpty || !c.isEmpty else { return [] }
+        return [(d.isEmpty ? (line.description ?? "") : d, abs(line.amount))]
+    }
 }
 
 /// 거래내역서와 청구서를 맞춘다.
@@ -98,14 +123,31 @@ enum StatementMatcher {
     /// 절대 시각(`Date`)이라 그대로 빼면 된다. 대시보드에서 `to_char` 로 보면 UTC 라
     /// 9시간 어긋나 보이는데, 그건 **찍어 보는 방식의 문제**지 값의 문제가 아니다.
     /// 여기에 9시간을 더하면 오히려 전부 틀어진다.
+    /// - Parameter accounts: 내부 이체 판정에 쓴다. `statementAlias` 가 있는 통장만
+    ///   의미가 있다 — 적요가 그 이름이면 그 통장과 주고받은 것이다.
     static func matches(lines: [ParsedStatementLine],
                         groups: [BillGroup],
-                        existing: [BankTransaction]) -> [StatementMatch] {
+                        existing: [BankTransaction],
+                        accounts: [Account] = []) -> [StatementMatch] {
+
+        // 적요에 찍히는 이름 → 통장. 이름이 없는 통장은 판정에 못 쓴다.
+        var accountByAlias: [String: UUID] = [:]
+        for account in accounts {
+            let alias = (account.statementAlias ?? "").normalizedName
+            guard !alias.isEmpty else { continue }
+            accountByAlias[alias] = account.id
+        }
 
         // 어느 묶음이 몇 줄에서 후보로 걸리는지 — 자동 선택을 판단하는 데 쓴다.
         var candidatesByLine: [[BillGroup]] = []
 
         for line in lines {
+            // 내부 이체에는 맞을 청구가 없다. 금액이 우연히 청구 묶음과 같을 수
+            // 있으므로 **후보를 아예 만들지 않는다.**
+            guard accountByAlias[(line.description ?? "").normalizedName] == nil else {
+                candidatesByLine.append([])
+                continue
+            }
             // 청구는 나가는 돈이다. 입금·이자에는 맞을 청구가 없다.
             guard line.amount < 0 else {
                 candidatesByLine.append([])
@@ -140,10 +182,13 @@ enum StatementMatcher {
             // **후보가 하나뿐이고 그 묶음이 다른 줄에는 안 걸릴 때만** 미리 고른다.
             let auto = (candidates.count == 1 && usage[candidates[0].id] == 1)
                 ? candidates[0].id : nil
+            let counter = accountByAlias[(line.description ?? "").normalizedName]
             return StatementMatch(line: line,
                                   alreadyImported: already,
                                   candidates: candidates,
-                                  chosenId: already ? nil : auto)
+                                  chosenId: already ? nil : auto,
+                                  isInternalTransfer: counter != nil,
+                                  counterAccountId: counter)
         }
     }
 }
