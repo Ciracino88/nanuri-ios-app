@@ -4,7 +4,6 @@ struct FinanceView: View {
     @ObservedObject var viewModel: FinanceViewModel
     @State private var selectedTab = 0
     @State private var editingTransaction: BankTransaction?
-    @State private var showStatements = false
     @State private var exportFile: ExportFile?
     @State private var isExporting = false
     @State private var exportMessage = "내보내는 중…"
@@ -102,8 +101,11 @@ struct FinanceView: View {
             .sheet(item: $editingTransaction) { tx in
                 TransactionEditView(transaction: tx, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
-            .sheet(isPresented: $showStatements) {
-                StatementsListView(viewModel: viewModel)
+            // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
+            .sheet(item: $viewModel.incomingStatement) { incoming in
+                if let account = viewModel.account(named: "모임") {
+                    StatementImportView(viewModel: viewModel, url: incoming.url, account: account)
+                }
             }
             .sheet(item: $exportFile) { file in
                 ShareSheet(items: [file.url])
@@ -126,7 +128,6 @@ struct FinanceView: View {
         .screenBackground(DS.Surface.card)
         .task {
             await viewModel.fetchTransactions()
-            viewModel.loadSavedStatements()
         }
     }
 
@@ -514,14 +515,13 @@ struct FinanceView: View {
     private func reload() async {
         await viewModel.fetchAccounts()
         await viewModel.fetchTransactions()
-        viewModel.loadSavedStatements()
     }
 
     private var emptyView: some View {
         EmptyStateView(
             title: "거래내역이 없어요",
             icon: "doc.richtext",
-            message: "우측 상단 ⋯ 에서 '거래 추가'로 직접 넣거나,\n토스뱅크 거래내역서를 앱으로 공유한 뒤\n'저장된 거래내역서'에서 불러올 수 있어요"
+            message: "우측 상단 ⋯ 에서 '거래 추가'로 직접 넣거나,\n토스뱅크 거래내역서를 앱으로 공유하면 돼요"
         )
         .pullToRefresh { await reload() }
     }
@@ -580,14 +580,6 @@ struct FinanceView: View {
             }
             .disabled(viewModel.filtered.isEmpty)
 
-            Divider()
-
-            Button {
-                viewModel.loadSavedStatements()
-                showStatements = true
-            } label: {
-                Label("저장된 거래내역서", systemImage: "folder")
-            }
         } label: {
             HeaderIcon(systemName: "ellipsis.circle")
         }

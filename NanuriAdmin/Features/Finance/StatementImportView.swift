@@ -17,7 +17,9 @@ import SwiftUI
 /// 훑어야 한다.
 struct StatementImportView: View {
     @ObservedObject var viewModel: FinanceViewModel
-    let statement: StatementFile
+    /// 공유로 들어온 파일. **앱은 이걸 보관하지 않는다** — 이 화면이 닫히면 끝이고,
+    /// 다시 필요하면 파일 앱에서 다시 공유한다.
+    let url: URL
     /// 이 내역서가 어느 통장 것인가. 토스에서 뽑으므로 모임통장이다.
     let account: Account
 
@@ -27,6 +29,10 @@ struct StatementImportView: View {
     @State private var isPreparing = true
     @State private var isImporting = false
     @State private var picking: StatementMatch?
+    @State private var showCloseConfirm = false
+    /// "이미 장부에 있어요" 는 접어 둔다. 같은 달을 다시 뽑으면 **그 섹션이 제일
+    /// 길어서**, 펼쳐 두면 정작 손댈 줄이 화면 밖으로 밀린다.
+    @State private var showSkipped = false
 
     private var needsChoice: [StatementMatch] {
         matches.filter { !$0.alreadyImported && $0.chosenId == nil && !$0.candidates.isEmpty }
@@ -40,7 +46,9 @@ struct StatementImportView: View {
     private var skipped: [StatementMatch] {
         matches.filter { $0.alreadyImported }
     }
-    private var importCount: Int { matches.filter { !$0.alreadyImported }.count }
+    private var importing: [StatementMatch] { matches.filter { !$0.alreadyImported } }
+    private var importCount: Int { importing.count }
+    private var importTotal: Int { importing.reduce(0) { $0 + $1.line.amount } }
 
     var body: some View {
         NavigationView {
@@ -54,23 +62,29 @@ struct StatementImportView: View {
                     list
                 }
             }
+            // 목록이 흰 바탕에 그냥 앉는 구조라 재정 탭과 같은 흰 페이지다.
+            .screenBackground(DS.Surface.card)
             .navigationTitle("거래내역서 확인")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("닫기") { dismiss() }.disabled(isImporting)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isImporting {
-                        ProgressView()
-                    } else {
-                        Button("넣기\(importCount > 0 ? " (\(importCount))" : "")") { runImport() }
-                            .fontWeight(.semibold)
-                            .disabled(importCount == 0)
-                    }
+                    Button("닫기") { closeRequested() }.disabled(isImporting)
                 }
             }
-            .interactiveDismissDisabled(isImporting)
+            // 결정은 바닥이다. 오른쪽 위 작은 글자에 두면 이 화면의 유일한 행동이
+            // 가장 안 눌리는 자리에 앉는다 (DESIGN.md 8번).
+            .safeAreaInset(edge: .bottom) {
+                if !isPreparing && !matches.isEmpty { importBar }
+            }
+            // 넣기 전에 닫으면 이 파일은 사라진다 (보관하지 않는다). 쓸어내려
+            // 닫는 것도 막고 닫기 버튼 하나로 모은다 — 그래야 물어볼 자리가 생긴다.
+            .interactiveDismissDisabled()
+            .confirmationDialog("넣지 않고 닫을까요?", isPresented: $showCloseConfirm, titleVisibility: .visible) {
+                Button("닫기", role: .destructive) { dismiss() }
+                Button("계속 보기", role: .cancel) {}
+            } message: {
+                Text("이 거래내역서는 앱에 보관하지 않아요. 다시 넣으려면 파일 앱에서 한 번 더 공유하면 돼요.")
+            }
             .sheet(item: $picking) { match in
                 CandidatePickerView(match: match) { chosenId in
                     if let idx = matches.firstIndex(where: { $0.id == match.id }) {
@@ -79,43 +93,136 @@ struct StatementImportView: View {
                 }
             }
             .task {
-                matches = await viewModel.prepareStatementImport(from: statement)
+                matches = await viewModel.prepareStatementImport(from: url)
                 isPreparing = false
             }
         }
     }
 
+    /// `List` 가 아니라 `ScrollView` 다 — 재정 탭 목록과 같은 문법이다.
+    /// **섹션은 회색 소제목이 앉고 그 아래 줄이 흰 바탕 위에 바로 놓인다.**
+    /// 상자도 구분선도 없다 (DESIGN.md 1번 "카드냐 섹션이냐").
     private var list: some View {
-        List {
-            section("확인이 필요해요", needsChoice,
-                    footer: "금액이 같은 청구 묶음이 여럿이라 어느 것인지 정해야 해요.")
-            section("청구서와 맞았어요", matched,
-                    footer: "금액이 정확히 맞고 다른 줄과 겹치지 않아 미리 골라 뒀어요. 눌러서 바꿀 수 있어요.")
-            section("청구 없이 넣어요", unmatched,
-                    footer: "맞는 청구가 없어요. 적요와 분류는 넣은 뒤에 손으로 적으면 돼요.")
-            section("이미 장부에 있어요", skipped,
-                    footer: "같은 시각·같은 금액의 거래가 이미 있어서 넣지 않아요.")
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                section("확인이 필요해요", needsChoice)
+                section("청구서와 맞았어요", matched)
+                section("청구 없이 넣어요", unmatched,
+                        note: "적요와 분류는 넣은 뒤에 손으로 적으면 돼요.")
+                skippedSection
+            }
+            .padding(.bottom, DS.Spacing.s8)
+            .animation(DS.Motion.list, value: showSkipped)
         }
     }
 
+    /// 섹션 하나. `note` 는 **읽어야 알 수 있는 것만** 준다.
+    ///
+    /// 예전에는 네 섹션 전부 두 줄짜리 설명이 붙어서 설명이 항목보다 많았다.
+    /// 지금은 줄 자체가 말하는 것(후보가 몇 개인지, 장부에 뭐라고 적힐지)은 빼고,
+    /// 줄을 봐도 모르는 것만 남긴다.
     @ViewBuilder
-    private func section(_ title: String, _ items: [StatementMatch], footer: String) -> some View {
+    private func section(_ title: String, _ items: [StatementMatch], note: String? = nil) -> some View {
         if !items.isEmpty {
-            Section {
+            VStack(alignment: .leading, spacing: 0) {
+                sectionHeader(title, count: items.count)
+                if let note {
+                    Text(note)
+                        .typeStyle(DS.Typo.body3)
+                        .foregroundColor(DS.Ink.tertiary)
+                        .padding(.horizontal, DS.Spacing.s4)
+                        .padding(.bottom, DS.Spacing.small)
+                }
                 ForEach(items) { match in
                     row(match)
                 }
-            } header: {
-                Text("\(title) \(items.count)")
-            } footer: {
-                Text(footer)
             }
         }
     }
 
+    /// 이미 넣은 것들. **접어 둔다.**
+    @ViewBuilder
+    private var skippedSection: some View {
+        if !skipped.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(DS.Motion.control) { showSkipped.toggle() }
+                } label: {
+                    HStack(spacing: DS.Spacing.tight) {
+                        sectionHeader("이미 장부에 있어요", count: skipped.count)
+                        Image(systemName: showSkipped ? "chevron.up" : "chevron.down")
+                            .font(DS.Icon.font(DS.Icon.m))
+                            .foregroundColor(DS.Ink.placeholder)
+                            .padding(.top, DS.Spacing.s6)
+                            .padding(.bottom, DS.Spacing.medium)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if showSkipped {
+                    ForEach(skipped) { match in
+                        row(match)
+                    }
+                }
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String, count: Int) -> some View {
+        Text("\(title) \(count)")
+            .typeStyle(DS.Typo.body3)
+            .foregroundColor(DS.Ink.secondary)
+            .padding(.horizontal, DS.Spacing.s4)
+            .padding(.top, DS.Spacing.s6)
+            .padding(.bottom, DS.Spacing.medium)
+    }
+
+    /// 바닥 바. **건수·합계와 결정을 한 자리에 담는다** — 묶어 보내기의
+    /// `selectionBar` 와 같은 문법이다.
+    private var importBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            VStack(alignment: .leading, spacing: DS.Spacing.medium) {
+                if !needsChoice.isEmpty {
+                    // 막지는 않는다. 안 정한 채로 넣으면 청구 없이 들어갈 뿐이라
+                    // 되돌릴 수 있고, 넣기를 잠그면 빠져나갈 길이 없어진다.
+                    Text("\(needsChoice.count)건은 어느 청구인지 아직 안 정했어요")
+                        .typeStyle(DS.Typo.body3)
+                        .foregroundColor(DS.Palette.pending)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(importCount == 0 ? "넣을 거래가 없어요" : "\(importCount)건 넣어요")
+                        .rowTitle()
+                    Spacer(minLength: DS.Spacing.small)
+                    if importCount > 0 {
+                        Text("\(importTotal.formatted())원")
+                            .cardTitle()
+                            .tabularAmount()
+                    }
+                }
+                if isImporting {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else {
+                    ActionButton(title: "장부에 넣기", kind: .primary, action: runImport)
+                        .disabled(importCount == 0)
+                        .opacity(importCount == 0 ? DS.State.disabledOpacity : 1)
+                }
+            }
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.top, DS.Spacing.medium)
+            .padding(.bottom, DS.Spacing.small)
+        }
+        .background(DS.Surface.card)
+        .elevation(.bottomBar)
+    }
+
+    /// 한 줄. **누를 수 있는 줄에만 화살표를 준다** — 네 섹션이 겉으로 같아 보이면
+    /// 어디를 눌러 고칠 수 있는지 알 길이 없다. 화살표가 없으면 읽는 줄이다.
     private func row(_ match: StatementMatch) -> some View {
-        Button {
-            guard !match.alreadyImported, !match.candidates.isEmpty else { return }
+        let canPick = !match.alreadyImported && !match.candidates.isEmpty
+        return Button {
+            guard canPick else { return }
             picking = match
         } label: {
             VStack(alignment: .leading, spacing: DS.Spacing.tight) {
@@ -131,6 +238,11 @@ struct StatementImportView: View {
                         .typeStyle(DS.Typo.body2)
                         .tabularAmount()
                         .foregroundColor(match.line.amount > 0 ? DS.Palette.deposit : DS.Ink.primary)
+                    if canPick {
+                        Image(systemName: "chevron.right")
+                            .font(DS.Icon.font(DS.Icon.m))
+                            .foregroundColor(DS.Ink.placeholder)
+                    }
                 }
 
                 if let group = match.chosen {
@@ -152,11 +264,24 @@ struct StatementImportView: View {
                         .foregroundColor(DS.Palette.pending)
                 }
             }
-            .padding(.vertical, DS.Spacing.s1 / 2)
+            .padding(.horizontal, DS.Spacing.s4)
+            .padding(.vertical, DS.Spacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .opacity(match.alreadyImported ? DS.State.disabledOpacity : 1)
         }
         .buttonStyle(.plain)
-        .disabled(match.alreadyImported || match.candidates.isEmpty)
+        .disabled(!canPick)
+    }
+
+    /// 넣을 게 남아 있으면 물어보고, 없으면 그냥 닫는다.
+    /// **다 이미 장부에 있는 내역서**를 확인만 하고 닫는 건 잃는 게 없다.
+    private func closeRequested() {
+        if importCount > 0 {
+            showCloseConfirm = true
+        } else {
+            dismiss()
+        }
     }
 
     private func runImport() {

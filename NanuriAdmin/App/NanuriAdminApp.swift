@@ -1,6 +1,7 @@
 import SwiftUI
 import GoogleSignIn
 import Combine
+import os
 
 @main
 struct NanuriAdminApp: App {
@@ -11,6 +12,29 @@ struct NanuriAdminApp: App {
     init() {
         // 이미지 캐시 상한. 기본값은 디스크 무제한이라 우리가 정해 준다.
         RemoteImageCache.configure()
+        Self.removeLegacyStatementArchive()
+    }
+
+    /// 옛 "저장된 거래내역서" 보관함을 지운다.
+    ///
+    /// 2026-09-03 까지는 공유로 들어온 PDF 를 `Documents/Statements` 에 복사해 두고
+    /// 목록에서 골라 불러왔다. 그 목록을 없애면서(원본은 파일 앱에 있고, 앱이 사본을
+    /// 쌓을 이유가 없다) **코드만 지우면 파일은 기기에 그대로 남는다.** 꺼낼 길도
+    /// 없이 용량만 차지하고 백업에도 올라가므로 한 번 지운다.
+    ///
+    /// 폴더가 없으면 아무 일도 안 한다. **이 관리자가 쓰는 기기에서 한 번 돌고 나면
+    /// 지워도 되는 코드다** — 앱을 쓰는 사람이 하나뿐이라 그 시점을 알 수 있다.
+    private static func removeLegacyStatementArchive() {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let legacy = docs.appendingPathComponent("Statements", isDirectory: true)
+        guard fm.fileExists(atPath: legacy.path) else { return }
+        do {
+            try fm.removeItem(at: legacy)
+            Log.finance.info("옛 거래내역서 보관함을 지웠다")
+        } catch {
+            Log.finance.error("옛 보관함 삭제 실패: \(error.localizedDescription)")
+        }
     }
 
     var body: some Scene {
