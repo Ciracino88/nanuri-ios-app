@@ -16,6 +16,10 @@ struct FinanceView: View {
     @State private var showAccounts = false
     /// ⋯ 메뉴가 여는 거래 추가 시트. 농협 거래를 옮겨 적는 자리다.
     @State private var showAddTransaction = false
+    /// 분류 붙이기 모드. 켜지면 줄이 "눌러서 고르는 것" 이 된다.
+    @State private var isSelecting = false
+    @State private var selection: Set<String> = []
+    @State private var showCategorySheet = false
 
     /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
     /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
@@ -61,14 +65,22 @@ struct FinanceView: View {
                 showsNotifications: false,
                 center: { monthStepper },
                 leading: {
-                    HeaderIconButton(systemName: "wallet.bifold", label: "통장 잔액") {
-                        showAccounts = true
+                    if isSelecting {
+                        HeaderIconButton(systemName: "xmark", label: "고르기 그만두기",
+                                         tint: DS.Palette.accent) { exitSelection() }
+                    } else {
+                        HeaderIconButton(systemName: "wallet.bifold", label: "통장 잔액") {
+                            showAccounts = true
+                        }
                     }
                 },
                 trailing: {
-                    actionMenu()
-                    HeaderIconButton(systemName: "plus", label: "거래 추가") {
-                        showAddTransaction = true
+                    // 고르는 중에는 다른 동작을 걷는다. 지금 할 일은 하나다.
+                    if !isSelecting {
+                        actionMenu()
+                        HeaderIconButton(systemName: "plus", label: "거래 추가") {
+                            showAddTransaction = true
+                        }
                     }
                 }
             )
@@ -131,6 +143,18 @@ struct FinanceView: View {
             .sheet(isPresented: $showAddTransaction) {
                 AddTransactionView(viewModel: viewModel)
             }
+            .sheet(isPresented: $showCategorySheet) {
+                CategoryAssignView(suggestions: viewModel.usedCategories,
+                                   count: selection.count) { category in
+                    Task {
+                        await viewModel.applyCategory(category, to: selectedRows)
+                        exitSelection()
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting { selectionBar }
+            }
         }
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
         // 요약 밴드 하나뿐이고, 그 대비가 화면 위쪽을 잡아 준다.
@@ -138,6 +162,57 @@ struct FinanceView: View {
         .task {
             await viewModel.fetchTransactions()
         }
+    }
+
+    /// 고른 줄들. 화면에 안 보이는 달의 줄은 애초에 못 고른다.
+    private var selectedRows: [LedgerRow] {
+        viewModel.ledgerRows.filter { selection.contains($0.id) }
+    }
+
+    private func toggle(_ row: LedgerRow) {
+        if selection.contains(row.id) { selection.remove(row.id) } else { selection.insert(row.id) }
+    }
+
+    private func enterSelection() {
+        selection = []
+        withAnimation(DS.Motion.control) { isSelecting = true }
+    }
+
+    private func exitSelection() {
+        withAnimation(DS.Motion.control) { isSelecting = false }
+        selection = []
+    }
+
+    /// 고르는 중에 바닥에 서는 바. 묶어 보내기의 `selectionBar` 와 같은 문법이다.
+    private var selectionBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            VStack(spacing: DS.Spacing.medium) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(selection.isEmpty ? "분류를 붙일 줄을 고르세요" : "\(selection.count)줄 선택")
+                        .rowTitle()
+                    Spacer(minLength: DS.Spacing.small)
+                    // **아무것도 안 골랐을 때 가장 쓸모 있다.** 분류를 붙이는 일은
+                    // 대개 "남은 것 전부" 로 시작해서 몇 줄을 빼는 식이다.
+                    if !viewModel.uncategorizedRows.isEmpty {
+                        Button("미분류 전체") {
+                            selection = Set(viewModel.uncategorizedRows.map(\.id))
+                        }
+                        .typeStyle(DS.Typo.labelS)
+                        .foregroundColor(DS.Ink.brand)
+                    }
+                }
+                if !selection.isEmpty {
+                    ActionButton(title: "분류 붙이기", kind: .primary) { showCategorySheet = true }
+                }
+            }
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.top, DS.Spacing.medium)
+            .padding(.bottom, DS.Spacing.small)
+        }
+        .background(DS.Surface.card)
+        .elevation(.bottomBar)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     /// 헤더 가운데에 들어가는 달 넘김.
@@ -399,12 +474,13 @@ struct FinanceView: View {
         return net > 0 ? DS.Palette.deposit : DS.Ink.secondary
     }
 
-    private var currentItems: [BankTransaction] {
-        let byKind: [BankTransaction]
+    private var currentItems: [LedgerRow] {
+        let byKind: [LedgerRow]
         switch selectedTab {
-        case 1: byKind = viewModel.deposits
-        case 2: byKind = viewModel.withdrawals
-        default: byKind = viewModel.filtered
+        case 1: byKind = viewModel.depositRows
+        case 2: byKind = viewModel.withdrawalRows
+        case 3: byKind = viewModel.uncategorizedRows
+        default: byKind = viewModel.ledgerRows
         }
         guard let selectedDay else { return byKind }
         let cal = Calendar.current
@@ -416,12 +492,12 @@ struct FinanceView: View {
     private var dayGroups: [DayGroup] {
         var groups: [DayGroup] = []
         let calendar = Calendar.current
-        for tx in currentItems {
-            let day = calendar.startOfDay(for: tx.datetime)
+        for row in currentItems {
+            let day = calendar.startOfDay(for: row.datetime)
             if let last = groups.last, last.day == day {
-                groups[groups.count - 1].items.append(tx)
+                groups[groups.count - 1].items.append(row)
             } else {
-                groups.append(DayGroup(day: day, items: [tx]))
+                groups.append(DayGroup(day: day, items: [row]))
             }
         }
         return groups
@@ -440,10 +516,16 @@ struct FinanceView: View {
             LazyVStack(spacing: 0) {
                 // 레퍼런스 순서 그대로 — 거르개가 먼저, 요약이 그다음, 날짜 축이
                 // 그 아래, 목록이 맨 끝이다. 위에서 아래로 범위가 좁혀진다.
+                // 개수는 **장부 줄 수**다. 묶어 보낸 출금 하나가 조각 아홉이면
+                // 아홉으로 센다 — 엑셀 장부의 줄 수와 같은 수라야 한다.
+                // **미분류가 넷째 칸이다.** 분류를 붙이는 일은 "남은 것" 을 보는
+                // 일이라 그 수가 보여야 한다. 내부 이체는 안 센다 — 앞으로도 분류가
+                // 안 붙는 줄이라 세면 그 수가 영영 0이 안 된다.
                 ChipSelector(items: [
-                    .init(value: 0, label: "전체", count: viewModel.filtered.count),
-                    .init(value: 1, label: "입금", count: viewModel.deposits.count),
-                    .init(value: 2, label: "출금", count: viewModel.withdrawals.count)
+                    .init(value: 0, label: "전체", count: viewModel.ledgerRows.count),
+                    .init(value: 1, label: "입금", count: viewModel.depositRows.count),
+                    .init(value: 2, label: "출금", count: viewModel.withdrawalRows.count),
+                    .init(value: 3, label: "미분류", count: viewModel.uncategorizedRows.count)
                 ], selection: $selectedTab)
                 .padding(.top, DS.Spacing.medium)
                 .padding(.bottom, DS.Spacing.s5)
@@ -494,10 +576,16 @@ struct FinanceView: View {
                 .padding(.top, DS.Spacing.s6)
                 .padding(.bottom, DS.Spacing.medium)
 
-            ForEach(group.items) { tx in
-                TransactionRowView(transaction: tx, splits: viewModel.splits(for: tx.id))
+            ForEach(group.items) { row in
+                // 고르는 중이면 누르는 뜻이 바뀐다 — 시트를 여는 대신 고른다.
+                // 조각을 눌러도 **부모 거래**의 편집이 열린다. 고칠 것이 조각
+                // 하나여도 금액·통장·영수증은 거래가 갖고 있다.
+                LedgerRowView(row: row,
+                              isSelected: isSelecting ? selection.contains(row.id) : nil)
                     .contentShape(Rectangle())
-                    .onTapGesture { editingTransaction = tx }
+                    .onTapGesture {
+                        if isSelecting { toggle(row) } else { editingTransaction = row.transaction }
+                    }
             }
         }
     }
@@ -542,6 +630,16 @@ struct FinanceView: View {
     /// 자리가 났다. **장부를 쓰는 게 이 화면의 본업이고 나머지는 뽑는 일이다.**
     private func actionMenu() -> some View {
         Menu {
+            // **맨 위다.** 분류를 붙이는 건 장부를 쓰는 일이고 나머지는 뽑는 일이다.
+            Button {
+                enterSelection()
+            } label: {
+                Label("분류 붙이기", systemImage: "checklist")
+            }
+            .disabled(viewModel.ledgerRows.isEmpty)
+
+            Divider()
+
             // 내보내기보다 먼저 둔다 — 확인하고 내보내는 순서가 자연스럽다.
             Button {
                 if let html = viewModel.reportHTML() {
@@ -587,19 +685,38 @@ struct FinanceView: View {
     }
 }
 
-/// 거래 한 줄.
+/// **장부 한 줄.**
 ///
 /// **금액이 제목 자리다.** 왼쪽 첫 줄에 크고 굵게 오고, 무엇에 쓴 돈인지는
 /// 그 아래 회색 부제로 붙는다. 제목이 왼쪽·금액이 오른쪽이던 적이 있는데,
 /// 장부를 훑을 때 눈이 먼저 잡는 건 결국 수다.
 ///
+/// **거래가 아니라 조각을 그린다.** 묶어 보낸 출금 하나는 여기서 여러 줄이 된다 —
+/// 사람이 쓰던 엑셀이 그 모양이고, 보고서·분석도 이미 그 단위로 센다.
+///
 /// 시각은 뺐다 — 날짜는 섹션 머리가 말하고, 몇 시였는지는 훑을 때 필요한 정보가
 /// 아니다. 상세 시트의 "일시" 에 그대로 있다.
-struct TransactionRowView: View {
-    let transaction: BankTransaction
-    var splits: [TransactionSplit] = []
+struct LedgerRowView: View {
+    let row: LedgerRow
+    /// 고르는 중일 때만 값이 있다. `nil` 이면 평소 목록이다.
+    var isSelected: Bool?
 
     var body: some View {
+        HStack(spacing: DS.Spacing.medium) {
+            if let isSelected {
+                // 청구서 탭 선택 모드와 같은 표식이다.
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(DS.Icon.font(DS.Icon.action))
+                    .foregroundColor(isSelected ? DS.Palette.accent : DS.Ink.placeholder)
+            }
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, DS.Spacing.s4)
+        .padding(.vertical, DS.Spacing.medium)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.s1 / 2) {
             // 입금은 브랜드 파랑, 출금은 본문 검정이다. 장부에서 지출은 사고가
             // 아니라 일상이라 경고색을 주지 않는다.
@@ -607,9 +724,9 @@ struct TransactionRowView: View {
             // **통장 사이 이체는 셋째 색이다.** 수입도 지출도 아니라서 — 장부
             // 전체로 보면 나간 돈도 들어온 돈도 아니고 합계·보고서에서도 빠진다.
             // 파랑이나 검정을 주면 그 줄이 다른 줄과 같은 종류의 수로 읽힌다.
-            Text(transaction.isDeposit
-                 ? "+\(transaction.amount.formatted())원"
-                 : "\(transaction.amount.formatted())원")
+            Text(row.isDeposit
+                 ? "+\(row.amount.formatted())원"
+                 : "\(row.amount.formatted())원")
                 .typeStyle(DS.Typo.title2)
                 .tabularAmount()
                 .foregroundColor(amountColor)
@@ -621,14 +738,12 @@ struct TransactionRowView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, DS.Spacing.s4)
-        .padding(.vertical, DS.Spacing.medium)
     }
 
     /// 금액의 색. 입금 파랑 · 출금 검정 · **통장 사이 이체는 회색**이다.
     private var amountColor: Color {
-        if transaction.isInternalTransfer { return DS.Ink.tertiary }
-        return transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal
+        if row.isInternalTransfer { return DS.Ink.tertiary }
+        return row.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal
     }
 
     /// 금액 아래 한 줄. **장부 적요 · 카테고리** 순이다.
@@ -637,42 +752,60 @@ struct TransactionRowView: View {
     /// 그건 **장부를 훑는 사람이 알고 싶은 순서가 아니다.** 이 목록은 통장이 아니라
     /// 장부고, 장부에 적힌 이름이 먼저 와야 한다. 은행 적요는 상세에 있다.
     ///
-    /// 분할이 있으면 조각의 적요가 곧 장부 적요다. 분할이 없으면 그 거래의 적요는
-    /// 은행이 준 것 하나뿐이라 그게 온다.
+    /// **카테고리가 비면 가운뎃점째로 안 나온다.** 거래내역서로 들어온 조각은
+    /// 분류가 비어 있는데, 거기에 "미분류" 를 적으면 목록이 그 글자로 뒤덮인다.
     private var subtitle: String {
-        // 내부 이체에는 장부 줄(분할)이 없다. 대신 어느 통장 사이인지를 말한다.
-        if transaction.isInternalTransfer { return "통장 사이 이체" }
-        let head = ledgerLabels.first.map {
-            ledgerLabels.count > 1 ? "\($0) 외 \(ledgerLabels.count - 1)" : $0
-        } ?? (transaction.description ?? "-")
-        guard let tail = categoryLabels.first.map({
-            categoryLabels.count > 1 ? "\($0) 외 \(categoryLabels.count - 1)" : $0
-        }) else { return head }
+        // 내부 이체에는 장부 줄(분할)이 없다. 대신 성격을 말한다.
+        if row.isInternalTransfer { return "통장 사이 이체" }
+        let head = clean(row.title) ?? "-"
+        guard let tail = clean(row.category) else { return head }
         return "\(head) · \(tail)"
     }
 
-    /// 앞자리 — 장부에 적힌 이름. 분할이 없으면 비어 있고, 그때는 은행 적요가 대신한다.
-    private var ledgerLabels: [String] {
-        splits.isEmpty ? [] : dedup(splits.map { $0.description })
+    private func clean(_ value: String?) -> String? {
+        let v = value?.trimmingCharacters(in: .whitespaces) ?? ""
+        return v.isEmpty ? nil : v
     }
+}
 
-    /// 뒷자리 — 분류. 분할이 있으면 조각의 것을, 없으면 거래 자체의 것을 쓴다.
-    /// **비어 있으면 가운뎃점째로 안 나온다** — 아직 안 붙인 분류 자리에
-    /// "미분류" 를 적으면 목록이 그 글자로 뒤덮인다.
-    private var categoryLabels: [String] {
-        splits.isEmpty ? dedup([transaction.category]) : dedup(splits.map { $0.category })
-    }
 
-    /// 빈 값을 걷어내고 같은 이름을 하나로 합친다. 처음 나온 순서를 지킨다.
-    private func dedup(_ values: [String?]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for value in values {
-            let v = value?.trimmingCharacters(in: .whitespaces) ?? ""
-            guard !v.isEmpty, seen.insert(v).inserted else { continue }
-            result.append(v)
+/// 고른 줄들에 붙일 분류를 정하는 시트.
+///
+/// **이미 쓴 이름을 먼저 보여준다.** 새로 치는 것보다 고르는 게 빠르고, 같은 뜻에
+/// 이름이 둘 생기는 것(`행사비`·`행사 비용`)을 막는다 — 그러면 보고서 요약이
+/// 두 줄로 갈린다.
+private struct CategoryAssignView: View {
+    let suggestions: [String]
+    let count: Int
+    let onApply: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var category = ""
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("카테고리 (예: 회비, 행사비, 심방비)", text: $category)
+                    CategorySuggestionChips(suggestions: suggestions, selected: $category)
+                } footer: {
+                    Text("\(count)줄에 같이 붙어요. 비워 두고 누르면 분류가 지워져요.")
+                }
+            }
+            .navigationTitle("분류 붙이기")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("취소") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("붙이기") {
+                        onApply(category)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
         }
-        return result
     }
-
 }

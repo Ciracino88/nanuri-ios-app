@@ -168,10 +168,10 @@ struct ReportPreview: Identifiable {
     let title: String
 }
 
-/// 같은 날 거래를 묶은 덩어리. 재정 탭 목록이 카드 한 장에 하루를 담는다.
+/// 같은 날 **장부 줄**을 묶은 덩어리. 재정 탭 목록이 하루씩 끊어 보여준다.
 struct DayGroup: Identifiable {
     let day: Date
-    var items: [BankTransaction]
+    var items: [LedgerRow]
 
     var id: Date { day }
 }

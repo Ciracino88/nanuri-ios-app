@@ -13,6 +13,10 @@ import SwiftUI
 /// - **일시·통장·종류·분류는 남는다.** 장부는 같은 날 여러 건이 몰린다 (8/5 에 7건).
 ///   매번 다시 고르게 하면 그게 제일 큰 낭비다.
 /// - **금액에 포커스가 돌아온다.** 저장 직후 바로 다음 숫자를 칠 수 있다.
+/// - **분류를 묻지 않는다.** 넣을 때마다 카테고리를 고르는 건 25번 반복하기에
+///   무거운 동작이고, 그 자리에서는 무엇으로 묶을지 정하기도 어렵다. **목록을
+///   훑으며 붙이는 편이 낫다** — 비슷한 줄이 나란히 보이니 이름이 저절로 정해진다.
+///   분류는 목록에서 줄을 눌러 붙인다.
 /// - 넣은 건수를 세어 보여준다. 25건을 넣는 동안 어디까지 왔는지가 보여야 한다.
 ///
 /// **통장을 묻지 않는다** — 기본이 농협이다. 손으로 넣는 건 곧 농협이라
@@ -30,7 +34,6 @@ struct AddTransactionView: View {
     @State private var isDeposit = false
     @State private var amountText = ""
     @State private var descriptionText = ""
-    @State private var category = ""
     @State private var accountId: UUID?
     @State private var counterAccountId: UUID?
 
@@ -73,11 +76,6 @@ struct AddTransactionView: View {
                     TextField("적요 (예: 헌금, 심방비)", text: $descriptionText)
                 } header: {
                     Text("거래")
-                }
-
-                Section("분류") {
-                    TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
-                    CategorySuggestionChips(suggestions: viewModel.usedCategories, selected: $category)
                 }
 
                 Section {
@@ -146,8 +144,7 @@ struct AddTransactionView: View {
                 counterAccountId: counterAccountId == accountId ? nil : counterAccountId,
                 datetime: datetime,
                 amount: isDeposit ? magnitude : -magnitude,
-                description: descriptionText.isEmpty ? nil : descriptionText,
-                category: category.isEmpty ? nil : category
+                description: descriptionText.isEmpty ? nil : descriptionText
             )
             isSaving = false
             guard ok else { return }   // 실패하면 입력을 지우지 않는다. 다시 누르면 된다.
