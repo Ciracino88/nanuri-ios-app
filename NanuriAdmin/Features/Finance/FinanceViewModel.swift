@@ -747,7 +747,6 @@ class FinanceViewModel: ObservableObject {
         accountId: UUID,
         counterAccountId: UUID?,
         category: String?,
-        memo: String?,
         keptUrls: [String],
         newImages: [UIImage],
         originalUrls: [String],
@@ -783,7 +782,7 @@ class FinanceViewModel: ObservableObject {
                 .from("finance_transactions")
                 .update(TransactionEditUpdate(
                     datetime: finalDatetime, amount: finalAmount, description: description,
-                    category: category, memo: memo, receiptUrls: finalUrls,
+                    category: category, receiptUrls: finalUrls,
                     accountId: finalAccount, counterAccountId: finalCounter
                 ))
                 .eq("id", value: id)
@@ -795,7 +794,6 @@ class FinanceViewModel: ObservableObject {
                 transactions[idx].accountId = finalAccount
                 transactions[idx].counterAccountId = finalCounter
                 transactions[idx].category = category
-                transactions[idx].memo = memo
                 transactions[idx].receiptUrls = finalUrls
             }
         } catch {

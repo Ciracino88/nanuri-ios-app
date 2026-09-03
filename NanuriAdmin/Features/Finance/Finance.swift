@@ -96,7 +96,6 @@ struct BankTransaction: Identifiable, Codable {
     var amount: Int
     var description: String?
     var category: String?
-    var memo: String?
     var receiptUrls: [String]?
     let createdAt: Date?
     /// 없으면 `manual` — 이 칸이 생기기 전의 행(수기 장부 이관분)이 그렇다.
@@ -118,7 +117,7 @@ struct BankTransaction: Identifiable, Codable {
     var receipts: [String] { receiptUrls ?? [] }
 
     enum CodingKeys: String, CodingKey {
-        case id, datetime, type, amount, description, category, memo, source
+        case id, datetime, type, amount, description, category, source
         case ledgerId = "ledger_id"
         case accountId = "account_id"
         case counterAccountId = "counter_account_id"
@@ -167,13 +166,12 @@ struct TransactionEditUpdate: Encodable {
     let amount: Int
     let description: String?
     let category: String?
-    let memo: String?
     let receiptUrls: [String]
     let accountId: UUID
     let counterAccountId: UUID?
 
     enum CodingKeys: String, CodingKey {
-        case datetime, amount, description, category, memo
+        case datetime, amount, description, category
         case receiptUrls = "receipt_urls"
         case accountId = "account_id"
         case counterAccountId = "counter_account_id"
