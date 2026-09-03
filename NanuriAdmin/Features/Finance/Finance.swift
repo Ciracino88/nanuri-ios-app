@@ -137,10 +137,16 @@ struct BankTransactionInsert: Encodable {
     let description: String?
     /// 손으로 넣을 때는 분류를 그 자리에서 같이 받는다. 거래내역서로 불러온 것은 없다.
     var category: String? = nil
+    /// 청구서에 붙어 있던 영수증. **거래내역서로 넣을 때 같이 넘어온다.**
+    ///
+    /// 안 넘기면 청구서엔 영수증이 있는데 **영수증 부록 PDF 에는 안 나온다** —
+    /// 그 부록은 `finance_transactions.receipt_urls` 를 모아 만들기 때문이다.
+    var receiptUrls: [String] = []
     var source: TransactionSource = .manual
 
     enum CodingKeys: String, CodingKey {
         case datetime, type, amount, description, category, source
+        case receiptUrls = "receipt_urls"
         case ledgerId = "ledger_id"
         case accountId = "account_id"
         case counterAccountId = "counter_account_id"

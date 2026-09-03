@@ -13,6 +13,20 @@ struct BillGroup: Identifiable {
     var id: String { "\(processedAt.timeIntervalSince1970)|\(submitterName)" }
     var total: Int { bills.reduce(0) { $0 + $1.amount } }
 
+    /// 이 묶음에 딸린 영수증들. **거래로 그대로 넘긴다.**
+    ///
+    /// 청구 하나에 영수증 하나라 묶음이면 여러 장이 된다. 같은 URL 이 두 번 들어가는
+    /// 일은 없어야 하므로 중복은 걷어내고, **처음 나온 순서를 지킨다** —
+    /// `ledgerLines` 와 같은 규칙이라 영수증 순서가 장부 줄 순서를 따라간다.
+    var receiptUrls: [String] {
+        var seen = Set<String>()
+        return bills.compactMap { bill in
+            let url = bill.receiptUrl.trimmingCharacters(in: .whitespaces)
+            guard !url.isEmpty, seen.insert(url).inserted else { return nil }
+            return url
+        }
+    }
+
     /// 장부에 적을 줄들. **같은 제목은 한 줄로 합친다.**
     ///
     /// 사용자가 손으로 하던 방식 그대로다 — 이승호 458,000 은 청구 4건(수영장
