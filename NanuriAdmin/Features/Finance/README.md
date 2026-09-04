@@ -1,33 +1,31 @@
 # 재정 (Finance)
 
-이 앱의 **핵심 기능**이다. 두 통장(농협·모임)의 거래내역을 하나의 장부로 모아
-보고·분류·정산하고, 청구서 탭에서 나간 지출과 맞춰 장부를 채운다.
+농협 통장과 토스뱅크 모임통장의 거래내역을 하나의 장부에 작성하는데 필요한 기능들을 제공한다.
 
-> 이 문서는 **어디에 무엇이 있는지**를 그린 지도다. 규칙의 진실(통장·장부·잔액·
-> 내부이체 불변식)은 [ARCHITECTURE.md](../../../ARCHITECTURE.md), 시각 규칙은
-> [DESIGN.md](../../../DESIGN.md) 에 있다. 여기서 그걸 다시 적지 않는다 —
-> 어긋나면 저쪽이 이긴다.
 
----
+## 규칙
+- 디자인 관련 규칙은 [DESIGN.md](../../../DESIGN.md) 을 참고한다.
+- 사실 확인되어 규칙화 된 것은 [ARCHITECTURE.md](../../../ARCHITECTURE.md) 을 참고한다.
 
-## 네 기둥
+## 핵심 기능
 
-재정 탭이 하는 일은 넷으로 나뉜다. 파일도 이 축을 따라 갈라 둔다.
+재정 탭이 제공하는 기능은 크게 네 가지로 나뉜다.
 
-| 기둥 | 하는 일 | 주요 파일 |
+| 기능 | 하는 일 | 주요 파일 |
 | --- | --- | --- |
-| **조회·분석** | 목록 브라우징 · 요약 · 그래프 · 잔액 (매일 쓰는 본체) | `FinanceView`, `FinanceSummaryBand`, `FinanceDaySelector`, `FinanceMonthStepper`, `SpendingDetailView`, `AccountBalanceView`, `+Summary`/`+Balance`/`+Month` |
-| **거래 CRUD** | 수기 추가 · 편집 · 삭제 · 분류 붙이기 | `AddTransactionView`, `TransactionEditView`, `+Edit` |
-| **불러오기·매칭** | 토스 거래내역서 파싱 → 청구와 매칭 → 거래 생성 | `StatementImportView`, `StatementMatcher`, `TossPdfParser`, `+Statement` |
-| **내보내기** | 월별 보고서 · 영수증 부록 (**현재 PDF만**) | `FinanceReportExporter`, `FinanceReportPreviewView`, `+Export` |
+| 조회 및 분석 | 목록 조회, 요약, 그래프 시각화, 잔액 확인 | `FinanceView`, `FinanceSummaryBand`, `FinanceDaySelector`, `FinanceMonthStepper`, `SpendingDetailView`, `AccountBalanceView`, `+Summary`/`+Balance`/`+Month` |
+| 거래 CRUD | 수기 추가, 편집, 삭제, 카테고리 라벨링 | `AddTransactionView`, `TransactionEditView`, `+Edit` |
+| 불러오기 및 매칭 | 토스 거래내역서 파싱 → 매칭 → 거래 생성 | `StatementImportView`, `StatementMatcher`, `TossPdfParser`, `+Statement` |
+| 내보내기 | 월별 보고서, 영수증 부록 | `FinanceReportExporter`, `FinanceReportPreviewView`, `+Export` |
 
----
+## 사용자 시나리오
+
+1. 농협 통장에 적힌 내역(대부분 입금 내역)을 수기로 작성한다.
+2. 토스뱅크 모임통장에서 거래내역서를 pdf 파일로 내보낸다 (토스 → 앱)
+3. 거래내역서 파일을 파싱 후, `매칭` 을 통해 청구 내역에 해당하는 토스뱅크 거래 내역을 찾는다.
+4. 해당 내역을 확인 후, 장부에 추가한다.
 
 ## 데이터 흐름
-
-청구서와 농협 수기 두 입구에서 들어온 돈이 **거래 → 장부 줄**로 흘러 목록·요약·
-보고서가 된다. 청구의 영수증은 불러오는 순간 거래로 **한 번 복사될 뿐**이다
-(연결이 아니다).
 
 ```mermaid
 flowchart TD
@@ -48,8 +46,6 @@ flowchart TD
     bills -. 영수증 URL 일회성 복사 .-> tx
     tx --> rows --> out
 ```
-
----
 
 ## 파일 지도
 
@@ -98,7 +94,7 @@ flowchart TD
 
 ---
 
-## 핵심 모델 — 여기만 알면 길이 보인다
+## 핵심 모델
 
 ### 장부 줄 = 조각(split) 또는 거래
 목록의 한 줄은 **은행 거래가 아니라 "장부 줄"**이다.
