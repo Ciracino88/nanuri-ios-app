@@ -17,7 +17,7 @@ struct BillGroup: Identifiable {
     ///
     /// 청구 하나에 영수증 하나라 묶음이면 여러 장이 된다. 같은 URL 이 두 번 들어가는
     /// 일은 없어야 하므로 중복은 걷어내고, **처음 나온 순서를 지킨다** —
-    /// `ledgerLines` 와 같은 규칙이라 영수증 순서가 장부 줄 순서를 따라간다.
+    /// `ledgerLines` 와 같은 규칙이라 영수증 순서가 항목 순서를 따라간다.
     var receiptUrls: [String] {
         var seen = Set<String>()
         return bills.compactMap { bill in
@@ -72,7 +72,7 @@ struct StatementMatch: Identifiable {
     /// 적으면 조각 하나짜리 분할이 된다 — 거래의 적요(은행 값)를 덮어쓰지 않는다.
     /// 청구 묶음을 골랐으면 그 제목들이 적요라 이 칸은 안 쓴다.
     var manualDescription: String = ""
-    /// 사람이 적은 분류. 이 줄에서 생기는 **모든 조각**에 같이 붙는다.
+    /// 사람이 적은 카테고리. 이 줄에서 생기는 **모든 조각**에 같이 붙는다.
     var manualCategory: String = ""
 
     var id: String { "\(line.datetime.timeIntervalSince1970)|\(line.amount)" }
@@ -80,7 +80,7 @@ struct StatementMatch: Identifiable {
 
     /// 이 줄이 장부에 만들 조각들. **화면과 저장이 같은 답을 쓰도록 여기 한 벌만 둔다.**
     var ledgerLines: [(title: String, amount: Int)] {
-        if isInternalTransfer { return [] }          // 내부 이체는 장부 줄이 아니다
+        if isInternalTransfer { return [] }          // 내부 이체는 분할 항목을 안 만든다
         if let group = chosen { return group.ledgerLines }
         let d = manualDescription.trimmingCharacters(in: .whitespaces)
         let c = manualCategory.trimmingCharacters(in: .whitespaces)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 고른 줄들에 붙일 분류를 정하는 시트.
+/// 고른 항목들에 붙일 카테고리를 정하는 시트.
 ///
 /// **이미 쓴 이름을 먼저 보여준다.** 새로 치는 것보다 고르는 게 빠르고, 같은 뜻에
 /// 이름이 둘 생기는 것(`행사비`·`행사 비용`)을 막는다 — 그러면 보고서 요약이
@@ -20,10 +20,10 @@ struct CategoryAssignView: View {
                     TextField("카테고리 (예: 회비, 행사비, 심방비)", text: $category)
                     CategorySuggestionChips(suggestions: suggestions, selected: $category)
                 } footer: {
-                    Text("\(count)줄에 같이 붙어요. 비워 두고 누르면 분류가 지워져요.")
+                    Text("\(count)줄에 같이 붙어요. 비워 두고 누르면 카테고리가 지워져요.")
                 }
             }
-            .navigationTitle("분류 붙이기")
+            .navigationTitle("카테고리 추가")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
