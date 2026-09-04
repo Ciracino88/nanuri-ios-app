@@ -46,7 +46,7 @@ flowchart TD
     imp["StatementImportView<br/>확인 후 장부에 추가"]
     add["AddTransactionView<br/>농협 수기 작성"]
     tx["BankTransaction<br/>(+ TransactionSplit)"]
-    rows["LedgerRow (장부 줄)"]
+    rows["LedgerRow (항목)"]
     out["목록, 요약, 보고서"]
 
     bills --> matcher
@@ -60,62 +60,74 @@ flowchart TD
 
 ## 파일 지도
 
-### 화면 (재정 탭 메인)
-- **`FinanceView.swift`** — 화면 조립. 헤더(거래추가 · 월넘김 · 분류 · 메뉴), 칩
+**핵심 기능 네 갈래가 그대로 폴더다.** 공용·코어만 루트에 둔다. (Xcode 파일시스템
+동기화 그룹이라 폴더에 넣으면 자동 인식된다.)
+
+### 루트 (공용·코어)
+- **`FinanceView.swift`** — 탭 화면 조립. 헤더(거래추가 · 월넘김 · 카테고리 · 메뉴), 칩
   셀렉터, 목록(`scrollingContent`/`daySection`), 선택 모드, 상태를 갖는다.
+- **`FinanceViewModel.swift`** — 저장 프로퍼티(@Published) + 조회 코어
+  (`filtered`·`ledgerRows`·`splits(for:)` 등). 모든 파생값이 여기서 시작한다.
+- **`FinanceViewModel+Ledger.swift`** — 장부·통장·거래 로드(`start`·`fetch*`).
+- **`FinanceMenuView.swift`** — 헤더 햄버거(≡)가 여는 풀스크린 메뉴(통장 잔액·내보내기).
+- **`FinanceHelpers.swift`** — UI 보조 타입/뷰(`DayGroup`·`ExportFile`·`ReportPreview`
+  ·`SpendingComparison`·`ChipFlowLayout`·`FinanceLedgerGateView` 등).
+
+### `Overview/` (조회 및 분석)
 - **`FinanceMonthStepper.swift`** — 헤더 가운데 월 넘김.
 - **`FinanceSummaryBand.swift`** — Hero 요약 밴드(총입금/총출금 + 지난달 대비 + 스파크라인).
 - **`FinanceDaySelector.swift`** — 주 단위 날짜 셀렉터.
-- **`LedgerRowView.swift`** — 목록 한 줄(장부 줄).
-- **`FinanceMenuView.swift`** — 헤더 햄버거(≡)가 여는 풀스크린 메뉴(통장 잔액·내보내기).
-- **`CategoryAssignView.swift`** — 선택 모드에서 여러 줄에 분류를 한 번에 붙이는 시트.
-
-### 화면 (시트/서브)
-- **`TransactionEditView.swift`** — **탭 → 상세/편집.** 조각을 누르면 조각 상세,
-  분할 없는 거래를 누르면 거래 편집. `ReceiptManagerView`·`SplitEditSheet`·영수증
-  뷰어를 함께 담는다. (조각/거래 구분은 아래 "핵심 모델" 참고)
-- **`AddTransactionView.swift`** — 농협 수기 추가(빠른 반복 입력. 분류·분할 없음).
+- **`LedgerRowView.swift`** — 목록의 한 항목(`LedgerRow`).
 - **`AccountBalanceView.swift`** — 통장별 잔액·총 재정.
 - **`SpendingDetailView.swift`** — 소비 분석(요약 밴드 "자세히 보기").
+- **`FinanceViewModel+Summary.swift`** — 요약·그래프·보고서 집계(`reportItems`·`comparison`·`dailyNet`…).
+- **`FinanceViewModel+Balance.swift`** — 잔액 유도(`balance`·`totalBalance`·내부이체 흐름).
+- **`FinanceViewModel+Month.swift`** — 달 넘김·달력(주/일 계산).
 
-### 뷰모델 (`FinanceViewModel` + 확장)
-본체는 얇게 두고 기둥별 `extension` 파일로 나눈다.
-- **`FinanceViewModel.swift`** — 저장 프로퍼티(@Published) + 조회 코어
-  (`filtered`·`ledgerRows`·`splits(for:)` 등). 모든 파생값이 여기서 시작한다.
-- **`+Balance`** — 잔액 유도(`balance`·`totalBalance`·내부이체 흐름).
-- **`+Month`** — 달 넘김·달력(주/일 계산).
-- **`+Summary`** — 요약·그래프·보고서 집계(`reportItems`·`comparison`·`dailyNet`…).
-- **`+Ledger`** — 장부·통장·거래 로드(`start`·`fetch*`).
-- **`+Statement`** — 거래내역서 불러오기·매칭 실행.
-- **`+Export`** — 보고서/영수증 PDF 생성 트리거.
-- **`+Edit`** — 거래 쓰기(추가·편집·삭제·분류 붙이기).
+### `Transactions/` (거래 CRUD)
+- **`TransactionEditView.swift`** — **분할 없는 거래 편집.** 금액·일시·통장·적요·카테고리
+  ·분할·영수증. (거래내역서 거래는 금액·일시·통장이 잠긴다)
+- **`PieceEditView.swift`** — **분할된 항목(조각) 편집.** 그 항목의 적요·카테고리만 고치고,
+  총액·통장·일시는 "속한 출금"으로 읽기 전용. (탭 라우팅은 아래 "핵심 모델" 참고)
+- **`TransactionEditShared.swift`** — 두 편집 화면 공용 섹션(`AmountHeroSection`
+  ·`ReceiptButtonSection`·`DeleteSection`).
+- **`SplitEditSheet.swift`** — 분할 항목 하나 입력·편집 바텀 시트(`SplitDraft` 포함).
+- **`Receipts.swift`** — 영수증 관리·전체화면 뷰어·카메라(`ReceiptManagerView`
+  ·`ReceiptViewerView`·`CameraPicker`·`PendingImage`·`ReceiptSource`).
+- **`AddTransactionView.swift`** — 농협 수기 추가(빠른 반복 입력. 카테고리·분할 없음).
+- **`CategoryAssignView.swift`** — 선택 모드에서 여러 항목에 카테고리를 한 번에 붙이는 시트.
+- **`FinanceViewModel+Edit.swift`** — 거래 쓰기(추가·편집·삭제·카테고리 추가).
 
-### 모델 (`Models/`)
+### `Import/` (불러오기 및 매칭)
+- **`StatementImportView.swift`** — 거래내역서를 장부에 넣기 전 사람이 확인하는 화면.
+- **`StatementMatcher.swift`** — 상태 없는 순수 매칭 로직(`BillGroup`·`StatementMatch`).
+- **`TossPdfParser.swift`** — 토스 내역서 PDF 텍스트 파싱.
+- **`FinanceViewModel+Statement.swift`** — 거래내역서 불러오기·매칭 실행.
+
+### `Export/` (내보내기)
+- **`FinanceReportExporter.swift`** — 보고서/영수증 PDF(`UIFont` 로 직접 그림, `DS` 밖).
+- **`FinanceReportPreviewView.swift`** — 보고서 HTML 미리보기(WKWebView).
+- **`FinanceViewModel+Export.swift`** — 보고서/영수증 PDF 생성 트리거.
+
+### `Models/`
 순수 데이터 타입(`import Foundation`). 엔티티 + 그 DTO(Insert/Patch)를 한 파일로.
 - `Ledger` · `Account` · `BankTransaction` · `TransactionSplit` · `LedgerRow`
   · `ReportModels`(ReportLineItem·CategoryTotal) · `IncomingStatement`.
-
-### 로직·출력물
-- **`StatementMatcher.swift`** — 상태 없는 순수 매칭 로직(`BillGroup`·`StatementMatch`).
-- **`TossPdfParser.swift`** — 토스 내역서 PDF 텍스트 파싱.
-- **`FinanceReportExporter.swift`** — 보고서/영수증 PDF(‌`UIFont` 로 직접 그림, `DS` 밖).
-- **`FinanceReportPreviewView.swift`** — 보고서 HTML 미리보기(WKWebView).
-- **`FinanceHelpers.swift`** — UI 보조 타입/뷰(`DayGroup`·`ExportFile`·`ReportPreview`
-  ·`SpendingComparison`·`ChipFlowLayout`·`FinanceLedgerGateView` 등).
 
 ---
 
 ## 핵심 모델
 
-### 장부 줄 = 조각(split) 또는 거래
-목록의 한 줄은 **은행 거래가 아니라 "장부 줄"**이다.
-- 거래가 분할돼 있으면(매칭·수동분할) → **조각마다 한 줄**. 묶어보내기 출금 하나는
-  여러 줄이 된다.
-- 분할이 없으면(미매칭·수기) → 거래 하나가 한 줄.
-- 내부 이체는 안 쪼갠다 → 한 줄.
+### 항목 = 거래 또는 조각(split)
+목록·보고서의 한 줄은 **은행 거래가 아니라 "항목"**이다. 조각(`TransactionSplit`)은
+항목을 여러 개로 만들어 내는 **내부 장치**일 뿐, 사람이 보는 단위는 늘 항목이다.
+- 거래가 분할돼 있으면(매칭·수동분할) → **조각마다 한 항목**. 묶어보내기 출금 하나는
+  여러 항목이 된다.
+- 분할이 없으면(미매칭·수기) → 거래 하나가 한 항목.
+- 내부 이체는 안 쪼갠다 → 한 항목.
 
 `ledgerRows(of:)`([FinanceViewModel.swift](FinanceViewModel.swift))가 이 펼침을 한다.
-칩 개수도 조각 수(=엑셀 장부 줄 수)와 같다.
+칩 개수도 항목 수(=엑셀 장부 줄 수)와 같다.
 
 ```mermaid
 flowchart LR
@@ -126,20 +138,22 @@ flowchart LR
       t1 --> r3["파라솔 60,000"]
     end
     subgraph g2["분할 없는 거래 (미매칭 또는 수기)"]
-      t2["BankTransaction 1건"] --> r4["장부 줄 1개"]
+      t2["BankTransaction 1건"] --> r4["항목 1개"]
     end
 ```
 
-### 탭 → 조각 상세
-목록 줄을 누르면 **그 줄(`LedgerRow`, 조각 정보 포함)**을 넘긴다.
-`TransactionEditView` 는 `row.split != nil` 이면 **조각 상세**(그 조각 금액·적요·분류만,
-총액·통장·영수증·삭제는 "속한 출금 전체"로 표시), 아니면 **거래 편집**을 그린다.
+### 탭 → 항목 편집 / 거래 편집
+목록에서 항목을 누르면 **그 항목(`LedgerRow`, 어느 조각인지 포함)**을 넘긴다.
+`FinanceView` 가 `row.split != nil` 로 화면을 가른다 — 조각이면 **`PieceEditView`**
+(그 항목의 적요·카테고리만, 총액·통장·일시는 "속한 출금 전체"로 읽기 전용), 분할 없는
+거래면 **`TransactionEditView`**. 두 화면은 히어로·영수증·삭제 섹션을
+`TransactionEditShared` 로 공유하고, 저장은 둘 다 `saveTransactionEdits` 로 수렴한다.
 
 ```mermaid
 flowchart TD
-    tap["목록 줄을 누름 → LedgerRow 전달"] --> q{"row.split != nil?"}
-    q -->|조각인 경우| piece["조각 상세<br/>금액은 조각 금액<br/>총액, 통장, 영수증, 삭제는 출금 전체"]
-    q -->|거래인 경우| edit["거래 편집<br/>금액, 통장, 일시, 분할 생성"]
+    tap["목록에서 항목을 누름 → LedgerRow 전달"] --> q{"row.split != nil?"}
+    q -->|조각인 항목| piece["PieceEditView<br/>그 항목의 적요·카테고리만<br/>총액, 통장, 일시, 영수증, 삭제는 출금 전체"]
+    q -->|거래 자체인 항목| edit["TransactionEditView<br/>금액, 통장, 일시, 적요, 카테고리, 분할"]
 ```
 
 ### 매칭은 일회성 복사다 (bill_id 없음)
@@ -291,7 +305,7 @@ flowchart TD
 
 - **내보내기는 PDF만 구현됨.** 엑셀(xlsx) 내보내기는 논의/가능성 증명만 있고 앱에
   안 붙었다. 붙이려면 `+Export` + `FinanceReportExporter` 에 별도 경로가 필요하다.
-- **편집창 남은 다듬기**: 조각-상세 전환은 됐으나, 통장 사이 이체 토글·분류·분할·
+- **편집창 남은 다듬기**: 항목 편집 전환은 됐으나, 통장 사이 이체 토글·카테고리·분할·
   삭제 섹션의 시각 정리는 다음 라운드로 미뤄 둠.
 - 그 밖의 남은 일은 [DESIGN.md](../../../DESIGN.md) 맨 아래와
   [SETUP.md](../../../SETUP.md) 의 ⬜ 항목에.

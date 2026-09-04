@@ -3,7 +3,7 @@ import SwiftUI
 struct FinanceView: View {
     @ObservedObject var viewModel: FinanceViewModel
     @State private var selectedTab = 0
-    /// 탭한 **장부 줄**. 거래가 아니라 줄(조각일 수도, 거래 전체일 수도)을 넘긴다 —
+    /// 탭한 **항목**. 거래가 아니라 항목(조각일 수도, 거래 전체일 수도)을 넘긴다 —
     /// 편집 화면이 조각을 눌렀는지 알아야 그 조각을 보여줄 수 있다.
     @State private var editingRow: LedgerRow?
     @State private var exportFile: ExportFile?
@@ -18,7 +18,7 @@ struct FinanceView: View {
     @State private var showAccounts = false
     /// ⋯ 메뉴가 여는 거래 추가 시트. 농협 거래를 옮겨 적는 자리다.
     @State private var showAddTransaction = false
-    /// 분류 붙이기 모드. 켜지면 줄이 "눌러서 고르는 것" 이 된다.
+    /// 카테고리 추가 모드. 켜지면 항목이 "눌러서 고르는 것" 이 된다.
     @State private var isSelecting = false
     @State private var selection: Set<String> = []
     @State private var showCategorySheet = false
@@ -60,8 +60,8 @@ struct FinanceView: View {
         VStack(spacing: 0) {
             // 인스타그램 프로필 헤더의 문법 — **왼쪽은 만들기, 오른쪽은 관리**다.
             // 가운데는 달 넘김이 가져간다(탭 이름은 탭바가 이미 말한다). 왼쪽엔
-            // 매달 스무 번 넘게 누르는 거래 추가를, 오른쪽엔 가끔 쓰는 것(분류
-            // 고르기 · 통장 잔액 · 내보내기)을 모은다.
+            // 매달 스무 번 넘게 누르는 거래 추가를, 오른쪽엔 가끔 쓰는 것(카테고리
+            // 추가 · 통장 잔액 · 내보내기)을 모은다.
             //
             // **알림 종은 안 그린다**(`showsNotifications: false`). 알림은 "청구가
             // 들어왔다" 는 소식이라 청구서 탭의 것이다. 통장 잔액은 헤더 왼쪽을
@@ -84,7 +84,7 @@ struct FinanceView: View {
                     if !isSelecting {
                         // 선택 모드는 이제 메뉴 안이 아니라 헤더의 제 버튼이다 —
                         // 장부를 쓰는 본업이라 두 단계 안에 숨길 자리가 아니다.
-                        HeaderIconButton(systemName: "tag", label: "분류 붙이기") {
+                        HeaderIconButton(systemName: "tag", label: "카테고리 추가") {
                             enterSelection()
                         }
                         .disabled(viewModel.ledgerRows.isEmpty)
@@ -132,7 +132,12 @@ struct FinanceView: View {
                 Text(viewModel.error ?? "")
             }
             .sheet(item: $editingRow) { row in
-                TransactionEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
+                // 조각을 눌렀으면 항목 편집, 분할 없는 거래를 눌렀으면 거래 편집.
+                if row.split != nil {
+                    PieceEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
+                } else {
+                    TransactionEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
+                }
             }
             // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
             .sheet(item: $viewModel.incomingStatement) { incoming in
@@ -209,13 +214,13 @@ struct FinanceView: View {
             Divider()
             VStack(spacing: DS.Spacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(selection.isEmpty ? "분류를 붙일 줄을 고르세요" : "\(selection.count)줄 선택")
+                    Text(selection.isEmpty ? "카테고리를 추가할 줄을 고르세요" : "\(selection.count)줄 선택")
                         .rowTitle()
                     Spacer(minLength: DS.Spacing.small)
-                    // **아무것도 안 골랐을 때 가장 쓸모 있다.** 분류를 붙이는 일은
+                    // **아무것도 안 골랐을 때 가장 쓸모 있다.** 카테고리를 붙이는 일은
                     // 대개 "남은 것 전부" 로 시작해서 몇 줄을 빼는 식이다.
                     if !viewModel.uncategorizedRows.isEmpty {
-                        Button("미분류 전체") {
+                        Button("미지정 전체") {
                             selection = Set(viewModel.uncategorizedRows.map(\.id))
                         }
                         .typeStyle(DS.Typo.labelS)
@@ -223,7 +228,7 @@ struct FinanceView: View {
                     }
                 }
                 if !selection.isEmpty {
-                    ActionButton(title: "분류 붙이기", kind: .primary) { showCategorySheet = true }
+                    ActionButton(title: "카테고리 추가", kind: .primary) { showCategorySheet = true }
                 }
             }
             .padding(.horizontal, DS.Spacing.screen)
@@ -309,16 +314,16 @@ struct FinanceView: View {
             LazyVStack(spacing: 0) {
                 // 레퍼런스 순서 그대로 — 거르개가 먼저, 요약이 그다음, 날짜 축이
                 // 그 아래, 목록이 맨 끝이다. 위에서 아래로 범위가 좁혀진다.
-                // 개수는 **장부 줄 수**다. 묶어 보낸 출금 하나가 조각 아홉이면
+                // 개수는 **항목 수**다. 묶어 보낸 출금 하나가 조각 아홉이면
                 // 아홉으로 센다 — 엑셀 장부의 줄 수와 같은 수라야 한다.
-                // **미분류가 넷째 칸이다.** 분류를 붙이는 일은 "남은 것" 을 보는
-                // 일이라 그 수가 보여야 한다. 내부 이체는 안 센다 — 앞으로도 분류가
+                // **미지정이 넷째 칸이다.** 카테고리를 붙이는 일은 "남은 것" 을 보는
+                // 일이라 그 수가 보여야 한다. 내부 이체는 안 센다 — 앞으로도 카테고리가
                 // 안 붙는 줄이라 세면 그 수가 영영 0이 안 된다.
                 ChipSelector(items: [
                     .init(value: 0, label: "전체", count: viewModel.ledgerRows.count),
                     .init(value: 1, label: "입금", count: viewModel.depositRows.count),
                     .init(value: 2, label: "출금", count: viewModel.withdrawalRows.count),
-                    .init(value: 3, label: "미분류", count: viewModel.uncategorizedRows.count)
+                    .init(value: 3, label: "미지정", count: viewModel.uncategorizedRows.count)
                 ], selection: $selectedTab)
                 .padding(.top, DS.Spacing.medium)
                 .padding(.bottom, DS.Spacing.s5)
