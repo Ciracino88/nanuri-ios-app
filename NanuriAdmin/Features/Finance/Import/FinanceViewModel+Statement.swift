@@ -62,9 +62,9 @@ extension FinanceViewModel {
 
     /// 확인이 끝난 것을 장부에 넣는다.
     ///
-    /// 거래는 **통장에 찍힌 그대로** 넣고(적요도 은행 값 그대로), 장부에 적힐 줄은
+    /// 거래는 **통장에 찍힌 그대로** 넣고(적요도 은행 값 그대로), 장부에 적힐 항목은
     /// **분할**로 만든다. 청구가 하나뿐일 때도 분할을 만든다 — 그래야 은행 적요를
-    /// 덮어쓰지 않고 장부 줄에 제 이름을 줄 수 있다.
+    /// 덮어쓰지 않고 항목에 제 이름을 줄 수 있다.
     ///
     /// 거래를 한 번에 넣고 돌려받은 행을 **금액·시각으로 되찾아** 분할을 붙인다.
     /// 돌아오는 순서를 믿지 않는다.
@@ -105,13 +105,13 @@ extension FinanceViewModel {
                 .execute()
                 .value
 
-            // 장부에 적힐 줄은 **분할**로 만든다. 무엇이 조각이 되는지는
+            // 장부에 적힐 항목은 **분할**로 만든다. 무엇이 조각이 되는지는
             // `StatementMatch.ledgerLines` 가 정한다 — 청구 묶음의 제목들이거나,
             // 사람이 적은 적요 한 줄이거나, 내부 이체면 없다. 화면이 미리 보여준
             // 것과 저장되는 것이 같아야 해서 그 계산을 한 곳에 뒀다.
             //
             // **청구가 하나뿐일 때도 조각을 만든다.** 그래야 은행 적요를 덮어쓰지
-            // 않고 장부 줄에 제 이름을 줄 수 있다.
+            // 않고 항목에 제 이름을 줄 수 있다.
             var splitInserts: [TransactionSplitInsert] = []
             for match in todo {
                 let lines = match.ledgerLines
@@ -120,7 +120,7 @@ extension FinanceViewModel {
                     $0.amount == match.line.amount
                         && abs($0.datetime.timeIntervalSince(match.line.datetime)) < 1
                 }) else { continue }
-                // 분류는 이 줄에서 나온 **모든 조각에 같이** 붙는다. 청구엔 없는
+                // 카테고리는 이 줄에서 나온 **모든 조각에 같이** 붙는다. 청구엔 없는
                 // 값이라 사람이 확인 화면에서 준 것뿐이다.
                 let category = match.manualCategory.trimmingCharacters(in: .whitespaces)
                 for (index, line) in lines.enumerated() {

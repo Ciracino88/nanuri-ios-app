@@ -5,7 +5,7 @@ import OSLog
 
 extension FinanceViewModel {
 
-    /// 고른 장부 줄들에 **분류를 한 번에 붙인다.** 빈 문자열이면 지운다.
+    /// 고른 항목들에 **카테고리를 한 번에 붙인다.** 빈 문자열이면 지운다.
     ///
     /// **건별로 나눠 보내지 않는다.** 조각은 조각끼리, 거래는 거래끼리 한 요청씩
     /// 두 번이다. 나눠 보내면 중간에 끊겼을 때 일부만 붙은 채로 남는다.
@@ -31,7 +31,7 @@ extension FinanceViewModel {
             }
         } catch {
             self.error = error.localizedDescription
-            Log.finance.error("분류 붙이기 실패: \(error.localizedDescription)")
+            Log.finance.error("카테고리 추가 실패: \(error.localizedDescription)")
             return
         }
 
@@ -84,9 +84,9 @@ extension FinanceViewModel {
             type: amount >= 0 ? "입금" : "출금",
             amount: amount,
             description: description,
-            // **분류는 여기서 안 받는다.** 넣을 때마다 고르는 건 스무 번 넘게
+            // **카테고리는 여기서 안 받는다.** 넣을 때마다 고르는 건 스무 번 넘게
             // 반복하기에 무거운 동작이고, 그 자리에서는 무엇으로 묶을지 정하기도
-            // 어렵다. 목록을 훑으며 붙이는 편이 낫다 — 비슷한 줄이 나란히 보이니
+            // 어렵다. 목록을 훑으며 붙이는 편이 낫다 — 비슷한 항목이 나란히 보이니
             // 이름이 저절로 정해진다.
             source: .manual
         )

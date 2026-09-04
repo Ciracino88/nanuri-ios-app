@@ -68,9 +68,9 @@ struct LedgerRowView: View {
     /// 장부고, 장부에 적힌 이름이 먼저 와야 한다. 은행 적요는 상세에 있다.
     ///
     /// **카테고리가 비면 가운뎃점째로 안 나온다.** 거래내역서로 들어온 조각은
-    /// 분류가 비어 있는데, 거기에 "미분류" 를 적으면 목록이 그 글자로 뒤덮인다.
+    /// 카테고리가 비어 있는데, 거기에 "미지정" 을 적으면 목록이 그 글자로 뒤덮인다.
     private var subtitle: String {
-        // 내부 이체에는 장부 줄(분할)이 없다. 대신 성격을 말한다.
+        // 내부 이체에는 분할 항목이 없다. 대신 성격을 말한다.
         if row.isInternalTransfer { return "통장 사이 이체" }
         let head = clean(row.title) ?? "-"
         guard let tail = clean(row.category) else { return head }

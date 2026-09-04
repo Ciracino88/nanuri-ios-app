@@ -30,7 +30,7 @@ enum FinanceReportExporter {
     /// A4 (pt)
     private static let pageSize = CGSize(width: 595.2, height: 841.8)
 
-    /// 카테고리별 합계 (금액 큰 순). 카테고리 없으면 "미분류".
+    /// 카테고리별 합계 (금액 큰 순). 카테고리 없으면 "미지정".
     ///
     /// 묶는 이름은 `ReportLineItem.categoryLabel` 이 정한다 — 분석 화면과 같은
     /// 규칙이라야 두 곳의 합계가 어긋나지 않는다.

@@ -45,7 +45,7 @@ struct StatementImportView: View {
         matches.filter { !$0.alreadyImported && !$0.isInternalTransfer
                           && $0.chosenId == nil && $0.candidates.isEmpty }
     }
-    /// 통장 사이 이체. **장부 줄이 아니라 합계에서 빠지는 줄이다.**
+    /// 통장 사이 이체. **분할 항목을 안 만들고 합계에서도 빠진다.**
     private var internalTransfers: [StatementMatch] {
         matches.filter { !$0.alreadyImported && $0.isInternalTransfer }
     }
@@ -115,7 +115,7 @@ struct StatementImportView: View {
                 section("확인이 필요해요", needsChoice)
                 section("청구서와 맞았어요", matched)
                 section("청구가 없어요", unmatched,
-                        note: "눌러서 적요와 분류를 적어 두면 넣을 때 같이 들어가요.")
+                        note: "눌러서 적요와 카테고리를 적어 두면 넣을 때 같이 들어가요.")
                 section("통장 사이 이체예요", internalTransfers,
                         note: "합계·보고서에서 빠져요. 아니면 눌러서 끌 수 있어요.")
                 skippedSection
@@ -230,7 +230,7 @@ struct StatementImportView: View {
     /// 어디를 눌러 고칠 수 있는지 알 길이 없다. 화살표가 없으면 읽는 줄이다.
     private func row(_ match: StatementMatch) -> some View {
         // **아직 안 들어간 줄은 전부 누를 수 있다.** 예전에는 후보가 있는 줄만
-        // 눌렸는데, 이제 어느 줄이든 적요와 분류를 적을 수 있다.
+        // 눌렸는데, 이제 어느 줄이든 적요와 카테고리를 적을 수 있다.
         let canPick = !match.alreadyImported
         return Button {
             guard canPick else { return }
@@ -326,7 +326,7 @@ struct StatementImportView: View {
 /// 내역서 한 줄을 손보는 시트.
 ///
 /// 여기서 정할 수 있는 게 셋이다 — **어느 청구인지 · 장부에 뭐라고 적을지 ·
-/// 어떤 분류인지.** 예전에는 첫째만 있었고, 그래서 청구가 없는 줄
+/// 어떤 카테고리인지.** 예전에는 첫째만 있었고, 그래서 청구가 없는 줄
 /// (`우성볼링장`·`ATM현금`·`통장 이자`)은 은행 적요 그대로 들어간 뒤에 거래를
 /// 하나씩 열어 고쳐야 했다. **같은 일을 두 번 하는 자리였다.**
 ///
@@ -430,10 +430,10 @@ private struct StatementRowEditView: View {
         }
     }
 
-    /// 장부에 적힐 이름과 분류.
+    /// 장부에 적힐 이름과 카테고리.
     ///
     /// 청구를 골랐으면 **적요는 청구 제목이 되므로 적는 자리를 안 준다** — 두 곳에서
-    /// 오면 어느 것이 맞는지가 매번 흔들린다. 분류는 청구에 없는 값이라 늘 열려 있다.
+    /// 오면 어느 것이 맞는지가 매번 흔들린다. 카테고리는 청구에 없는 값이라 늘 열려 있다.
     @ViewBuilder
     private var ledgerSection: some View {
         if draft.chosen == nil {
@@ -446,7 +446,7 @@ private struct StatementRowEditView: View {
             }
         }
 
-        Section("분류") {
+        Section("카테고리") {
             TextField("카테고리 (예: 회비, 식대, 시상품)", text: $draft.manualCategory)
         }
 
