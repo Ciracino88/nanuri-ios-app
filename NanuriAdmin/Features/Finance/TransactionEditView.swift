@@ -2,9 +2,16 @@ import SwiftUI
 import PhotosUI
 
 struct TransactionEditView: View {
-    let transaction: BankTransaction
+    /// 탭한 **장부 줄.** 조각(`row.split != nil`)일 수도, 분할 없는 거래 전체일 수도
+    /// 있다. 이 하나가 화면의 성격을 가른다.
+    let row: LedgerRow
     let suggestions: [String]
     @ObservedObject var viewModel: FinanceViewModel
+
+    /// 편의 별칭. 아래 코드가 거래를 자주 참조한다.
+    private var transaction: BankTransaction { row.transaction }
+    /// 눌린 조각. 없으면 거래 전체를 누른 것이다.
+    private var split: TransactionSplit? { row.split }
 
     @State private var category: String
     // 아래 다섯은 **손으로 넣은 거래에서만** 바뀐다. 거래내역서에서 온 거래는
@@ -18,32 +25,45 @@ struct TransactionEditView: View {
     @State private var showDeleteConfirm = false
     @State private var keptUrls: [String]           // 유지할 기존 영수증 (저장 시 확정)
     @State private var pendingImages: [PendingImage] // 새로 추가한, 아직 업로드 안 한 이미지
-    @State private var photoItem: PhotosPickerItem?
-    @State private var showCamera = false
-    @State private var previewReceipt: ReceiptPreview?
+    /// 영수증을 보고·더하는 시트. 레퍼런스처럼 편집창에는 버튼 하나만 두고,
+    /// 실제 썸네일·추가·미리보기는 이 시트가 맡는다.
+    @State private var showReceiptManager = false
     @State private var isSaving = false
     @State private var splitDrafts: [SplitDraft]
     @State private var showSplitMismatch = false
     @State private var activeSplit: SplitDraft?
     @Environment(\.dismiss) var dismiss
 
-    init(transaction: BankTransaction, suggestions: [String], viewModel: FinanceViewModel) {
-        self.transaction = transaction
+    init(row: LedgerRow, suggestions: [String], viewModel: FinanceViewModel) {
+        self.row = row
         self.suggestions = suggestions
         self.viewModel = viewModel
-        _category = State(initialValue: transaction.category ?? "")
-        _descriptionText = State(initialValue: transaction.description ?? "")
-        _amountText = State(initialValue: String(abs(transaction.amount)))
-        _isDeposit = State(initialValue: transaction.isDeposit)
-        _datetime = State(initialValue: transaction.datetime)
-        _accountId = State(initialValue: transaction.accountId)
-        _counterAccountId = State(initialValue: transaction.counterAccountId)
-        _keptUrls = State(initialValue: transaction.receipts)
+        let tx = row.transaction
+        // **조각을 눌렀으면 그 조각의 적요·분류를, 거래를 눌렀으면 거래의 것을 편집한다.**
+        _category = State(initialValue: (row.split?.category ?? tx.category) ?? "")
+        _descriptionText = State(initialValue: (row.split?.description ?? tx.description) ?? "")
+        _amountText = State(initialValue: String(abs(tx.amount)))
+        _isDeposit = State(initialValue: tx.isDeposit)
+        _datetime = State(initialValue: tx.datetime)
+        _accountId = State(initialValue: tx.accountId)
+        _counterAccountId = State(initialValue: tx.counterAccountId)
+        _keptUrls = State(initialValue: tx.receipts)
         _pendingImages = State(initialValue: [])
-        _splitDrafts = State(initialValue: viewModel.splits(for: transaction.id).map {
-            SplitDraft(category: $0.category ?? "", amount: $0.amount, description: $0.description ?? "")
+        // **원본 조각 id 를 지켜 담는다** — 눌린 조각을 이 안에서 되찾아 고치려면
+        // 필요하다. 저장은 어차피 조각을 다시 만들어 넣으므로 이 id 는 화면용이다.
+        _splitDrafts = State(initialValue: viewModel.splits(for: tx.id).map {
+            SplitDraft(id: $0.id, category: $0.category ?? "", amount: $0.amount, description: $0.description ?? "")
         })
     }
+
+    /// 조각을 눌렀나. 화면이 "조각 상세" 인지 "거래 편집" 인지 가른다.
+    private var isPieceMode: Bool { split != nil }
+    /// 부모 출금이 몇 조각인가. 2 이상이면 히어로(조각)와 총액이 달라 맥락이 필요하다.
+    private var pieceCount: Int { splitDrafts.count }
+    /// 금액을 이 화면에서 고칠 수 있나 — **분할 없는 손입력 거래일 때만.**
+    private var isEditableAmount: Bool { !isPieceMode && !transaction.isFromStatement }
+    /// 히어로에 세울 부호 붙은 금액. 조각이면 조각 금액, 아니면 거래 금액.
+    private var heroSignedAmount: Int { isPieceMode ? row.amount : transaction.amount }
 
     private func accountName(_ id: UUID) -> String {
         viewModel.accounts.first { $0.id == id }?.name ?? "알 수 없음"
@@ -80,29 +100,128 @@ struct TransactionEditView: View {
     }
 
     private var canSave: Bool {
-        transaction.isFromStatement || editedMagnitude > 0
+        // 조각 화면은 텍스트만 고치므로 늘 저장 가능. 거래 화면은 손입력이면 금액이 있어야.
+        isPieceMode || transaction.isFromStatement || editedMagnitude > 0
     }
     private var splitSum: Int { splitDrafts.reduce(0) { $0 + $1.amount } }
     private var splitRemaining: Int { txMagnitude - splitSum }
 
+    // MARK: - 금액 히어로
+
+    /// **첫 섹션은 금액 하나를 크게 세운다** (토스 결제 결과 화면의 문법).
+    /// 장부를 열어 가장 먼저 확인하는 건 결국 "얼마" 라, 그 수를 가운데 큰 글씨로
+    /// 홀로 세우고 나머지 정보는 아래 섹션이 받는다.
+    ///
+    /// **부호는 색과 캡션이 대신 말한다.** 레퍼런스처럼 수는 절댓값으로 깔끔하게
+    /// 두고(마이너스 기호를 큰 글씨에 얹지 않는다), 입금·출금·이체는 색과 그 아래
+    /// 한 단어가 말한다. 손입력 거래는 이 수가 바로 **고치는 칸**이다.
+    private var amountHeroSection: some View {
+        Section {
+            VStack(spacing: DS.Spacing.tight) {
+                if !isEditableAmount {
+                    Text("\(abs(heroSignedAmount).formatted())원")
+                        .typeStyle(DS.Typo.display2)
+                        .tabularAmount()
+                        .foregroundColor(heroAmountColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
+                        TextField("0", text: $amountText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.center)
+                            .typeStyle(DS.Typo.display2)
+                            .tabularAmount()
+                            .foregroundColor(heroAmountColor)
+                            .fixedSize()
+                        Text("원")
+                            .typeStyle(DS.Typo.h3)
+                            .foregroundColor(heroAmountColor)
+                    }
+                }
+                Text(heroCaption)
+                    .typeStyle(DS.Typo.body2)
+                    .foregroundColor(DS.Ink.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Spacing.medium)
+            // 카드 없이 화면 배경 위에 그대로 세운다 — 레퍼런스의 흰 바탕처럼.
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    /// 히어로 금액의 색. 목록 줄(`LedgerRowView.amountColor`)과 같은 규칙이다 —
+    /// 입금 파랑 · 출금 검정 · 통장 사이 이체 회색.
+    private var heroAmountColor: Color {
+        if transaction.isInternalTransfer { return DS.Ink.tertiary }
+        // 조각·거래내역서 거래는 통장 값(`transaction.isDeposit`)이 정본, 손입력은 입력 중인 값.
+        let deposit = (isPieceMode || transaction.isFromStatement) ? transaction.isDeposit : isDeposit
+        return deposit ? DS.Palette.deposit : DS.Palette.withdrawal
+    }
+
+    /// 금액 아래 한 단어. 부호 대신 성격을 말한다.
+    private var heroCaption: String {
+        if transaction.isInternalTransfer { return "통장 사이 이체" }
+        let deposit = (isPieceMode || transaction.isFromStatement) ? transaction.isDeposit : isDeposit
+        return deposit ? "입금" : "출금"
+    }
+
+    // MARK: - 조각 상세
+
+    /// 눌린 **조각**의 적요·분류. 이것만 이 화면에서 고친다.
+    ///
+    /// 매칭 거래의 조각은 금액·통장이 청구·통장에서 온 정본이라 여기서 못 고치고,
+    /// 사람이 손볼 여지가 있는 건 **적요 문구와 분류** 뿐이다.
+    private var pieceInfoSection: some View {
+        Section {
+            TextField("적요 (예: 파라솔 대여비)", text: $descriptionText)
+            TextField("분류 (예: 행사비, 회비)", text: $category)
+            CategorySuggestionChips(suggestions: suggestions, selected: $category)
+        } header: {
+            Text("내역")
+        }
+    }
+
+    /// **이 조각이 속한 출금.** 총액·통장·일시는 조각의 것이 아니라 거래 전체의
+    /// 것이라, 조각 화면에서는 읽기 전용 맥락으로만 둔다.
+    ///
+    /// 여러 조각이면 "이 6만원은 45.8만원 출금의 일부" 를 총액으로 말한다. 한 조각뿐이면
+    /// 총액이 곧 히어로라 다시 적지 않는다.
+    @ViewBuilder
+    private var parentContextSection: some View {
+        Section {
+            if pieceCount > 1 {
+                LabeledContent("전체 출금", value: "\(abs(transaction.amount).formatted())원")
+            }
+            LabeledContent("통장", value: accountLabel)
+            LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
+        } header: {
+            Text("이 내역이 속한 출금")
+        } footer: {
+            if pieceCount > 1 {
+                Text("이 출금 한 건이 \(pieceCount)개 내역으로 나뉘어요. 금액·통장·일시는 출금 전체의 값이라 여기서 고치지 않아요.")
+            }
+        }
+    }
+
     // MARK: - 거래 정보
 
-    /// **거래내역서에서 온 거래는 금액·일시·통장이 잠긴다.** 그 셋은 통장에 찍힌
-    /// 기록이라 고치면 통장과 어긋나 대조가 뜻을 잃는다.
+    /// **금액을 뺀 나머지 정보를 나열한다** (레퍼런스의 이름·수신처·날짜 줄).
     ///
-    /// **적요는 둘 다 고칠 수 있다.** 통장이 주는 적요는 예금주나 가맹점 이름
-    /// (`홍길동` · `우성볼링장` · `ATM현금`)이라 장부에 그대로 적을 수 없다.
-    /// 장부에 적히는 건 "아침식사" · "볼링 게임 16명" 같은 **뜻**이다.
-    private var infoSection: some View {
+    /// **거래내역서에서 온 거래는 일시·통장이 잠긴다.** 통장에 찍힌 기록이라 고치면
+    /// 통장과 어긋나 대조가 뜻을 잃는다. **적요는 둘 다 고칠 수 있다** — 통장이 주는
+    /// 적요는 예금주·가맹점 이름(`홍길동` · `우성볼링장`)이라 장부에 그대로 적을 수
+    /// 없고, 장부에 적히는 건 "아침식사" 같은 **뜻**이다.
+    ///
+    /// 통장 사이 이체 토글(`transferRows`)은 아직 여기 남겨 둔다 — 다음 라운드에서
+    /// 손본다. 지금 빼면 내부 이체를 고칠 길이 사라진다.
+    private var detailsSection: some View {
         Section {
             TextField("적요 (예: 아침식사, 8월 헌금)", text: $descriptionText)
 
             if transaction.isFromStatement {
-                LabeledContent("금액", value: "\(transaction.amount.formatted())원")
                 LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
                 LabeledContent("통장", value: accountLabel)
-                // **이체 표시는 잠기지 않는다.** 은행은 이게 통장 사이 이체인지
-                // 말해 주지 않는다 — 적요를 보고 사람이 정하는 회계 판단이다.
                 transferRows
             } else {
                 DatePicker("일시", selection: $datetime, displayedComponents: [.date])
@@ -112,15 +231,6 @@ struct TransactionEditView: View {
                     Text("출금").tag(false)
                 }
                 .pickerStyle(.segmented)
-
-                HStack {
-                    Text("금액")
-                    Spacer()
-                    TextField("0", text: $amountText)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.trailing)
-                    Text("원").foregroundColor(DS.Ink.secondary)
-                }
 
                 Picker("통장", selection: $accountId) {
                     ForEach(viewModel.accounts) { Text($0.name).tag($0.id) }
@@ -167,32 +277,46 @@ struct TransactionEditView: View {
             } label: {
                 HStack {
                     Spacer()
-                    Text("이 거래 삭제")
+                    // 조각을 눌러도 삭제는 **출금 전체**에 걸린다 — 조각 하나만
+                    // 지우는 건 없다(합이 거래액과 어긋난다).
+                    Text(isPieceMode && pieceCount > 1 ? "이 출금 전체 삭제" : "이 거래 삭제")
                     Spacer()
                 }
             }
             .disabled(isSaving)
         } footer: {
-            Text("분할 항목과 영수증도 같이 지워져요. 되돌릴 수 없어요.")
+            Text(isPieceMode && pieceCount > 1
+                 ? "이 출금의 \(pieceCount)개 내역과 영수증이 모두 지워져요. 되돌릴 수 없어요."
+                 : "분할 항목과 영수증도 같이 지워져요. 되돌릴 수 없어요.")
         }
     }
 
     var body: some View {
         NavigationView {
             Form {
-                infoSection
-                // 메모 칸이 여기 있었는데 **어디에도 안 보이는 값**이었다 —
-                // 목록 줄도 보고서도 분석 화면도 안 읽었다. 적을 말이 있으면
-                // 분할 조각의 적요에 적는다. 그건 실제로 장부에 남는다.
-                Section("분류") {
-                    TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
-                    CategorySuggestionChips(suggestions: suggestions, selected: $category)
+                amountHeroSection
+                if isPieceMode {
+                    // **조각을 눌렀다.** 이 조각만 보여주고, 총액·통장·일시는 "속한
+                    // 출금" 으로 밀어 둔다. 형제 조각은 다시 나열하지 않는다 —
+                    // 목록이 이미 줄마다 펼쳐 놨다.
+                    pieceInfoSection
+                    parentContextSection
+                } else {
+                    // **분할 없는 거래 전체.** 지금까지의 편집 화면 그대로다.
+                    detailsSection
+                    // 메모 칸이 여기 있었는데 **어디에도 안 보이는 값**이었다 —
+                    // 목록 줄도 보고서도 분석 화면도 안 읽었다. 적을 말이 있으면
+                    // 분할 조각의 적요에 적는다. 그건 실제로 장부에 남는다.
+                    Section("분류") {
+                        TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
+                        CategorySuggestionChips(suggestions: suggestions, selected: $category)
+                    }
+                    splitSection
                 }
-                splitSection
                 receiptSection
                 deleteSection
             }
-            .navigationTitle("거래 편집")
+            .navigationTitle(isPieceMode ? "내역 편집" : "거래 편집")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -208,24 +332,10 @@ struct TransactionEditView: View {
                     }
                 }
             }
-            .onChange(of: photoItem) { item in
-                guard let item else { return }
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        pendingImages.append(PendingImage(image: image))
-                    }
-                    photoItem = nil
-                }
-            }
-            .sheet(isPresented: $showCamera) {
-                CameraPicker { image in
-                    pendingImages.append(PendingImage(image: image))
-                }
-                .ignoresSafeArea()
-            }
-            .fullScreenCover(item: $previewReceipt) { preview in
-                ReceiptViewerView(source: preview.source)
+            .sheet(isPresented: $showReceiptManager) {
+                ReceiptManagerView(keptUrls: $keptUrls,
+                                   pendingImages: $pendingImages,
+                                   isSaving: isSaving)
             }
             .alert("분할 금액 불일치", isPresented: $showSplitMismatch) {
                 Button("확인") {}
@@ -269,6 +379,7 @@ struct TransactionEditView: View {
     }
 
     private func save() {
+        if isPieceMode { savePiece(); return }
         // 분할이 있으면 합이 거래액과 일치해야 한다.
         if !splitDrafts.isEmpty && splitSum != txMagnitude {
             showSplitMismatch = true
@@ -290,6 +401,39 @@ struct TransactionEditView: View {
                 newImages: pendingImages.map(\.image),
                 originalUrls: transaction.receipts,
                 splits: splitDrafts.map {
+                    (category: $0.category.isEmpty ? nil : $0.category,
+                     amount: $0.amount,
+                     description: $0.description.isEmpty ? nil : $0.description)
+                }
+            )
+            isSaving = false
+            dismiss()
+        }
+    }
+
+    /// 조각 화면의 저장. **거래 필드는 그대로 두고**(금액·통장·일시·거래 분류·은행
+    /// 적요) 눌린 조각의 적요·분류만 바꿔 넣는다. 저장 자체는 같은
+    /// `saveTransactionEdits` 를 타므로 형제 조각은 그대로 다시 만들어진다.
+    private func savePiece() {
+        var drafts = splitDrafts
+        if let i = drafts.firstIndex(where: { $0.id == split?.id }) {
+            drafts[i].category = category
+            drafts[i].description = descriptionText
+        }
+        Task {
+            isSaving = true
+            await viewModel.saveTransactionEdits(
+                id: transaction.id,
+                datetime: transaction.datetime,
+                amount: transaction.amount,
+                description: transaction.description,
+                accountId: transaction.accountId,
+                counterAccountId: transaction.counterAccountId,
+                category: transaction.category,
+                keptUrls: keptUrls,
+                newImages: pendingImages.map(\.image),
+                originalUrls: transaction.receipts,
+                splits: drafts.map {
                     (category: $0.category.isEmpty ? nil : $0.category,
                      amount: $0.amount,
                      description: $0.description.isEmpty ? nil : $0.description)
@@ -371,90 +515,24 @@ struct TransactionEditView: View {
         }
     }
 
+    /// 영수증은 편집창에 **버튼 하나**로만 둔다 (레퍼런스 문법). 있으면 "보기",
+    /// 없으면 "추가" — 어느 쪽이든 같은 관리 시트(`ReceiptManagerView`)를 연다.
+    /// 썸네일·추가·미리보기가 본문을 차지하면 금액·정보가 아래로 밀린다.
     private var receiptSection: some View {
-        Section(receiptCount == 0 ? "영수증" : "영수증 (\(receiptCount)장)") {
-            if receiptCount > 0 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(keptUrls, id: \.self) { urlString in
-                            thumbnailFrame(
-                                onTap: { previewReceipt = ReceiptPreview(source: .remote(urlString)) },
-                                onDelete: { keptUrls.removeAll { $0 == urlString } }
-                            ) {
-                                RemoteImage(
-                                    url: URL(string: urlString),
-                                    maxDimension: DS.Size.thumbnail
-                                ) {
-                                    loadingTile
-                                } failure: {
-                                    fallbackTile
-                                }
-                                .scaledToFill()
-                            }
-                        }
-                        ForEach(pendingImages) { pending in
-                            thumbnailFrame(
-                                onTap: { previewReceipt = ReceiptPreview(source: .local(pending.image)) },
-                                onDelete: { pendingImages.removeAll { $0.id == pending.id } }
-                            ) {
-                                Image(uiImage: pending.image).resizable().scaledToFill()
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            }
-
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Label("앨범에서 추가", systemImage: "photo")
-            }
-            .disabled(isSaving)
+        Section {
             Button {
-                showCamera = true
+                showReceiptManager = true
             } label: {
-                Label("카메라로 촬영", systemImage: "camera")
+                if receiptCount > 0 {
+                    Label("영수증 보기 (\(receiptCount)장)", systemImage: "paperclip")
+                } else {
+                    Label("영수증 추가", systemImage: "plus")
+                }
             }
             .disabled(isSaving)
+        } header: {
+            Text("영수증")
         }
-    }
-
-    private var fallbackTile: some View {
-        Image(systemName: "exclamationmark.triangle")
-            .foregroundColor(DS.Ink.placeholder)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DS.Surface.secondary)
-    }
-
-    private var loadingTile: some View {
-        ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DS.Surface.secondary)
-    }
-
-    private func thumbnailFrame<Content: View>(
-        onTap: @escaping () -> Void,
-        onDelete: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let size = DS.Size.thumbnail
-        return ZStack(alignment: .topTrailing) {
-            content()
-                .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
-                .contentShape(RoundedRectangle(cornerRadius: DS.Radius.l))
-                .onTapGesture(perform: onTap)
-
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(DS.Icon.font(DS.Icon.action))
-                    .foregroundStyle(.white, .black.opacity(0.55))
-            }
-            .buttonStyle(.plain)
-            .padding(DS.Spacing.tight)
-            .disabled(isSaving)
-        }
-        .frame(width: size, height: size)
     }
 }
 
@@ -565,6 +643,149 @@ struct SplitEditSheet: View {
 }
 
 /// 영수증 출처 (업로드된 원격 URL 또는 아직 업로드 안 한 로컬 이미지).
+/// 영수증을 보고·더하고·지우는 시트.
+///
+/// 예전에는 편집창 본문에 썸네일과 추가 버튼이 그대로 있었다. 레퍼런스처럼
+/// 편집창에는 버튼 하나만 두고, 실제 관리는 여기로 옮겼다. 영수증은 자주 열지
+/// 않는 자리라 한 단계 안이 알맞고, 본문은 금액·정보에 내준다.
+///
+/// **거래는 아직 저장하지 않는다.** 여기서 더한 이미지는 `pendingImages` 로,
+/// 남긴 것은 `keptUrls` 로 부모에 그대로 반영되고, 실제 업로드·삭제는 편집창의
+/// "저장" 이 `saveTransactionEdits` 로 한 번에 확정한다.
+struct ReceiptManagerView: View {
+    @Binding var keptUrls: [String]
+    @Binding var pendingImages: [PendingImage]
+    let isSaving: Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var previewReceipt: ReceiptPreview?
+
+    private var receiptCount: Int { keptUrls.count + pendingImages.count }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                if receiptCount > 0 {
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: DS.Spacing.small) {
+                                ForEach(keptUrls, id: \.self) { urlString in
+                                    thumbnailFrame(
+                                        onTap: { previewReceipt = ReceiptPreview(source: .remote(urlString)) },
+                                        onDelete: { keptUrls.removeAll { $0 == urlString } }
+                                    ) {
+                                        RemoteImage(
+                                            url: URL(string: urlString),
+                                            maxDimension: DS.Size.thumbnail
+                                        ) {
+                                            loadingTile
+                                        } failure: {
+                                            fallbackTile
+                                        }
+                                        .scaledToFill()
+                                    }
+                                }
+                                ForEach(pendingImages) { pending in
+                                    thumbnailFrame(
+                                        onTap: { previewReceipt = ReceiptPreview(source: .local(pending.image)) },
+                                        onDelete: { pendingImages.removeAll { $0.id == pending.id } }
+                                    ) {
+                                        Image(uiImage: pending.image).resizable().scaledToFill()
+                                    }
+                                }
+                            }
+                            .padding(.vertical, DS.Spacing.tight)
+                        }
+                        .listRowInsets(EdgeInsets(top: DS.Spacing.small, leading: DS.Spacing.s4,
+                                                  bottom: DS.Spacing.small, trailing: DS.Spacing.s4))
+                    } footer: {
+                        Text("영수증을 눌러 크게 봐요. 오른쪽 위 ✕ 로 지워요. 저장을 눌러야 반영돼요.")
+                    }
+                }
+
+                Section {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        Label("앨범에서 추가", systemImage: "photo")
+                    }
+                    .disabled(isSaving)
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("카메라로 촬영", systemImage: "camera")
+                    }
+                    .disabled(isSaving)
+                }
+            }
+            .navigationTitle(receiptCount == 0 ? "영수증" : "영수증 (\(receiptCount)장)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("완료") { dismiss() }.fontWeight(.semibold)
+                }
+            }
+            .onChange(of: photoItem) { item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        pendingImages.append(PendingImage(image: image))
+                    }
+                    photoItem = nil
+                }
+            }
+            .sheet(isPresented: $showCamera) {
+                CameraPicker { image in
+                    pendingImages.append(PendingImage(image: image))
+                }
+                .ignoresSafeArea()
+            }
+            .fullScreenCover(item: $previewReceipt) { preview in
+                ReceiptViewerView(source: preview.source)
+            }
+        }
+    }
+
+    private var fallbackTile: some View {
+        Image(systemName: "exclamationmark.triangle")
+            .foregroundColor(DS.Ink.placeholder)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DS.Surface.secondary)
+    }
+
+    private var loadingTile: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DS.Surface.secondary)
+    }
+
+    private func thumbnailFrame<Content: View>(
+        onTap: @escaping () -> Void,
+        onDelete: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let size = DS.Size.thumbnail
+        return ZStack(alignment: .topTrailing) {
+            content()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
+                .contentShape(RoundedRectangle(cornerRadius: DS.Radius.l))
+                .onTapGesture(perform: onTap)
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(DS.Icon.font(DS.Icon.action))
+                    .foregroundStyle(.white, .black.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+            .padding(DS.Spacing.tight)
+            .disabled(isSaving)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 enum ReceiptSource {
     case remote(String)
     case local(UIImage)
