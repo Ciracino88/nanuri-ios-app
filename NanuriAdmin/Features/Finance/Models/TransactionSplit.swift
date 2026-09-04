@@ -35,7 +35,7 @@ struct TransactionSplitInsert: Encodable {
     }
 }
 
-/// 분류만 바꾸는 업데이트 페이로드. 여러 줄에 한 번에 붙일 때 쓴다.
+/// 카테고리만 바꾸는 업데이트 페이로드. 여러 항목에 한 번에 붙일 때 쓴다.
 struct CategoryPatch: Encodable {
     let category: String?
 }

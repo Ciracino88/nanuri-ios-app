@@ -12,7 +12,7 @@ class FinanceViewModel: ObservableObject {
     @Published var error: String?
     /// 목록 정렬. 켜면 오래된 순, 끄면(기본) 최신순이다.
     ///
-    /// **여기 하나만 바꾸면 네 칩(전체·입금·출금·미분류)이 모두 따라간다** —
+    /// **여기 하나만 바꾸면 네 칩(전체·입금·출금·미지정)이 모두 따라간다** —
     /// 네 목록이 전부 `ledgerRows(of:)` 를 지나가기 때문이다. 합계·보고서·그래프는
     /// 순서와 무관한 집계라 건드리지 않는다.
     @Published var oldestFirst = false
@@ -66,7 +66,7 @@ class FinanceViewModel: ObservableObject {
 
     var withdrawals: [BankTransaction] { filteredExternal.filter { !$0.isDeposit } }
 
-    /// 목록이 그리는 **장부 줄들.** 분할이 있으면 조각마다 한 줄이다.
+    /// 목록이 그리는 **항목들.** 분할이 있으면 조각마다 한 항목이다.
     ///
     /// 칩의 개수도 이걸 센다 — 엑셀 장부의 줄 수와 같은 수가 나와야 한다.
     var ledgerRows: [LedgerRow] { ledgerRows(of: filtered) }
@@ -75,10 +75,10 @@ class FinanceViewModel: ObservableObject {
 
     var withdrawalRows: [LedgerRow] { ledgerRows(of: withdrawals) }
 
-    /// **분류가 비어 있는 장부 줄.** 목록에서 골라 한 번에 붙이라고 모아 준다.
+    /// **카테고리가 비어 있는 항목.** 목록에서 골라 한 번에 붙이라고 모아 준다.
     ///
-    /// 내부 이체는 뺀다 — 분류를 붙일 줄이 아니고, 앞으로도 안 붙는다.
-    /// 그걸 세면 "아직 12줄 남았다" 가 영영 0이 안 된다.
+    /// 내부 이체는 뺀다 — 카테고리를 붙일 항목이 아니고, 앞으로도 안 붙는다.
+    /// 그걸 세면 "아직 12항목 남았다" 가 영영 0이 안 된다.
     var uncategorizedRows: [LedgerRow] {
         ledgerRows.filter {
             !$0.isInternalTransfer
@@ -86,8 +86,8 @@ class FinanceViewModel: ObservableObject {
         }
     }
 
-    /// 거래를 장부 줄로 편다. **내부 이체는 안 쪼갠다** — 장부 줄이 아니라서
-    /// 조각이 애초에 없고, 그 사실이 화면에서도 한 줄로 남아야 한다.
+    /// 거래를 항목으로 편다. **내부 이체는 안 쪼갠다** — 사람 장부에 없는 줄이라
+    /// 조각이 애초에 없고, 그 사실이 화면에서도 한 항목으로 남아야 한다.
     private func ledgerRows(of items: [BankTransaction]) -> [LedgerRow] {
         // 정렬은 여기서 한 번만 건다. 분할 조각은 `splits(for:)` 가 매기는
         // `sort_order` 를 그대로 지킨다 — 한 거래 안에서의 순서는 뒤집지 않는다.
