@@ -23,6 +23,34 @@
 
 ---
 
+## 데이터 흐름
+
+청구서와 농협 수기 두 입구에서 들어온 돈이 **거래 → 장부 줄**로 흘러 목록·요약·
+보고서가 된다. 청구의 영수증은 불러오는 순간 거래로 **한 번 복사될 뿐**이다
+(연결이 아니다).
+
+```mermaid
+flowchart TD
+    bills["청구서 bills<br/>승인 → processed_at"]
+    parser["TossPdfParser<br/>내역서 PDF 파싱"]
+    matcher["StatementMatcher<br/>금액·시각 매칭"]
+    imp["StatementImportView<br/>사람이 확인·확정"]
+    add["AddTransactionView<br/>농협 수기"]
+    tx["BankTransaction<br/>+ TransactionSplit"]
+    rows["LedgerRow · 장부 줄"]
+    out["목록 · 요약 · 보고서"]
+
+    bills --> matcher
+    parser --> matcher
+    matcher --> imp
+    imp -->|거래 생성| tx
+    add -->|거래 생성| tx
+    bills -. 영수증 URL 일회성 복사 .-> tx
+    tx --> rows --> out
+```
+
+---
+
 ## 파일 지도
 
 ### 화면 (재정 탭 메인)
@@ -82,10 +110,30 @@
 `ledgerRows(of:)`([FinanceViewModel.swift](FinanceViewModel.swift))가 이 펼침을 한다.
 칩 개수도 조각 수(=엑셀 장부 줄 수)와 같다.
 
+```mermaid
+flowchart LR
+    subgraph g1["분할된 거래 · 매칭/수동분할"]
+      t1["BankTransaction<br/>458,000원 출금 1건"]
+      t1 --> r1["수영장 260,000"]
+      t1 --> r2["카페 138,000"]
+      t1 --> r3["파라솔 60,000"]
+    end
+    subgraph g2["분할 없는 거래 · 미매칭/수기"]
+      t2["BankTransaction 1건"] --> r4["장부 줄 1개"]
+    end
+```
+
 ### 탭 → 조각 상세
 목록 줄을 누르면 **그 줄(`LedgerRow`, 조각 정보 포함)**을 넘긴다.
 `TransactionEditView` 는 `row.split != nil` 이면 **조각 상세**(그 조각 금액·적요·분류만,
 총액·통장·영수증·삭제는 "속한 출금 전체"로 표시), 아니면 **거래 편집**을 그린다.
+
+```mermaid
+flowchart TD
+    tap["목록 줄 탭 → LedgerRow 전달"] --> q{"row.split != nil?"}
+    q -->|예 · 조각| piece["조각 상세<br/>히어로 = 조각 금액<br/>총액·통장·영수증·삭제 = 출금 전체"]
+    q -->|아니오 · 거래| edit["거래 편집<br/>금액·통장·일시·분할 생성"]
+```
 
 ### 매칭은 일회성 복사다 (bill_id 없음)
 청구↔거래 연결은 불러오기 순간에 청구의 `receipt_url` 을 거래 `receipt_urls` 로
