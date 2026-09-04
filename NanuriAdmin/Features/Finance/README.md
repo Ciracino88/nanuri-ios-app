@@ -29,21 +29,21 @@
 
 ```mermaid
 flowchart TD
-    bills["청구서 bills<br/>승인 → processed_at"]
-    parser["TossPdfParser<br/>내역서 PDF 파싱"]
-    matcher["StatementMatcher<br/>금액·시각 매칭"]
-    imp["StatementImportView<br/>사람이 확인·확정"]
-    add["AddTransactionView<br/>농협 수기"]
-    tx["BankTransaction<br/>+ TransactionSplit"]
-    rows["LedgerRow · 장부 줄"]
-    out["목록 · 요약 · 보고서"]
+    bills["청구서 (bills)<br/>승인됨"]
+    parser["TossPdfParser<br/>거래내역서 파싱"]
+    matcher["StatementMatcher<br/>청구 내역과 매칭"]
+    imp["StatementImportView<br/>확인 후 장부에 추가"]
+    add["AddTransactionView<br/>농협 수기 작성"]
+    tx["BankTransaction<br/>(+ TransactionSplit)"]
+    rows["LedgerRow (장부 줄)"]
+    out["목록, 요약, 보고서"]
 
     bills --> matcher
     parser --> matcher
     matcher --> imp
     imp -->|거래 생성| tx
     add -->|거래 생성| tx
-    bills -. 영수증 URL 일회성 복사 .-> tx
+    bills -. 영수증 한 번 복사 .-> tx
     tx --> rows --> out
 ```
 
@@ -108,13 +108,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph g1["분할된 거래 · 매칭/수동분할"]
+    subgraph g1["분할된 거래 (매칭 또는 수동 분할)"]
       t1["BankTransaction<br/>458,000원 출금 1건"]
       t1 --> r1["수영장 260,000"]
       t1 --> r2["카페 138,000"]
       t1 --> r3["파라솔 60,000"]
     end
-    subgraph g2["분할 없는 거래 · 미매칭/수기"]
+    subgraph g2["분할 없는 거래 (미매칭 또는 수기)"]
       t2["BankTransaction 1건"] --> r4["장부 줄 1개"]
     end
 ```
@@ -126,9 +126,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    tap["목록 줄 탭 → LedgerRow 전달"] --> q{"row.split != nil?"}
-    q -->|예 · 조각| piece["조각 상세<br/>히어로 = 조각 금액<br/>총액·통장·영수증·삭제 = 출금 전체"]
-    q -->|아니오 · 거래| edit["거래 편집<br/>금액·통장·일시·분할 생성"]
+    tap["목록 줄을 누름 → LedgerRow 전달"] --> q{"row.split != nil?"}
+    q -->|조각인 경우| piece["조각 상세<br/>금액은 조각 금액<br/>총액, 통장, 영수증, 삭제는 출금 전체"]
+    q -->|거래인 경우| edit["거래 편집<br/>금액, 통장, 일시, 분할 생성"]
 ```
 
 ### 매칭은 일회성 복사다 (bill_id 없음)
