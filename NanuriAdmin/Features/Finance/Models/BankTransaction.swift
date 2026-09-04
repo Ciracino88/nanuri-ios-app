@@ -64,7 +64,7 @@ struct BankTransactionInsert: Encodable {
     let type: String
     let amount: Int
     let description: String?
-    /// 손으로 넣을 때는 분류를 그 자리에서 같이 받는다. 거래내역서로 불러온 것은 없다.
+    /// 손으로 넣을 때는 카테고리를 그 자리에서 같이 받는다. 거래내역서로 불러온 것은 없다.
     var category: String? = nil
     /// 청구서에 붙어 있던 영수증. **거래내역서로 넣을 때 같이 넘어온다.**
     ///
