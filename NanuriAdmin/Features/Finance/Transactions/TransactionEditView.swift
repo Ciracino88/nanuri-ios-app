@@ -1,36 +1,43 @@
 import SwiftUI
 
-/// 분할 없는 **거래 하나**를 고치는 화면. 목록에서 (조각이 아닌) 거래를 누르면 온다.
+/// 분할 없는 **거래 하나**의 상세 화면. 목록에서 (조각이 아닌) 거래를 누르면 온다.
 ///
-/// 손으로 넣은 거래는 금액·일시·종류·통장까지 고칠 수 있고, 거래내역서에서 온 거래는
-/// 그 넷이 통장의 기록이라 잠긴다(화면이 잠그고 뷰모델이 한 번 더 막는다). 어느 쪽이든
-/// **적요·카테고리·분할·영수증**은 고칠 수 있다. 조각을 눌렀을 때의 편집은
-/// `PieceEditView` 가 맡는다.
+/// **상세다.** 값을 죽 나열하고, 고칠 수 있는 것만 chevron 을 달아 눌러서 필드별 시트로
+/// 고친다. 거래내역서에서 온 거래는 금액·일시·통장이 통장의 기록이라 chevron 을 안 단다
+/// — 레이아웃은 같고 그 세 줄만 잠긴 것처럼 보인다. 조각을 눌렀을 때는 `PieceEditView`.
+///
+/// 시트 편집은 **로컬 상태만** 바꾸고, DB 저장은 "저장" 이 `saveTransactionEdits` 로
+/// 한 번에 한다. 거래내역서 거래의 잠긴 값은 화면이 chevron 을 안 다는 것과 별개로
+/// 뷰모델이 한 번 더 막는다.
+///
+/// **통장 사이 이체 토글은 거래내역서 거래에만 있다.** 판정(적요 == 농협의
+/// `statement_alias`)은 매처가 불러올 때 하지만, 못 잡거나 오탐일 때 사람이 고칠 수
+/// 있어야 해서 거래내역서 거래 편집에는 토글이 남는다 — 은행이 말해 줄 수 없는 회계
+/// 판단이라 그렇다. **수기 거래엔 없다**(추가·편집 모두): 이체는 반드시 모임통장을
+/// 지나 거래내역서로 들어오므로, 손입력이 이체일 수 없다.
 struct TransactionEditView: View {
     let row: LedgerRow
     let suggestions: [String]
     @ObservedObject var viewModel: FinanceViewModel
 
-    /// 편의 별칭. 아래 코드가 거래를 자주 참조한다.
     private var transaction: BankTransaction { row.transaction }
 
     @State private var category: String
-    // 아래 다섯은 **손으로 넣은 거래에서만** 바뀐다. 거래내역서에서 온 거래는
-    // 금액·일시·통장이 통장의 기록이라 화면이 잠그고, 뷰모델이 한 번 더 막는다.
     @State private var descriptionText: String
     @State private var amountText: String
     @State private var isDeposit: Bool
     @State private var datetime: Date
     @State private var accountId: UUID
     @State private var counterAccountId: UUID?
-    @State private var showDeleteConfirm = false
-    @State private var keptUrls: [String]           // 유지할 기존 영수증 (저장 시 확정)
-    @State private var pendingImages: [PendingImage] // 새로 추가한, 아직 업로드 안 한 이미지
-    @State private var showReceiptManager = false
-    @State private var isSaving = false
+    @State private var keptUrls: [String]
+    @State private var pendingImages: [PendingImage]
     @State private var splitDrafts: [SplitDraft]
-    @State private var showSplitMismatch = false
+    @State private var editField: EditField?
     @State private var activeSplit: SplitDraft?
+    @State private var showReceiptManager = false
+    @State private var showDeleteConfirm = false
+    @State private var showSplitMismatch = false
+    @State private var isSaving = false
     @Environment(\.dismiss) var dismiss
 
     init(row: LedgerRow, suggestions: [String], viewModel: FinanceViewModel) {
@@ -52,25 +59,25 @@ struct TransactionEditView: View {
         })
     }
 
-    /// 부모 출금이 몇 조각인가. 삭제 안내문이 이걸 본다.
+    /// 금액·일시·통장을 이 화면에서 고칠 수 있나 — **손입력 거래일 때만.**
+    private var isEditable: Bool { !transaction.isFromStatement }
     private var pieceCount: Int { splitDrafts.count }
-    /// 금액을 이 화면에서 고칠 수 있나 — **손입력 거래일 때만.**
-    private var isEditableAmount: Bool { !transaction.isFromStatement }
+    private var receiptCount: Int { keptUrls.count + pendingImages.count }
 
     private func accountName(_ id: UUID) -> String {
         viewModel.accounts.first { $0.id == id }?.name ?? "알 수 없음"
     }
 
-    private var receiptCount: Int { keptUrls.count + pendingImages.count }
-
-    /// 입력된 금액(양수). 손으로 넣은 거래에서만 뜻이 있다.
     private var editedMagnitude: Int { Int(amountText) ?? 0 }
 
-    /// 분할 합계와 견줄 거래액. **거래내역서에서 온 거래는 통장 값이 기준**이고,
-    /// 손으로 넣은 거래는 지금 입력 중인 값이 기준이다 — 금액을 고치면 분할도
-    /// 새 금액에 맞아야 한다.
+    /// 분할 합계와 견줄 거래액. 거래내역서 거래는 통장 값, 손입력은 입력 중인 값.
     private var txMagnitude: Int {
         transaction.isFromStatement ? abs(transaction.amount) : editedMagnitude
+    }
+
+    /// 히어로에 세울 부호 붙은 금액. 손입력은 입력 중인 값, 거래내역서는 통장 값.
+    private var heroSignedAmount: Int {
+        transaction.isFromStatement ? transaction.amount : (isDeposit ? editedMagnitude : -editedMagnitude)
     }
 
     /// 저장할 부호 붙은 금액.
@@ -80,22 +87,26 @@ struct TransactionEditView: View {
     }
 
     private var canSave: Bool {
-        // 손입력이면 금액이 있어야, 거래내역서 거래는 텍스트만 고치므로 늘 저장 가능.
         transaction.isFromStatement || editedMagnitude > 0
     }
     private var splitSum: Int { splitDrafts.reduce(0) { $0 + $1.amount } }
     private var splitRemaining: Int { txMagnitude - splitSum }
 
-    /// 히어로 금액의 색. 목록 줄과 같은 규칙 — 입금 파랑 · 출금 검정 · 이체 회색.
+    /// 어느 통장의 거래인가. **내부 이체면 방향까지** ("농협 → 모임").
+    private var accountLabel: String {
+        guard let counter = counterAccountId else { return accountName(accountId) }
+        return heroSignedAmount < 0
+            ? "\(accountName(accountId)) → \(accountName(counter))"
+            : "\(accountName(counter)) → \(accountName(accountId))"
+    }
+
     private var heroColor: Color {
-        if transaction.isInternalTransfer { return DS.Ink.tertiary }
-        // 거래내역서 거래는 통장 값이 정본, 손입력은 입력 중인 값.
+        if counterAccountId != nil { return DS.Ink.tertiary }
         let deposit = transaction.isFromStatement ? transaction.isDeposit : isDeposit
         return deposit ? DS.Palette.deposit : DS.Palette.withdrawal
     }
-    /// 금액 아래 한 단어. 부호 대신 성격을 말한다.
     private var heroCaption: String {
-        if transaction.isInternalTransfer { return "통장 사이 이체" }
+        if counterAccountId != nil { return "통장 사이 이체" }
         let deposit = transaction.isFromStatement ? transaction.isDeposit : isDeposit
         return deposit ? "입금" : "출금"
     }
@@ -103,16 +114,14 @@ struct TransactionEditView: View {
     var body: some View {
         NavigationView {
             Form {
-                AmountHeroSection(amountText: isEditableAmount ? $amountText : nil,
-                                  displayAmount: transaction.amount,
-                                  color: heroColor, caption: heroCaption)
-                detailsSection
-                // 메모 칸이 여기 있었는데 **어디에도 안 보이는 값**이었다 —
-                // 목록 줄도 보고서도 분석 화면도 안 읽었다. 적을 말이 있으면
-                // 분할 조각의 적요에 적는다. 그건 실제로 장부에 남는다.
+                AmountHeroSection(displayAmount: heroSignedAmount, color: heroColor, caption: heroCaption,
+                                  onEdit: isEditable ? { editField = .amount } : nil)
+                infoSection
                 Section("카테고리") {
-                    TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $category)
-                    CategorySuggestionChips(suggestions: suggestions, selected: $category)
+                    DetailRow(label: "카테고리",
+                              value: category.isEmpty ? "미지정" : category,
+                              isPlaceholder: category.isEmpty,
+                              onEdit: { editField = .category })
                 }
                 splitSection
                 ReceiptButtonSection(receiptCount: receiptCount, isSaving: isSaving) {
@@ -124,7 +133,7 @@ struct TransactionEditView: View {
                     isSaving: isSaving
                 ) { showDeleteConfirm = true }
             }
-            .navigationTitle("거래 편집")
+            .navigationTitle("항목 상세")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -140,34 +149,15 @@ struct TransactionEditView: View {
                     }
                 }
             }
+            .sheet(item: $editField) { field in editSheet(field) }
             .sheet(isPresented: $showReceiptManager) {
-                ReceiptManagerView(keptUrls: $keptUrls,
-                                   pendingImages: $pendingImages,
-                                   isSaving: isSaving)
+                ReceiptManagerView(keptUrls: $keptUrls, pendingImages: $pendingImages, isSaving: isSaving)
             }
+            .sheet(item: $activeSplit) { draft in splitSheet(draft) }
             .alert("분할 금액 불일치", isPresented: $showSplitMismatch) {
                 Button("확인") {}
             } message: {
                 Text("분할 금액의 합(\(splitSum.formatted())원)이 거래액(\(txMagnitude.formatted())원)과 같아야 저장할 수 있어요.")
-            }
-            .sheet(item: $activeSplit) { draft in
-                let isNew = !splitDrafts.contains { $0.id == draft.id }
-                let otherSum = splitDrafts.filter { $0.id != draft.id }.reduce(0) { $0 + $1.amount }
-                SplitEditSheet(
-                    initial: draft,
-                    isNew: isNew,
-                    suggestions: suggestions,
-                    txMagnitude: txMagnitude,
-                    otherSum: otherSum,
-                    onSave: { updated in
-                        if let idx = splitDrafts.firstIndex(where: { $0.id == updated.id }) {
-                            splitDrafts[idx] = updated
-                        } else {
-                            splitDrafts.append(updated)
-                        }
-                    },
-                    onDelete: { splitDrafts.removeAll { $0.id == draft.id } }
-                )
             }
             .confirmationDialog("이 거래를 삭제할까요?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("삭제", role: .destructive) {
@@ -188,37 +178,32 @@ struct TransactionEditView: View {
 
     // MARK: - 거래 정보
 
-    /// **금액을 뺀 나머지 정보를 나열한다** (레퍼런스의 이름·수신처·날짜 줄).
-    ///
-    /// **거래내역서에서 온 거래는 일시·통장이 잠긴다.** 통장에 찍힌 기록이라 고치면
-    /// 통장과 어긋나 대조가 뜻을 잃는다. **적요는 둘 다 고칠 수 있다** — 통장이 주는
-    /// 적요는 예금주·가맹점 이름(`홍길동` · `우성볼링장`)이라 장부에 그대로 적을 수
-    /// 없고, 장부에 적히는 건 "아침식사" 같은 **뜻**이다.
-    ///
-    /// 통장 사이 이체 토글(`transferRows`)은 아직 여기 남겨 둔다 — 다음 라운드에서
-    /// 손본다. 지금 빼면 내부 이체를 고칠 길이 사라진다.
-    private var detailsSection: some View {
+    /// **거래내역서에서 온 거래는 일시·통장에 chevron 이 없다** — 통장의 기록이라
+    /// 고치면 통장과 어긋나 대조가 뜻을 잃는다. 적요·카테고리는 둘 다 고칠 수 있고,
+    /// **통장 사이 이체 토글은 거래내역서 거래에만** 뜬다 — 은행이 말해 줄 수 없는
+    /// 회계 판단이라 매처가 못 잡은 것을 사람이 여기서 고친다.
+    @ViewBuilder
+    private var infoSection: some View {
         Section {
-            TextField("적요 (예: 아침식사, 8월 헌금)", text: $descriptionText)
-
+            DetailRow(label: "적요",
+                      value: descriptionText.isEmpty ? "없음" : descriptionText,
+                      isPlaceholder: descriptionText.isEmpty,
+                      onEdit: { editField = .description })
+            DetailRow(label: "일시",
+                      value: isEditable ? datetime.koreanDateString : transaction.datetime.koreanDateTimeString,
+                      onEdit: isEditable ? { editField = .date } : nil)
+            DetailRow(label: "통장",
+                      value: accountLabel,
+                      onEdit: isEditable ? { editField = .account } : nil)
+            // 이체 판정은 매처가 하지만, 못 잡거나 오탐일 때 사람이 고쳐야 한다.
+            // 수기 거래는 이체일 수 없어(내역서로 들어옴) 거래내역서 거래에만 둔다.
             if transaction.isFromStatement {
-                LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
-                LabeledContent("통장", value: accountLabel)
-                transferRows
-            } else {
-                DatePicker("일시", selection: $datetime, displayedComponents: [.date])
-
-                Picker("종류", selection: $isDeposit) {
-                    Text("입금").tag(true)
-                    Text("출금").tag(false)
-                }
-                .pickerStyle(.segmented)
-
-                Picker("통장", selection: $accountId) {
-                    ForEach(viewModel.accounts) { Text($0.name).tag($0.id) }
-                }
-
-                transferRows
+                Toggle("통장 사이 이체", isOn: Binding(
+                    get: { counterAccountId != nil },
+                    set: { on in
+                        counterAccountId = on ? viewModel.accounts.first { $0.id != accountId }?.id : nil
+                    }
+                ))
             }
         } header: {
             Text("거래 정보")
@@ -229,49 +214,12 @@ struct TransactionEditView: View {
         }
     }
 
-    /// 어느 통장의 거래인가. **내부 이체면 방향까지 보여준다** ("농협 → 모임").
-    ///
-    /// `amount` 는 `accountId` 기준이라, 음수면 거기서 나가 상대 통장으로 들어간 것이다.
-    private var accountLabel: String {
-        guard let counter = transaction.counterAccountId else {
-            return accountName(transaction.accountId)
-        }
-        return transaction.amount < 0
-            ? "\(accountName(transaction.accountId)) → \(accountName(counter))"
-            : "\(accountName(counter)) → \(accountName(transaction.accountId))"
-    }
-
-    /// 내부 이체 표시. **한 줄이 양쪽 통장을 안다** — 두 줄로 적으면 그 둘이 같은
-    /// 사건이라는 걸 따로 짝지어야 하고, 짝이 깨지면 조용히 틀어진다.
-    @ViewBuilder
-    private var transferRows: some View {
-        let others = viewModel.accounts.filter { $0.id != accountId }
-        if let fallback = others.first {
-            Toggle("통장 사이 이체", isOn: Binding(
-                get: { counterAccountId != nil },
-                set: { counterAccountId = $0 ? fallback.id : nil }
-            ))
-
-            if counterAccountId != nil {
-                Picker("상대 통장", selection: Binding(
-                    get: { counterAccountId ?? fallback.id },
-                    set: { counterAccountId = $0 }
-                )) {
-                    ForEach(others) { Text($0.name).tag($0.id) }
-                }
-            }
-        }
-    }
-
     // MARK: - 분할
 
     private var splitSection: some View {
         Section {
             if splitDrafts.isEmpty {
                 Button {
-                    // 전액짜리 첫 항목을 만들고 바로 편집 시트를 연다.
-                    // 카테고리·금액만 물려준다. 거래의 **메모**를 조각의 **적요**로
-                    // 옮기면 성격이 다른 두 칸이 섞인다 (메모는 거래에 남는다).
                     let first = SplitDraft(category: category, amount: txMagnitude, description: "")
                     splitDrafts = [first]
                     activeSplit = first
@@ -289,8 +237,7 @@ struct TransactionEditView: View {
                                     .typeStyle(DS.Typo.body2)
                                     .foregroundColor(DS.Ink.primary)
                                 if !draft.description.isEmpty {
-                                    Text(draft.description)
-                                        .rowSubtext()
+                                    Text(draft.description).rowSubtext()
                                 }
                             }
                             Spacer()
@@ -305,9 +252,7 @@ struct TransactionEditView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .onDelete { indexSet in
-                    splitDrafts.remove(atOffsets: indexSet)
-                }
+                .onDelete { splitDrafts.remove(atOffsets: $0) }
 
                 Button {
                     activeSplit = SplitDraft(category: "", amount: max(splitRemaining, 0), description: "")
@@ -321,8 +266,6 @@ struct TransactionEditView: View {
                         .tabularAmount()
                         .foregroundColor(DS.Ink.secondary)
                     Spacer()
-                    // 맞으면 완료색, 아니면 아직 손봐야 한다는 뜻이라 주의색이다.
-                    // 빨강을 쓰지 않는다 — 빨강은 되돌릴 수 없는 것에만 남긴다.
                     Text(splitRemaining == 0 ? "일치 ✓" : "남은 \(splitRemaining.formatted())원")
                         .typeStyle(DS.Typo.labelS)
                         .tabularAmount()
@@ -336,8 +279,50 @@ struct TransactionEditView: View {
         }
     }
 
+    // MARK: - 시트 라우팅
+
+    @ViewBuilder
+    private func editSheet(_ field: EditField) -> some View {
+        switch field {
+        case .amount:
+            AmountEditSheet(magnitude: editedMagnitude, isDeposit: isDeposit) { m, d in
+                amountText = String(m)
+                isDeposit = d
+            }
+        case .date:
+            DateEditSheet(date: datetime) { datetime = $0 }
+        case .account:
+            AccountEditSheet(title: "통장", choices: viewModel.accounts, selected: accountId) { newId in
+                accountId = newId
+                // 상대 통장이 새 통장과 같아지면 이체가 성립 안 하므로 턴다.
+                if counterAccountId == newId { counterAccountId = nil }
+            }
+        case .description:
+            DescriptionEditSheet(text: descriptionText) { descriptionText = $0 }
+        case .category:
+            CategoryEditSheet(text: category, suggestions: suggestions) { category = $0 }
+        }
+    }
+
+    @ViewBuilder
+    private func splitSheet(_ draft: SplitDraft) -> some View {
+        let isNew = !splitDrafts.contains { $0.id == draft.id }
+        let otherSum = splitDrafts.filter { $0.id != draft.id }.reduce(0) { $0 + $1.amount }
+        SplitEditSheet(
+            initial: draft, isNew: isNew, suggestions: suggestions,
+            txMagnitude: txMagnitude, otherSum: otherSum,
+            onSave: { updated in
+                if let idx = splitDrafts.firstIndex(where: { $0.id == updated.id }) {
+                    splitDrafts[idx] = updated
+                } else {
+                    splitDrafts.append(updated)
+                }
+            },
+            onDelete: { splitDrafts.removeAll { $0.id == draft.id } }
+        )
+    }
+
     private func save() {
-        // 분할이 있으면 합이 거래액과 일치해야 한다.
         if !splitDrafts.isEmpty && splitSum != txMagnitude {
             showSplitMismatch = true
             return
@@ -350,8 +335,6 @@ struct TransactionEditView: View {
                 amount: signedAmount,
                 description: descriptionText.isEmpty ? nil : descriptionText,
                 accountId: accountId,
-                // 자기 자신과의 이체는 이체가 아니다 (DB 에도 check 가 걸려 있다).
-                // 통장을 바꾸면 상대 통장이 같아질 수 있어서 여기서 한 번 턴다.
                 counterAccountId: counterAccountId == accountId ? nil : counterAccountId,
                 category: category.isEmpty ? nil : category,
                 keptUrls: keptUrls,

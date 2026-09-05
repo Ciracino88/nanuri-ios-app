@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// 분할된 **항목(조각) 하나**를 고치는 화면. 목록에서 조각을 누르면 여기로 온다.
+/// 분할된 **항목(조각) 하나**의 상세 화면. 목록에서 조각을 누르면 여기로 온다.
 ///
-/// 고치는 건 그 조각의 **적요·카테고리**뿐이다 — 금액·통장·일시는 조각의 것이 아니라
-/// 부모 거래의 것이라 "속한 출금" 맥락으로 읽기 전용이고, 영수증·삭제도 출금 전체에
-/// 걸린다. 매칭 거래의 조각은 금액·통장이 청구·통장에서 온 정본이라 여기서 못 고친다.
+/// **상세다.** `TransactionEditView` 와 같은 레이아웃이되, 고칠 수 있는 건 그 조각의
+/// **적요·카테고리**뿐이라 그 둘에만 chevron 이 붙는다. 금액·통장·일시는 조각의 것이
+/// 아니라 부모 거래의 것이라 "속한 출금" 으로 읽기 전용이고, 영수증·삭제도 출금 전체에
+/// 걸린다.
 ///
-/// 저장은 거래 편집과 같은 `saveTransactionEdits` 로 수렴한다 — 거래 필드는 그대로
+/// 저장은 거래 상세와 같은 `saveTransactionEdits` 로 수렴한다 — 거래 필드는 그대로
 /// 두고 이 조각만 바꿔 넣으면 형제 조각은 그대로 다시 만들어진다.
 struct PieceEditView: View {
     let row: LedgerRow
@@ -14,18 +15,18 @@ struct PieceEditView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
     private var transaction: BankTransaction { row.transaction }
-    /// 눌린 조각.
     private var split: TransactionSplit? { row.split }
 
     @State private var category: String
     @State private var descriptionText: String
-    @State private var keptUrls: [String]            // 유지할 기존 영수증 (저장 시 확정)
-    @State private var pendingImages: [PendingImage]  // 새로 추가한, 아직 업로드 안 한 이미지
-    /// 형제 조각까지 그대로 담아 둔다 — 저장은 조각을 통째로 다시 만들어 넣으므로,
-    /// 눌린 하나만 고치고 나머지는 원래대로 다시 써야 한다.
+    @State private var keptUrls: [String]
+    @State private var pendingImages: [PendingImage]
+    /// 형제 조각까지 담아 둔다 — 저장은 조각을 통째로 다시 만들어 넣으므로, 눌린
+    /// 하나만 고치고 나머지는 원래대로 다시 써야 한다.
     @State private var splitDrafts: [SplitDraft]
-    @State private var showDeleteConfirm = false
+    @State private var editField: EditField?
     @State private var showReceiptManager = false
+    @State private var showDeleteConfirm = false
     @State private var isSaving = false
     @Environment(\.dismiss) var dismiss
 
@@ -43,7 +44,6 @@ struct PieceEditView: View {
         })
     }
 
-    /// 부모 출금이 몇 조각인가. 2 이상이면 히어로(조각)와 총액이 달라 맥락이 필요하다.
     private var pieceCount: Int { splitDrafts.count }
     private var receiptCount: Int { keptUrls.count + pendingImages.count }
 
@@ -51,7 +51,6 @@ struct PieceEditView: View {
         viewModel.accounts.first { $0.id == id }?.name ?? "알 수 없음"
     }
 
-    /// 어느 통장의 거래인가. **내부 이체면 방향까지 보여준다** ("농협 → 모임").
     private var accountLabel: String {
         guard let counter = transaction.counterAccountId else {
             return accountName(transaction.accountId)
@@ -61,8 +60,6 @@ struct PieceEditView: View {
             : "\(accountName(counter)) → \(accountName(transaction.accountId))"
     }
 
-    /// 히어로 금액의 색. 목록 줄과 같은 규칙 — 입금 파랑 · 출금 검정 · 이체 회색.
-    /// 조각은 늘 통장 값(`transaction.isDeposit`)이 정본이다.
     private var heroColor: Color {
         if transaction.isInternalTransfer { return DS.Ink.tertiary }
         return transaction.isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal
@@ -75,17 +72,24 @@ struct PieceEditView: View {
     var body: some View {
         NavigationView {
             Form {
-                // 히어로는 조각 금액을, 아래 맥락은 출금 전체를 말한다.
-                AmountHeroSection(amountText: nil, displayAmount: row.amount,
-                                  color: heroColor, caption: heroCaption)
-                pieceInfoSection
+                AmountHeroSection(displayAmount: row.amount, color: heroColor, caption: heroCaption, onEdit: nil)
+                Section {
+                    DetailRow(label: "적요",
+                              value: descriptionText.isEmpty ? "없음" : descriptionText,
+                              isPlaceholder: descriptionText.isEmpty,
+                              onEdit: { editField = .description })
+                    DetailRow(label: "카테고리",
+                              value: category.isEmpty ? "미지정" : category,
+                              isPlaceholder: category.isEmpty,
+                              onEdit: { editField = .category })
+                } header: {
+                    Text("항목")
+                }
                 parentContextSection
                 ReceiptButtonSection(receiptCount: receiptCount, isSaving: isSaving) {
                     showReceiptManager = true
                 }
                 DeleteSection(
-                    // 조각을 눌러도 삭제는 **출금 전체**에 걸린다 — 조각 하나만
-                    // 지우는 건 없다(합이 거래액과 어긋난다).
                     label: pieceCount > 1 ? "이 출금 전체 삭제" : "이 거래 삭제",
                     message: pieceCount > 1
                         ? "이 출금의 \(pieceCount)개 항목과 영수증이 모두 지워져요. 되돌릴 수 없어요."
@@ -93,7 +97,7 @@ struct PieceEditView: View {
                     isSaving: isSaving
                 ) { showDeleteConfirm = true }
             }
-            .navigationTitle("항목 편집")
+            .navigationTitle("항목 상세")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -107,10 +111,9 @@ struct PieceEditView: View {
                     }
                 }
             }
+            .sheet(item: $editField) { field in editSheet(field) }
             .sheet(isPresented: $showReceiptManager) {
-                ReceiptManagerView(keptUrls: $keptUrls,
-                                   pendingImages: $pendingImages,
-                                   isSaving: isSaving)
+                ReceiptManagerView(keptUrls: $keptUrls, pendingImages: $pendingImages, isSaving: isSaving)
             }
             .confirmationDialog("이 거래를 삭제할까요?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("삭제", role: .destructive) {
@@ -129,27 +132,16 @@ struct PieceEditView: View {
         }
     }
 
-    /// 눌린 조각의 적요·카테고리. 이것만 이 화면에서 고친다.
-    private var pieceInfoSection: some View {
-        Section {
-            TextField("적요 (예: 파라솔 대여비)", text: $descriptionText)
-            TextField("카테고리 (예: 행사비, 회비)", text: $category)
-            CategorySuggestionChips(suggestions: suggestions, selected: $category)
-        } header: {
-            Text("항목")
-        }
-    }
-
     /// **이 조각이 속한 출금.** 총액·통장·일시는 조각의 것이 아니라 거래 전체의
-    /// 것이라 읽기 전용 맥락으로만 둔다.
+    /// 것이라 chevron 없는 읽기 전용이다.
     @ViewBuilder
     private var parentContextSection: some View {
         Section {
             if pieceCount > 1 {
-                LabeledContent("전체 출금", value: "\(abs(transaction.amount).formatted())원")
+                DetailRow(label: "전체 출금", value: "\(abs(transaction.amount).formatted())원")
             }
-            LabeledContent("통장", value: accountLabel)
-            LabeledContent("일시", value: transaction.datetime.koreanDateTimeString)
+            DetailRow(label: "통장", value: accountLabel)
+            DetailRow(label: "일시", value: transaction.datetime.koreanDateTimeString)
         } header: {
             Text("이 항목이 속한 출금")
         } footer: {
@@ -159,9 +151,19 @@ struct PieceEditView: View {
         }
     }
 
+    @ViewBuilder
+    private func editSheet(_ field: EditField) -> some View {
+        switch field {
+        case .description:
+            DescriptionEditSheet(text: descriptionText) { descriptionText = $0 }
+        case .category:
+            CategoryEditSheet(text: category, suggestions: suggestions) { category = $0 }
+        default:
+            EmptyView()   // 조각 상세에서 고칠 수 있는 건 적요·카테고리뿐이다.
+        }
+    }
+
     /// **거래 필드는 그대로 두고** 눌린 조각의 적요·카테고리만 바꿔 넣는다.
-    /// 저장은 거래 편집과 같은 `saveTransactionEdits` 를 타므로 형제 조각은 그대로
-    /// 다시 만들어진다.
     private func save() {
         var drafts = splitDrafts
         if let i = drafts.firstIndex(where: { $0.id == split?.id }) {
