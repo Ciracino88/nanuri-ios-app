@@ -1,46 +1,41 @@
 import SwiftUI
 import UIKit
 
-/// 농협 항목을 손으로 넣는 화면.
+/// 농협 항목을 손으로 넣는 **풀스크린** 화면. 토스 송금 화면의 문법을 따른다.
 ///
 /// 농협은 인터넷뱅킹이 없어 거래내역 파일이 안 나오므로 사람이 앱 화면을 보고
 /// 옮겨 적는 수밖에 없다. 한 달에 25건 안팎을 연달아 넣는다. 그래서 이 화면의
 /// 설계 목표는 하나다 — **빠르고 가볍게.**
 ///
-/// **토스 송금 문법 그대로 — 금액 먼저, 단계로 전개한다.**
-///   1단계(금액): 화면 위에 큰 금액, 하단에 커스텀 숫자패드. 금액이 들어오면
-///      패드 위 **다음**이 켜진다. 패드 좌하단 키는 `00` 대신 **입금/출금 토글**이라,
-///      금액 색과 함께 지금 종류가 무엇인지도 보여준다.
-///   2단계(적요): 다음을 누르면 적요 칸이 나타나 포커스가 옮겨간다(시스템 키보드).
-///      금액은 위에 작은 요약으로 접히고, 눌러서 1단계로 되돌아간다. 날짜는 그 달
-///      1일이 기본이라 대개 안 건드린다.
+/// **위에서 아래로 날짜 → 적요 → 금액**, 금액은 맨 아래 큰 글씨로 앉고 그 밑에
+/// 커스텀 숫자패드가 붙는다. 날짜는 재정 탭과 같은 가로 주 셀렉터(`WeekDatePicker`)로
+/// 고른다.
 ///
-/// **통장은 안 묻는다 — 늘 농협이다.** "통장은 입력 경로가 정한다" — 모임통장은
-/// 거래내역서로만 들어오고, 손으로 넣는 건 정의상 농협뿐이다. 모임을 손으로 적으면
-/// 나중에 내역서에서 같은 게 또 들어와 두 줄이 된다.
+/// **흐름:** 열면 적요에 포커스가 가고(시스템 키보드), 적요에서 **엔터를 치면 커스텀
+/// 숫자패드가 뜨며 금액으로 포커스가 옮겨간다.** 금액을 다 넣으면 하단 **저장** CTA 로
+/// 확정한다. 취소는 좌상단 뒤로(‹).
 ///
-/// - **저장해도 닫히지 않는다.** 저장하면 금액과 적요만 비우고 1단계로 돌아가
-///   그 자리에서 다음 건을 받는다. 날짜·종류는 남는다 (같은 날 여러 건이
-///   몰린다 — 8/5 에 7건).
+/// **통장은 안 묻는다 — 늘 농협이다.** "통장은 입력 경로가 정한다." 모임통장은
+/// 거래내역서로만 들어오고, 손으로 넣는 건 정의상 농협뿐이다.
+///
+/// - **저장해도 닫히지 않는다.** 금액·적요만 비우고 다시 적요 포커스로 돌아가 그
+///   자리에서 다음 건을 받는다. 날짜·종류는 남는다 (같은 날 여러 건이 몰린다).
 /// - **카테고리를 묻지 않는다.** 목록에서 선택 모드로 훑으며 붙이는 편이 낫다.
-/// - 넣은 건수를 제목에 센다.
 ///
-/// **내부 이체 토글은 없다.** 손으로 넣는 건 은행 증명이 없어 거래가 아니라 **항목**
-/// 으로 바로 들어간다 (`addManualItem`, `sourceTransactionId == nil`).
+/// 손으로 넣는 건 은행 증명이 없어 거래가 아니라 **항목**으로 바로 들어간다
+/// (`addManualItem`, `sourceTransactionId == nil`).
 struct AddTransactionView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var descFocused: Bool
 
-    /// 입력 단계. 금액 → 적요.
-    private enum Step { case amount, details }
-    @State private var step: Step = .amount
-
     @State private var datetime: Date
     @State private var isDeposit = false
     /// 금액의 숫자만 (콤마 없이). 커스텀 패드가 이걸 민다.
     @State private var amountDigits = ""
+    /// 금액을 입력 중인가 — 켜지면 커스텀 숫자패드가 뜬다.
+    @State private var amountActive = false
     @State private var descriptionText = ""
     /// 늘 농협이다. 손입력은 정의상 농협뿐이라 고르는 자리를 두지 않는다.
     @State private var accountId: UUID?
@@ -60,43 +55,42 @@ struct AddTransactionView: View {
     private var amountColor: Color { isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal }
 
     var body: some View {
-        NavigationView {
-            Form {
-                if step == .amount {
-                    amountHeroSection
-                } else {
-                    amountSummarySection
-                    Section {
-                        TextField("적요 (예: 헌금, 심방비)", text: $descriptionText)
+        NavigationStack {
+            VStack(spacing: 0) {
+                // 날짜 → 적요 → 금액
+                WeekDatePicker(viewModel: viewModel, selection: $datetime)
+                Divider()
+
+                Form {
+                    Section("적요") {
+                        TextField("예: 헌금, 심방비", text: $descriptionText)
                             .focused($descFocused)
+                            .submitLabel(.next)
+                            .onSubmit { activateAmount() }
                     }
-                    dateSection
+                    amountSection
                 }
             }
             .navigationTitle(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("닫기") { dismiss() }.disabled(isSaving)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isSaving {
-                        ProgressView()
-                    } else if step == .details {
-                        Button("저장") { save() }
-                            .fontWeight(.semibold)
-                            .disabled(!canSave)
+                    // 취소 = 뒤로가기(‹).
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left")
                     }
+                    .disabled(isSaving)
                 }
             }
             .interactiveDismissDisabled(isSaving)
-            // 1단계에서만 하단에 커스텀 숫자패드를 고정한다.
+            // 금액을 넣는 중에만 하단에 커스텀 숫자패드 + 저장 CTA 를 고정한다.
             .safeAreaInset(edge: .bottom) {
-                if step == .amount {
+                if amountActive {
                     AmountKeypad(
                         isDeposit: $isDeposit,
-                        canProceed: magnitude > 0,
-                        onNext: goToDetails,
+                        ctaTitle: "저장",
+                        ctaEnabled: canSave,
+                        onCTA: save,
                         onDigit: { d in
                             guard amountDigits.count < 9 else { return }
                             if amountDigits.isEmpty && (d == "0" || d == "00") { return }
@@ -106,79 +100,55 @@ struct AddTransactionView: View {
                     )
                 }
             }
-        }
-    }
-
-    /// 1단계 — 금액을 큰 글씨로. 아래 캡션이 종류를 한 단어로 말한다.
-    private var amountHeroSection: some View {
-        Section {
-            VStack(spacing: DS.Spacing.tight) {
-                HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
-                    Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
-                        .typeStyle(DS.Typo.display2)
-                        .tabularAmount()
-                        .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                    Text("원")
-                        .typeStyle(DS.Typo.h3)
-                        .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                }
-                Text(isDeposit ? "입금" : "출금")
-                    .typeStyle(DS.Typo.body2)
-                    .foregroundColor(DS.Ink.secondary)
+            .onAppear {
+                // 처음 포커스는 적요.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { descFocused = true }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DS.Spacing.section)
-            .listRowBackground(Color.clear)
+            .onChange(of: descFocused) { _, focused in
+                // 적요로 돌아가면 숫자패드를 걷는다.
+                if focused { amountActive = false }
+            }
         }
     }
 
-    /// 2단계 위 금액 요약 — 누르면 1단계로 되돌아간다.
-    private var amountSummarySection: some View {
+    /// 금액 히어로 — 맨 아래 큰 글씨. 누르면 시스템 키보드를 내리고 숫자패드로 넣는다.
+    private var amountSection: some View {
         Section {
-            Button {
-                descFocused = false
-                withAnimation(DS.Motion.control) { step = .amount }
-            } label: {
-                HStack(spacing: DS.Spacing.tight) {
-                    Text("\(magnitude.formatted())원")
-                        .typeStyle(DS.Typo.h3)
-                        .tabularAmount()
-                        .foregroundColor(amountColor)
+            Button { activateAmount() } label: {
+                VStack(spacing: DS.Spacing.tight) {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
+                        Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
+                            .typeStyle(DS.Typo.display2)
+                            .tabularAmount()
+                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Text("원")
+                            .typeStyle(DS.Typo.h3)
+                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                    }
                     Text(isDeposit ? "입금" : "출금")
                         .typeStyle(DS.Typo.body2)
-                        .foregroundColor(DS.Ink.secondary)
-                    Spacer()
-                    Image(systemName: "pencil")
-                        .font(DS.Icon.font(DS.Icon.s))
-                        .foregroundColor(DS.Ink.placeholder)
+                        .foregroundColor(amountActive ? DS.Ink.brand : DS.Ink.secondary)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.medium)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .listRowBackground(Color.clear)
+        } header: {
+            Text("금액")
         }
     }
 
-    /// 날짜 한 줄. 통장은 안 묻는다(늘 농협). 기기 언어가 영어여도 달력은 한국어로 뜬다.
-    private var dateSection: some View {
-        Section {
-            DatePicker("날짜", selection: $datetime, displayedComponents: [.date])
-                .environment(\.locale, Locale(identifier: "ko_KR"))
-        } footer: {
-            Text("저장해도 안 닫혀요. 날짜·종류는 그대로 남아 다음 건을 바로 넣어요. 손으로 넣는 건 늘 농협이에요 — 모임통장은 거래내역서를 불러오면 자동으로 채워져요.")
-        }
+    /// 적요 키보드를 내리고 숫자패드를 띄우며 금액으로 포커스를 옮긴다.
+    private func activateAmount() {
+        descFocused = false
+        withAnimation(DS.Motion.control) { amountActive = true }
     }
 
-    private func goToDetails() {
-        guard magnitude > 0 else { return }
-        withAnimation(DS.Motion.control) { step = .details }
-        // 화면 전환 뒤 적요로 포커스를 옮긴다.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { descFocused = true }
-    }
-
-    /// 저장하고 **1단계로 돌아가 다음 건을 받는다.** 비우는 건 금액과 적요뿐이다.
+    /// 저장하고 **적요 포커스로 돌아가 다음 건을 받는다.** 비우는 건 금액과 적요뿐이다.
     private func save() {
         guard let accountId else { return }
         Task {
@@ -194,20 +164,21 @@ struct AddTransactionView: View {
             savedCount += 1
             amountDigits = ""
             descriptionText = ""
-            descFocused = false
-            withAnimation(DS.Motion.control) { step = .amount }
+            amountActive = false
+            descFocused = true
         }
     }
 }
 
 /// 토스식 커스텀 숫자패드. 화면 하단에 고정된다 — 열고 닫히는 애니메이션이 없다.
 ///
-/// 위에 **다음**(금액이 들어오면 켜짐), 아래 좌하단 키는 `00` 대신 **입금/출금 토글**
-/// 이다 — 눌러서 종류를 바꾸고, 지금 무엇인지도 색으로 보여준다.
+/// 위에 **CTA**(저장 등), 아래 좌하단 키는 `00` 대신 **입금/출금 토글**이다 — 눌러서
+/// 종류를 바꾸고, 지금 무엇인지도 색으로 보여준다. 키마다 가벼운 진동을 준다.
 private struct AmountKeypad: View {
     @Binding var isDeposit: Bool
-    let canProceed: Bool
-    let onNext: () -> Void
+    let ctaTitle: String
+    let ctaEnabled: Bool
+    let onCTA: () -> Void
     let onDigit: (String) -> Void
     let onBackspace: () -> Void
 
@@ -219,26 +190,12 @@ private struct AmountKeypad: View {
         .toggle,     .digit("0"), .back
     ]
 
-    /// 토스처럼 키를 누를 때마다 가벼운 진동을 준다.
     private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Button {
-                haptic(.medium)
-                onNext()
-            } label: {
-                Text("다음")
-                    .typeStyle(DS.Typo.labelL)
-                    .frame(maxWidth: .infinity, minHeight: DS.Size.buttonXL)
-                    .foregroundColor(DS.Ink.onAccent)
-                    .background(canProceed ? DS.Palette.accent : DS.Palette.accent.opacity(DS.State.disabledOpacity))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canProceed)
-
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3),
                       spacing: DS.Spacing.tight) {
                 ForEach(keys, id: \.self) { key in
@@ -259,6 +216,23 @@ private struct AmountKeypad: View {
             }
             .padding(.horizontal, DS.Spacing.screen)
             .padding(.vertical, DS.Spacing.tight)
+
+            // 하단 CTA — 저장.
+            Button {
+                haptic(.medium)
+                onCTA()
+            } label: {
+                Text(ctaTitle)
+                    .typeStyle(DS.Typo.labelL)
+                    .frame(maxWidth: .infinity, minHeight: DS.Size.buttonXL)
+                    .foregroundColor(DS.Ink.onAccent)
+                    .background(ctaEnabled ? DS.Palette.accent : DS.Palette.accent.opacity(DS.State.disabledOpacity))
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
+            }
+            .buttonStyle(.plain)
+            .disabled(!ctaEnabled)
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.bottom, DS.Spacing.small)
         }
         .background(
             DS.Surface.card
@@ -277,7 +251,6 @@ private struct AmountKeypad: View {
                 .font(DS.Icon.font(DS.Icon.action))
                 .foregroundColor(DS.Ink.primary)
         case .toggle:
-            // 지금 종류를 색으로 보여주고, 눌러서 바꾼다.
             Text(isDeposit ? "입금" : "출금")
                 .typeStyle(DS.Typo.labelM)
                 .foregroundColor(isDeposit ? DS.Palette.deposit : DS.Ink.primary)
