@@ -60,16 +60,14 @@ struct AddTransactionView: View {
                 // 날짜 셀렉터는 헤더에 밀착한다.
                 WeekDatePicker(viewModel: viewModel, selection: $datetime)
 
-                // 적요 — 라벨 없이 문구로. 날짜와는 구분선 없이 여백으로 가른다.
+                // 적요 — 라벨 없이 문구로, 좌측 정렬. 날짜와는 여백으로 가른다.
                 descriptionField
                     .padding(.top, DS.Spacing.s8)
                     .padding(.horizontal, DS.Spacing.screen)
 
-                Spacer(minLength: 0)
-
-                // 금액 — 맨 아래 큰 글씨, 숫자패드 바로 위. 라벨 없이 수만 세운다.
+                // 금액 — 적요 바로 아래, 좌측 정렬. 라벨 없이 수만 세운다.
                 Button { activateAmount() } label: {
-                    VStack(spacing: DS.Spacing.tight) {
+                    VStack(alignment: .leading, spacing: DS.Spacing.tight) {
                         HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
                             Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
                                 .typeStyle(DS.Typo.display2)
@@ -85,11 +83,15 @@ struct AddTransactionView: View {
                             .typeStyle(DS.Typo.body2)
                             .foregroundColor(DS.Ink.secondary)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.Spacing.section)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(.top, DS.Spacing.section)
+                .padding(.horizontal, DS.Spacing.screen)
+
+                // 빈 공간은 금액 아래로. 그래야 적요·금액이 붙어 있는다.
+                Spacer(minLength: 0)
             }
             .screenBackground(DS.Surface.card)
             .navigationTitle(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)")
@@ -139,7 +141,7 @@ struct AddTransactionView: View {
         return HStack(spacing: DS.Spacing.s1) {
             TextField("적요를 입력해주세요", text: $descriptionText)
                 .typeStyle(DS.Typo.h4)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
                 .fixedSize()
                 .focused($descFocused)
                 .submitLabel(.next)
@@ -149,8 +151,9 @@ struct AddTransactionView: View {
                     .typeStyle(DS.Typo.h4)
                     .foregroundColor(DS.Ink.secondary)
             }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 목적격 조사 "으로/로". 받침이 없거나 ㄹ 이면 "로", 그 밖엔 "으로".
