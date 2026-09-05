@@ -65,25 +65,24 @@ struct AddTransactionView: View {
                     .padding(.top, DS.Spacing.s8)
                     .padding(.horizontal, DS.Spacing.screen)
 
-                // 금액 — 적요 바로 아래, 좌측 정렬. 라벨 없이 수만 세운다.
+                // 금액 — 적요 바로 아래. 수는 왼쪽, 출금/입금은 같은 행 오른쪽.
                 Button { activateAmount() } label: {
-                    VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                        HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
-                            Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
-                                .typeStyle(DS.Typo.display2)
-                                .tabularAmount()
-                                .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.5)
-                            Text("원")
-                                .typeStyle(DS.Typo.h3)
-                                .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                        }
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
+                        Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
+                            .typeStyle(DS.Typo.display2)
+                            .tabularAmount()
+                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Text("원")
+                            .typeStyle(DS.Typo.h3)
+                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                        Spacer(minLength: DS.Spacing.small)
                         Text(isDeposit ? "입금" : "출금")
-                            .typeStyle(DS.Typo.body2)
+                            .typeStyle(DS.Typo.body1)
                             .foregroundColor(DS.Ink.secondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -138,7 +137,9 @@ struct AddTransactionView: View {
     /// 조사가 붙어 "헌금으로"·"심방비로" 처럼 문장으로 읽힌다.
     private var descriptionField: some View {
         let trimmed = descriptionText.trimmingCharacters(in: .whitespaces)
-        return HStack(spacing: DS.Spacing.s1) {
+        // 조사(으로/로)는 **적요를 다 적고 엔터를 눌러 빠져나왔을 때만** 붙인다.
+        // 입력값에 바짝 붙여(spacing 0) "헌금으로" 처럼 한 덩어리로 읽히게 한다.
+        return HStack(spacing: 0) {
             TextField("적요를 입력해주세요", text: $descriptionText)
                 .typeStyle(DS.Typo.h4)
                 .multilineTextAlignment(.leading)
@@ -146,7 +147,7 @@ struct AddTransactionView: View {
                 .focused($descFocused)
                 .submitLabel(.next)
                 .onSubmit { activateAmount() }
-            if !trimmed.isEmpty {
+            if !descFocused && !trimmed.isEmpty {
                 Text(objectParticle(trimmed))
                     .typeStyle(DS.Typo.h4)
                     .foregroundColor(DS.Ink.secondary)
@@ -220,6 +221,21 @@ private struct AmountKeypad: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // CTA(저장)는 토스처럼 키패드 **윗부분에 flush** 로 붙는다 — 마지막 흐름이
+            // 금액 입력이라, 다 넣고 바로 위 버튼으로 확정한다.
+            Button {
+                haptic(.medium)
+                onCTA()
+            } label: {
+                Text(ctaTitle)
+                    .typeStyle(DS.Typo.labelL)
+                    .frame(maxWidth: .infinity, minHeight: DS.Size.buttonXL)
+                    .foregroundColor(DS.Ink.onAccent)
+                    .background(ctaEnabled ? DS.Palette.accent : DS.Palette.accent.opacity(DS.State.disabledOpacity))
+            }
+            .buttonStyle(.plain)
+            .disabled(!ctaEnabled)
+
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3),
                       spacing: DS.Spacing.tight) {
                 ForEach(keys, id: \.self) { key in
@@ -240,29 +256,8 @@ private struct AmountKeypad: View {
             }
             .padding(.horizontal, DS.Spacing.screen)
             .padding(.vertical, DS.Spacing.tight)
-
-            // 하단 CTA — 저장.
-            Button {
-                haptic(.medium)
-                onCTA()
-            } label: {
-                Text(ctaTitle)
-                    .typeStyle(DS.Typo.labelL)
-                    .frame(maxWidth: .infinity, minHeight: DS.Size.buttonXL)
-                    .foregroundColor(DS.Ink.onAccent)
-                    .background(ctaEnabled ? DS.Palette.accent : DS.Palette.accent.opacity(DS.State.disabledOpacity))
-                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.l))
-            }
-            .buttonStyle(.plain)
-            .disabled(!ctaEnabled)
-            .padding(.horizontal, DS.Spacing.screen)
-            .padding(.bottom, DS.Spacing.small)
         }
-        .background(
-            DS.Surface.card
-                .overlay(alignment: .top) { Divider() }
-                .ignoresSafeArea(edges: .bottom)
-        )
+        .background(DS.Surface.card.ignoresSafeArea(edges: .bottom))
     }
 
     @ViewBuilder
