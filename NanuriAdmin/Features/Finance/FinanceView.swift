@@ -184,6 +184,9 @@ struct FinanceView: View {
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
         // 요약 밴드 하나뿐이고, 그 대비가 화면 위쪽을 잡아 준다.
         .screenBackground(DS.Surface.card)
+        // 선택 모드에서는 하단 탭바를 숨긴다 — 아래 선택 바(`selectionBar`)가 그
+        // 자리를 쓰고, 고르는 동안엔 탭을 옮길 일이 없다 (청구서 탭과 같은 규칙).
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
         .task {
             await viewModel.fetchTransactions()
         }
