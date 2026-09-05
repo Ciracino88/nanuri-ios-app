@@ -77,6 +77,9 @@ struct BillListView: View {
             if isSelecting { selectionBar }
         }
         .screenBackground()
+        // 선택 모드에서는 하단 탭바를 숨긴다 — 아래 선택 바(`selectionBar`)가
+        // 그 자리를 쓰고, 고르는 동안엔 탭을 옮길 일이 없다. 끄면 탭바가 돌아온다.
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
         .sheet(item: $detailBill, onDismiss: {
             // 상세 시트가 완전히 닫힌 뒤에 다음 시트를 연다. 같은 순간에 둘을
             // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다.

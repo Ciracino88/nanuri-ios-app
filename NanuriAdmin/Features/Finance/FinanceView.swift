@@ -243,30 +243,29 @@ struct FinanceView: View {
     /// 정렬 줄. **오른쪽 끝에 붙는다** — 왼쪽은 날짜 셀렉터가 이미 다 쓴 폭이라
     /// 비어 있고, 정렬은 목록의 성질이라 목록 바로 위 오른쪽에 있어야 눈이 잇는다.
     ///
-    /// 두 갈래뿐이라(최신순·오래된 순) 세그먼트로 폭을 나누지 않고 `Menu` 로
-    /// 접어 둔다. 고른 갈래가 라벨에 그대로 적혀서 펼치지 않아도 지금 무슨 순인지
-    /// 읽힌다. 정렬 자체는 뷰모델의 `oldestFirst` 한 값이 갖는다.
+    /// 두 갈래뿐이라(최신순·오래된 순) 메뉴로 고르게 하지 않고 **눌러서 바로
+    /// 뒤집는 토글**이다 — 옵션을 펼쳐 다시 한 번 고르는 손품이 없다. 라벨은
+    /// 지금 무슨 순인지를 적고, 누르면 반대 순으로 바뀐다. 정렬 자체는 뷰모델의
+    /// `oldestFirst` 한 값이 갖는다.
     private var sortRow: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
-            Menu {
-                Picker("정렬", selection: $viewModel.oldestFirst) {
-                    Text("최신순").tag(false)
-                    Text("오래된 순").tag(true)
-                }
+            Button {
+                withAnimation(DS.Motion.list) { viewModel.oldestFirst.toggle() }
             } label: {
                 HStack(spacing: DS.Spacing.tight) {
                     Image(systemName: "arrow.up.arrow.down")
                         .font(DS.Icon.font(DS.Icon.s))
                     Text(viewModel.oldestFirst ? "오래된 순" : "최신순")
                         .typeStyle(DS.Typo.labelS)
-                    Image(systemName: "chevron.down")
-                        .font(DS.Icon.font(DS.Icon.s))
                 }
                 .foregroundColor(DS.Ink.secondary)
                 .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("정렬 순서")
+            .accessibilityValue(viewModel.oldestFirst ? "오래된 순" : "최신순")
+            .accessibilityHint("두 번 누르면 정렬 순서를 바꿔요")
         }
         .padding(.horizontal, DS.Spacing.s4)
         .padding(.bottom, DS.Spacing.small)

@@ -9,7 +9,6 @@ import SwiftUI
 /// 구조는 **위에서 아래로 한 줄기**다 (DESIGN.md 1번 "영수증 시트의 뼈대").
 ///
 /// ```
-/// 닫기 ✕                 ← 오른쪽 위. 시트를 내리지 않고도 닫는다
 /// 198,000원              ← 금액 (34). 이 시트에서 제일 먼저 읽는 것
 /// 아직 송금하지 않았어요    ← 상태를 문장 한 줄로. 색이 뜻이다
 /// ────────────────       ← 머리와 값을 가르는 선 한 올
@@ -18,6 +17,10 @@ import SwiftUI
 /// ────────────────
 /// [ 거절 ] [ 송금하기 ]    ← 바닥 고정
 /// ```
+///
+/// **닫기 버튼은 두지 않는다.** 위쪽에 드래그 인디케이터가 있어(부모가
+/// `presentationDragIndicator(.visible)`) 손잡이로 내린다 — 닫는 자리가
+/// 하나면 충분하고, ✕ 를 없애면 맨 위가 곧장 금액으로 시작한다.
 ///
 /// **머리에 프로필 영역을 두지 않는다.** 이름·계좌·상태를 위에 한 번 적고 아래
 /// 상자에 또 적으면 같은 값이 한 화면에 두 번 나온다. 이름까지 아래 값 줄로
@@ -44,8 +47,6 @@ struct BillDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            closeBar
-
             ScrollView {
                 VStack(spacing: DS.Spacing.section) {
                     amount
@@ -109,20 +110,6 @@ struct BillDetailView: View {
     /// `.large` 는 손으로 더 올릴 때를 위해 남긴다.
     private var detents: Set<PresentationDetent> {
         [.fraction(DS.Sheet.billDetail), .large]
-    }
-
-    // MARK: - 닫기
-
-    /// 오른쪽 위 ✕. 손잡이(드래그 인디케이터)로도 내릴 수 있지만, **닫는 자리가
-    /// 눈에 보이는 것**과 아래로 끌 수 있다는 것은 다른 이야기다. 이게 생기면서
-    /// 처리된 청구서의 바닥 "닫기" 버튼이 필요 없어졌고, 바닥은 그 건에 남은
-    /// 동작 하나(삭제)만 갖는다.
-    private var closeBar: some View {
-        HStack {
-            Spacer()
-            HeaderIconButton(systemName: "xmark", label: "닫기") { dismiss() }
-        }
-        .padding(.horizontal, DS.Spacing.small)
     }
 
     // MARK: - 바닥
@@ -201,8 +188,8 @@ struct BillDetailView: View {
     /// 대기중이면 처리하는 자리고, 처리된 뒤에는 지우는 자리다.
     /// 계좌를 못 찾았으면 송금 대신 계좌 등록이 들어온다 — 등록이 먼저다.
     ///
-    /// 처리된 청구서에 남는 동작은 삭제 하나라 **가로를 다 쓴다.** 예전에는
-    /// "닫기"와 나란히 둘이었는데, 닫기가 오른쪽 위 ✕ 로 올라가면서 짝이 없어졌다.
+    /// 처리된 청구서에 남는 동작은 삭제 하나라 **가로를 다 쓴다.** 닫기는
+    /// 드래그 인디케이터가 맡으므로 바닥에 짝지을 버튼이 없다.
     @ViewBuilder
     private var actions: some View {
         if bill.isPending {
