@@ -43,6 +43,7 @@
 | `20260903120000_split_description` | ✅ 2026-09-03 |
 | `20260903140000_transaction_source` | ✅ 2026-09-03 |
 | `20260903160000_account_statement_alias` | ✅ 2026-09-03 |
+| `20260905120000_finance_two_layer` | ✅ 2026-09-05 (대시보드 SQL 에디터로 적용 — 공유 DB라 push 대신) |
 
 **적용됐는지는 비밀번호 없이 확인된다.** anon key 로 REST probe 하면 없는 컬럼은
 `42703`, 없는 테이블은 `PGRST205` 가 온다 (ARCHITECTURE.md "검증하는 법").
