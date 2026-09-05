@@ -180,7 +180,9 @@ struct AddTransactionView: View {
             .buttonStyle(.plain)
 
             if showDetails {
+                // 기기 언어가 영어여도 달력은 한국어로 뜬다.
                 DatePicker("날짜", selection: $datetime, displayedComponents: [.date])
+                    .environment(\.locale, Locale(identifier: "ko_KR"))
                 Picker("통장", selection: Binding(
                     get: { accountId ?? viewModel.accounts.first?.id ?? UUID() },
                     set: { accountId = $0 }
@@ -265,7 +267,7 @@ private struct AmountKeypad: View {
                       spacing: DS.Spacing.tight) {
                 ForEach(keys, id: \.self) { key in
                     Button {
-                        haptic(.light)
+                        haptic(.medium)
                         switch key {
                         case .digit(let d): onDigit(d)
                         case .toggle: isDeposit.toggle()
