@@ -57,20 +57,55 @@ struct AddTransactionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 날짜 → 적요 → 금액
+                // 날짜 셀렉터는 헤더에 밀착한다.
                 WeekDatePicker(viewModel: viewModel, selection: $datetime)
                 Divider()
 
-                Form {
-                    Section("적요") {
-                        TextField("예: 헌금, 심방비", text: $descriptionText)
-                            .focused($descFocused)
-                            .submitLabel(.next)
-                            .onSubmit { activateAmount() }
-                    }
-                    amountSection
+                // 적요 — 날짜 바로 아래.
+                VStack(alignment: .leading, spacing: DS.Spacing.tight) {
+                    Text("적요")
+                        .typeStyle(DS.Typo.labelS)
+                        .foregroundColor(DS.Ink.secondary)
+                    TextField("예: 헌금, 심방비", text: $descriptionText)
+                        .typeStyle(DS.Typo.body1)
+                        .focused($descFocused)
+                        .submitLabel(.next)
+                        .onSubmit { activateAmount() }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DS.Spacing.screen)
+                .padding(.vertical, DS.Spacing.medium)
+
+                Spacer(minLength: 0)
+
+                // 금액 — 맨 아래 큰 글씨, 숫자패드 바로 위. 누르면 숫자패드로 넣는다.
+                Button { activateAmount() } label: {
+                    VStack(spacing: DS.Spacing.tight) {
+                        Text("금액")
+                            .typeStyle(DS.Typo.labelS)
+                            .foregroundColor(amountActive ? DS.Ink.brand : DS.Ink.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
+                            Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
+                                .typeStyle(DS.Typo.display2)
+                                .tabularAmount()
+                                .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                            Text("원")
+                                .typeStyle(DS.Typo.h3)
+                                .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
+                        }
+                        Text(isDeposit ? "입금" : "출금")
+                            .typeStyle(DS.Typo.body2)
+                            .foregroundColor(DS.Ink.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.Spacing.section)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
+            .screenBackground(DS.Surface.card)
             .navigationTitle(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -108,37 +143,6 @@ struct AddTransactionView: View {
                 // 적요로 돌아가면 숫자패드를 걷는다.
                 if focused { amountActive = false }
             }
-        }
-    }
-
-    /// 금액 히어로 — 맨 아래 큰 글씨. 누르면 시스템 키보드를 내리고 숫자패드로 넣는다.
-    private var amountSection: some View {
-        Section {
-            Button { activateAmount() } label: {
-                VStack(spacing: DS.Spacing.tight) {
-                    HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
-                        Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
-                            .typeStyle(DS.Typo.display2)
-                            .tabularAmount()
-                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                        Text("원")
-                            .typeStyle(DS.Typo.h3)
-                            .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
-                    }
-                    Text(isDeposit ? "입금" : "출금")
-                        .typeStyle(DS.Typo.body2)
-                        .foregroundColor(amountActive ? DS.Ink.brand : DS.Ink.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DS.Spacing.medium)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .listRowBackground(Color.clear)
-        } header: {
-            Text("금액")
         }
     }
 

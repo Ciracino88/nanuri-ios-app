@@ -31,7 +31,8 @@ struct WeekDatePicker: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.paging)
-            .padding(.vertical, DS.Spacing.s5)
+            .padding(.top, DS.Spacing.small)
+            .padding(.bottom, DS.Spacing.medium)
             .onAppear {
                 guard let week = weeks.firstIndex(where: {
                     $0.contains { cal.isDate($0, inSameDayAs: selection) }
