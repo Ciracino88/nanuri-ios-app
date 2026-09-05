@@ -297,10 +297,10 @@ struct StatementImportView: View {
         .disabled(!canPick)
     }
 
-    /// 내부 이체의 상대 통장 이름. 없으면 빈 문자열.
+    /// 내부 이체의 상대 통장 이름. 통장이 둘뿐이라 상대는 늘 '불러오는 통장이 아닌
+    /// 다른 통장 하나'다.
     private func counterName(_ match: StatementMatch) -> String {
-        guard let id = match.counterAccountId else { return "" }
-        return viewModel.accounts.first { $0.id == id }?.name ?? ""
+        viewModel.accounts.first { $0.id != account.id }?.name ?? ""
     }
 
     /// 넣을 게 남아 있으면 물어보고, 없으면 그냥 닫는다.
@@ -362,9 +362,9 @@ private struct StatementRowEditView: View {
                     Text("통장의 기록이라 고치지 않아요. 장부에 적을 이름은 아래에서 정해요.")
                 }
 
-                // 상대 통장을 알아낸 줄에만 나온다. 이름이 우연히 같을 수 있어서
-                // 잠그지 않는다.
-                if match.counterAccountId != nil {
+                // 매처가 이체로 판정한 줄에만 나온다. 이름이 우연히 같을 수 있어서
+                // 잠그지 않는다 — 사람이 끌 수 있다.
+                if match.isInternalTransfer {
                     Section {
                         Toggle("통장 사이 이체", isOn: $draft.isInternalTransfer)
                     } footer: {

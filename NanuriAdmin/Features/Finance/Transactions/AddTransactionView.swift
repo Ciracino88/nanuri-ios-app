@@ -24,7 +24,9 @@ import SwiftUI
 ///
 /// **내부 이체 토글은 없다.** 농협↔모임 이체는 반드시 모임통장을 지나 거래내역서에
 /// 찍히므로 불러오기로 들어온다 — 여기서 손으로 적으면 같은 사건이 두 줄이 된다.
-/// 판정이 못 잡은 이체를 바로잡는 건 편집 화면(`TransactionEditView`)이 맡는다.
+///
+/// 손으로 넣는 건 은행 증명이 없어 거래가 아니라 **항목**으로 바로 들어간다
+/// (`addManualItem`, `sourceTransactionId == nil`).
 struct AddTransactionView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
@@ -117,11 +119,8 @@ struct AddTransactionView: View {
         guard let accountId else { return }
         Task {
             isSaving = true
-            let ok = await viewModel.addTransaction(
+            let ok = await viewModel.addManualItem(
                 accountId: accountId,
-                // 수기 추가는 내부 이체를 만들지 않는다 — 이체는 반드시 모임통장을
-                // 지나 거래내역서로 들어오므로 여기서 적으면 같은 사건이 두 줄이 된다.
-                counterAccountId: nil,
                 datetime: datetime,
                 amount: isDeposit ? magnitude : -magnitude,
                 description: descriptionText.isEmpty ? nil : descriptionText

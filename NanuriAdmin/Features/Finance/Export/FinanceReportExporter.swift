@@ -243,18 +243,18 @@ enum FinanceReportExporter {
         """
     }
 
-    static func makeReceiptsPDF(transactions: [BankTransaction], startDate: Date, endDate: Date) async -> URL? {
+    static func makeReceiptsPDF(items: [FinanceItem], startDate: Date, endDate: Date) async -> URL? {
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyy-MM-dd"
 
-        // (라벨, 이미지 URL) 목록 구성
+        // (라벨, 이미지 URL) 목록 구성. **영수증은 항목이 갖는다.**
         struct Entry { let label: String; let url: String }
         var entries: [Entry] = []
-        for tx in transactions.sorted(by: { $0.datetime < $1.datetime }) {
-            let receipts = tx.receipts
+        for item in items.sorted(by: { $0.datetime < $1.datetime }) {
+            let receipts = item.receipts
             for (i, urlString) in receipts.enumerated() {
-                var label = "\(dateFmt.string(from: tx.datetime)) · \(tx.description ?? "-") · \(won(abs(tx.amount)))"
-                if let cat = tx.category, !cat.isEmpty { label += " · \(cat)" }
+                var label = "\(dateFmt.string(from: item.datetime)) · \(item.description ?? "-") · \(won(abs(item.amount)))"
+                if let cat = item.category, !cat.isEmpty { label += " · \(cat)" }
                 if receipts.count > 1 { label += " (\(i + 1)/\(receipts.count))" }
                 entries.append(Entry(label: label, url: urlString))
             }
