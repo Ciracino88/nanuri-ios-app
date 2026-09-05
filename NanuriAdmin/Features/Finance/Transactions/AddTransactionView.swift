@@ -133,26 +133,33 @@ struct AddTransactionView: View {
         }
     }
 
-    /// 적요 — 라벨 없이 가운데 문구로. 비면 "적요를 입력해주세요", 들어오면 뒤에
-    /// 조사가 붙어 "헌금으로"·"심방비로" 처럼 문장으로 읽힌다.
+    /// 적요 — 라벨 없이 좌측 문구로. 비면 "적요를 입력해주세요", 다 적고 엔터로
+    /// 빠져나오면 조사가 바짝 붙어 "헌금으로"·"심방비로" 로 읽힌다.
+    ///
+    /// **편집 중이 아닐 땐 `TextField` 대신 한 덩어리 `Text` 로 그린다** — `TextField`
+    /// 는 텍스트를 안 감싸고 폭을 채워, 조사를 붙이면 멀리 떨어진다. 필드는 뒤에
+    /// 숨겨 두어(opacity) 포커스만 살려 둔다. 문구를 누르면 다시 편집으로 돌아간다.
     private var descriptionField: some View {
         let trimmed = descriptionText.trimmingCharacters(in: .whitespaces)
-        // 조사(으로/로)는 **적요를 다 적고 엔터를 눌러 빠져나왔을 때만** 붙인다.
-        // 입력값에 바짝 붙여(spacing 0) "헌금으로" 처럼 한 덩어리로 읽히게 한다.
-        return HStack(spacing: 0) {
+        let showPhrase = !descFocused && !trimmed.isEmpty
+        return ZStack(alignment: .leading) {
             TextField("적요를 입력해주세요", text: $descriptionText)
                 .typeStyle(DS.Typo.h4)
-                .multilineTextAlignment(.leading)
-                .fixedSize()
                 .focused($descFocused)
                 .submitLabel(.next)
                 .onSubmit { activateAmount() }
-            if !descFocused && !trimmed.isEmpty {
-                Text(objectParticle(trimmed))
-                    .typeStyle(DS.Typo.h4)
-                    .foregroundColor(DS.Ink.secondary)
+                .opacity(showPhrase ? 0 : 1)
+
+            if showPhrase {
+                Button { descFocused = true } label: {
+                    HStack(spacing: 0) {
+                        Text(trimmed).typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.primary)
+                        Text(objectParticle(trimmed)).typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
