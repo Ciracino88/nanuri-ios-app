@@ -152,7 +152,8 @@ struct FinanceView: View {
             .sheet(isPresented: $showAccounts) {
                 AccountBalanceView(viewModel: viewModel)
             }
-            .sheet(isPresented: $showAddTransaction) {
+            // 토스처럼 풀스크린으로 연다 (시트 아님).
+            .fullScreenCover(isPresented: $showAddTransaction) {
                 AddTransactionView(viewModel: viewModel)
             }
             // 드롭다운이 아니라 화면을 통째로 덮는 풀스크린이다. 닫힌 뒤 고른 동작을
