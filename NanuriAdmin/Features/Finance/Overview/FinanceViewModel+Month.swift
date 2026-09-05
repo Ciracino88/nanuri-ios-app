@@ -11,7 +11,7 @@ extension FinanceViewModel {
     /// 거래가 없어도 열 수 있어야 하기 때문이다 (오늘 넣은 게 여기 뜬다).
     var selectableMonths: [Date] {
         let cal = Calendar.current
-        let months = transactions.map { cal.startOfMonth($0.datetime) }
+        let months = items.map { cal.startOfMonth($0.datetime) }
         let thisMonth = cal.startOfMonth(Date())
         guard var cursor = months.min() else { return [thisMonth] }
         let last = max(months.max() ?? thisMonth, thisMonth)
@@ -28,7 +28,7 @@ extension FinanceViewModel {
     /// 그 달에 거래가 있는지 (달 고르는 메뉴에서 빈 달을 흐리게 보여주려고).
     func hasTransactions(in month: Date) -> Bool {
         let cal = Calendar.current
-        return transactions.contains { cal.isDate($0.datetime, equalTo: month, toGranularity: .month) }
+        return items.contains { cal.isDate($0.datetime, equalTo: month, toGranularity: .month) }
     }
 
     var canGoToPreviousMonth: Bool {
@@ -60,7 +60,7 @@ extension FinanceViewModel {
         guard needsInitialMonth else { return }
         needsInitialMonth = false
         let cal = Calendar.current
-        if let latest = transactions.map({ cal.startOfMonth($0.datetime) }).max() {
+        if let latest = items.map({ cal.startOfMonth($0.datetime) }).max() {
             currentMonth = latest
         }
     }

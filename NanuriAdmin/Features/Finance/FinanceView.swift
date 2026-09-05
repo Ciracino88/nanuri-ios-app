@@ -28,17 +28,12 @@ struct FinanceView: View {
     /// 다른 시트를 얹으면 둘이 부딪혀 조용히 안 뜬다. `onDismiss` 가 이걸 집어 연다.
     @State private var pendingMenuAction: FinanceMenuAction?
 
-    /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
-    /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
-    ///
-    /// 그래서 갈래가 셋이다 — **열어 둔 장부 / 정말 장부가 없음 / 아직 받는 중.**
-    /// 뒤의 둘을 안 가르면 받아 오는 사이에 "장부가 없어요" 가 깜빡 스친다.
+    /// 통장은 마이그레이션에서 심겨 늘 둘이라, 고르거나 만드는 화면이 없다.
+    /// 받는 중이면 로딩, 다 받으면 바로 장부를 연다.
     var body: some View {
         Group {
-            if viewModel.currentLedger != nil {
+            if viewModel.loaded {
                 content()
-            } else if viewModel.ledgersLoaded {
-                FinanceLedgerGateView(viewModel: viewModel)
             } else {
                 loadingView
             }
@@ -102,7 +97,7 @@ struct FinanceView: View {
                     Spacer()
                     ProgressView()
                     Spacer()
-                } else if viewModel.transactions.isEmpty {
+                } else if viewModel.items.isEmpty {
                     emptyView
                 } else {
                     scrollingContent()
@@ -132,12 +127,7 @@ struct FinanceView: View {
                 Text(viewModel.error ?? "")
             }
             .sheet(item: $editingRow) { row in
-                // 조각을 눌렀으면 항목 편집, 분할 없는 거래를 눌렀으면 거래 편집.
-                if row.split != nil {
-                    PieceEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
-                } else {
-                    TransactionEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
-                }
+                ItemEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
             // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
             .sheet(item: $viewModel.incomingStatement) { incoming in

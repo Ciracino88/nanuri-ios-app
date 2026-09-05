@@ -13,20 +13,6 @@ struct BillGroup: Identifiable {
     var id: String { "\(processedAt.timeIntervalSince1970)|\(submitterName)" }
     var total: Int { bills.reduce(0) { $0 + $1.amount } }
 
-    /// 이 묶음에 딸린 영수증들. **거래로 그대로 넘긴다.**
-    ///
-    /// 청구 하나에 영수증 하나라 묶음이면 여러 장이 된다. 같은 URL 이 두 번 들어가는
-    /// 일은 없어야 하므로 중복은 걷어내고, **처음 나온 순서를 지킨다** —
-    /// `ledgerLines` 와 같은 규칙이라 영수증 순서가 항목 순서를 따라간다.
-    var receiptUrls: [String] {
-        var seen = Set<String>()
-        return bills.compactMap { bill in
-            let url = bill.receiptUrl.trimmingCharacters(in: .whitespaces)
-            guard !url.isEmpty, seen.insert(url).inserted else { return nil }
-            return url
-        }
-    }
-
     /// 장부에 적을 줄들. **같은 제목은 한 줄로 합친다.**
     ///
     /// 사용자가 손으로 하던 방식 그대로다 — 이승호 458,000 은 청구 4건(수영장
@@ -35,14 +21,26 @@ struct BillGroup: Identifiable {
     ///
     /// 처음 나온 순서를 지킨다. 금액순으로 다시 세우면 사람이 적은 흐름이 흐트러진다.
     var ledgerLines: [(title: String, amount: Int)] {
+        ledgerLinesWithReceipts.map { ($0.title, $0.amount) }
+    }
+
+    /// 장부 줄 + **그 줄에 딸린 영수증들.** 영수증이 항목별로 붙으므로 제목묶음마다
+    /// 그 제목 청구들의 영수증을 모은다(중복 제거, 나온 순서 유지).
+    var ledgerLinesWithReceipts: [(title: String, amount: Int, receiptUrls: [String])] {
         var order: [String] = []
         var sums: [String: Int] = [:]
+        var receipts: [String: [String]] = [:]
+        var seen: [String: Set<String>] = [:]
         for bill in bills {
             let title = bill.title.trimmingCharacters(in: .whitespaces)
-            if sums[title] == nil { order.append(title) }
+            if sums[title] == nil { order.append(title); receipts[title] = []; seen[title] = [] }
             sums[title, default: 0] += bill.amount
+            let url = bill.receiptUrl.trimmingCharacters(in: .whitespaces)
+            if !url.isEmpty, seen[title]?.insert(url).inserted == true {
+                receipts[title, default: []].append(url)
+            }
         }
-        return order.map { ($0, sums[$0] ?? 0) }
+        return order.map { ($0, sums[$0] ?? 0, receipts[$0] ?? []) }
     }
 }
 
@@ -60,12 +58,10 @@ struct StatementMatch: Identifiable {
     /// 사람이 고른(또는 자동으로 정해진) 묶음. 비어 있으면 청구 없이 그냥 넣는다.
     var chosenId: String?
 
-    /// **통장 사이 이체로 보이는 줄인가.** 적요가 다른 통장의 `statementAlias` 와
+    /// **통장 사이 이체로 보이는 줄인가.** 적요가 다른 통장의 `holderName` 과
     /// 같으면 켜진다. 사람이 끌 수 있다 — 이름이 우연히 같을 수 있고, 그때
-    /// 잠가 두면 빠져나갈 길이 없다.
+    /// 잠가 두면 빠져나갈 길이 없다. (통장이 둘뿐이라 상대는 늘 '다른 통장 하나'다.)
     var isInternalTransfer: Bool
-    /// 내부 이체일 때 상대 통장. 판정과 함께 정해진다.
-    let counterAccountId: UUID?
 
     /// 사람이 적은 적요. **비어 있으면 은행 적요 그대로 들어간다.**
     ///
@@ -78,15 +74,54 @@ struct StatementMatch: Identifiable {
     var id: String { "\(line.datetime.timeIntervalSince1970)|\(line.amount)" }
     var chosen: BillGroup? { candidates.first { $0.id == chosenId } }
 
-    /// 이 줄이 장부에 만들 조각들. **화면과 저장이 같은 답을 쓰도록 여기 한 벌만 둔다.**
+    /// 이 줄이 **미리보기**에 보여줄 장부 조각들. 내부 이체나 "청구 없이 그냥 넣기"는
+    /// 따로 보여줄 조각이 없어 빈 배열이다(저장은 `itemSpecs` 가 통짜 항목을 만든다).
     var ledgerLines: [(title: String, amount: Int)] {
-        if isInternalTransfer { return [] }          // 내부 이체는 분할 항목을 안 만든다
+        if isInternalTransfer { return [] }
         if let group = chosen { return group.ledgerLines }
         let d = manualDescription.trimmingCharacters(in: .whitespaces)
         let c = manualCategory.trimmingCharacters(in: .whitespaces)
         guard !d.isEmpty || !c.isEmpty else { return [] }
         return [(d.isEmpty ? (line.description ?? "") : d, abs(line.amount))]
     }
+
+    /// 이 거래가 장부에 만들 **항목들.** 저장이 이걸 그대로 넣는다 — 모든 거래는
+    /// 최소 한 항목으로 완전히 풀려야 은행 증명(거래)과 장부(항목)가 대조된다.
+    /// - Parameter txAmount: 부호가 여기서 나온다. 청구 조각도 이 부호를 따른다.
+    func itemSpecs(txAmount: Int) -> [ItemSpec] {
+        if isInternalTransfer {
+            return [ItemSpec(amount: txAmount, category: nil, description: nil,
+                             receiptUrls: [], isInternalTransfer: true)]
+        }
+        let c = manualCategory.trimmingCharacters(in: .whitespaces)
+        let category: String? = c.isEmpty ? nil : c
+        if let group = chosen {
+            let sign = txAmount < 0 ? -1 : 1
+            return group.ledgerLinesWithReceipts.map { line in
+                ItemSpec(amount: sign * line.amount, category: category,
+                         description: line.title, receiptUrls: line.receiptUrls,
+                         isInternalTransfer: false)
+            }
+        }
+        let d = manualDescription.trimmingCharacters(in: .whitespaces)
+        if !d.isEmpty || category != nil {
+            return [ItemSpec(amount: txAmount, category: category,
+                             description: d.isEmpty ? nil : d, receiptUrls: [],
+                             isInternalTransfer: false)]
+        }
+        // 아무 것도 없으면 통짜 항목 하나. 적요는 은행 값으로 떨어지게 nil 로 둔다.
+        return [ItemSpec(amount: txAmount, category: nil, description: nil,
+                         receiptUrls: [], isInternalTransfer: false)]
+    }
+}
+
+/// 거래 하나가 만들 항목 하나의 명세. 화면과 저장이 같은 답을 쓰도록 한 벌만 둔다.
+struct ItemSpec {
+    let amount: Int              // 부호 붙은 금액
+    let category: String?
+    let description: String?
+    let receiptUrls: [String]
+    let isInternalTransfer: Bool
 }
 
 /// 거래내역서와 청구서를 맞춘다.
@@ -123,17 +158,17 @@ enum StatementMatcher {
     /// 절대 시각(`Date`)이라 그대로 빼면 된다. 대시보드에서 `to_char` 로 보면 UTC 라
     /// 9시간 어긋나 보이는데, 그건 **찍어 보는 방식의 문제**지 값의 문제가 아니다.
     /// 여기에 9시간을 더하면 오히려 전부 틀어진다.
-    /// - Parameter accounts: 내부 이체 판정에 쓴다. `statementAlias` 가 있는 통장만
+    /// - Parameter accounts: 내부 이체 판정에 쓴다. `holderName` 이 있는 통장만
     ///   의미가 있다 — 적요가 그 이름이면 그 통장과 주고받은 것이다.
     static func matches(lines: [ParsedStatementLine],
                         groups: [BillGroup],
                         existing: [BankTransaction],
                         accounts: [Account] = []) -> [StatementMatch] {
 
-        // 적요에 찍히는 이름 → 통장. 이름이 없는 통장은 판정에 못 쓴다.
+        // 적요에 찍히는 예금주명 → 통장. 이름이 없는 통장은 판정에 못 쓴다.
         var accountByAlias: [String: UUID] = [:]
         for account in accounts {
-            let alias = (account.statementAlias ?? "").normalizedName
+            let alias = (account.holderName ?? "").normalizedName
             guard !alias.isEmpty else { continue }
             accountByAlias[alias] = account.id
         }
@@ -182,13 +217,12 @@ enum StatementMatcher {
             // **후보가 하나뿐이고 그 묶음이 다른 줄에는 안 걸릴 때만** 미리 고른다.
             let auto = (candidates.count == 1 && usage[candidates[0].id] == 1)
                 ? candidates[0].id : nil
-            let counter = accountByAlias[(line.description ?? "").normalizedName]
+            let isTransfer = accountByAlias[(line.description ?? "").normalizedName] != nil
             return StatementMatch(line: line,
                                   alreadyImported: already,
                                   candidates: candidates,
                                   chosenId: already ? nil : auto,
-                                  isInternalTransfer: counter != nil,
-                                  counterAccountId: counter)
+                                  isInternalTransfer: isTransfer)
         }
     }
 }
