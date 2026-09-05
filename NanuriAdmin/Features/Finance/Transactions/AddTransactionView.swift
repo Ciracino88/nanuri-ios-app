@@ -74,6 +74,8 @@ struct AddTransactionView: View {
                             .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
                             .lineLimit(1)
                             .minimumScaleFactor(0.5)
+                            // 숫자를 누를 때마다 자릿수가 굴러 들어온다.
+                            .contentTransition(.numericText())
                         Text("원")
                             .typeStyle(DS.Typo.h3)
                             .foregroundColor(amountDigits.isEmpty ? DS.Ink.placeholder : amountColor)
@@ -116,9 +118,11 @@ struct AddTransactionView: View {
                         onDigit: { d in
                             guard amountDigits.count < 9 else { return }
                             if amountDigits.isEmpty && (d == "0" || d == "00") { return }
-                            amountDigits += d
+                            withAnimation(DS.Motion.control) { amountDigits += d }
                         },
-                        onBackspace: { amountDigits = String(amountDigits.dropLast()) }
+                        onBackspace: {
+                            withAnimation(DS.Motion.control) { amountDigits = String(amountDigits.dropLast()) }
+                        }
                     )
                 }
             }
@@ -154,7 +158,11 @@ struct AddTransactionView: View {
                 Button { descFocused = true } label: {
                     HStack(spacing: 0) {
                         Text(trimmed).typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.primary)
-                        Text(objectParticle(trimmed)).typeStyle(DS.Typo.h4).foregroundColor(DS.Ink.secondary)
+                        // 조사는 적요 오른쪽에서 톡 붙듯 나타난다.
+                        Text(objectParticle(trimmed))
+                            .typeStyle(DS.Typo.h4)
+                            .foregroundColor(DS.Ink.secondary)
+                            .transition(.scale(scale: 0.4, anchor: .bottomLeading).combined(with: .opacity))
                     }
                     .contentShape(Rectangle())
                 }
@@ -162,6 +170,7 @@ struct AddTransactionView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(DS.Motion.control, value: descFocused)
     }
 
     /// 목적격 조사 "으로/로". 받침이 없거나 ㄹ 이면 "로", 그 밖엔 "으로".
