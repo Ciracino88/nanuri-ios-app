@@ -58,6 +58,60 @@ extension FinanceViewModel {
         }
     }
 
+    /// 고른 항목들을 지운다. 은행 증명이 있는 항목은 그 거래 전체가 지워진다
+    /// (`deleteItem` 규칙 그대로). 한 요청씩이 아니라 순서대로 지운다.
+    func deleteItems(_ rows: [LedgerRow]) async {
+        for row in rows { await deleteItem(row.item) }
+    }
+
+    /// 고른 항목들을 **한 항목으로 합친다.**
+    ///
+    /// **농협 수기 항목만**(은행 증명 없음), 같은 통장·같은 방향일 때만이다. 은행 증명이
+    /// 있는 항목은 합이 거래액과 맞아야 하는 대조가 있어서 함부로 못 합친다(분할 편집이
+    /// 따로 맡는다). 영수증은 **합쳐서 병합 항목으로 물려주고**, 원본은 줄만 지운다 —
+    /// `deleteItem` 을 안 쓴다(그건 R2 영수증까지 지워서, 방금 옮긴 걸 날린다).
+    func mergeItems(_ rows: [LedgerRow], description: String) async {
+        let items = rows.map(\.item)
+        guard items.count >= 2,
+              items.allSatisfy({ $0.sourceTransactionId == nil && !$0.isInternalTransfer }),
+              let accountId = items.first?.accountId,
+              items.allSatisfy({ $0.accountId == accountId }),
+              (items.allSatisfy { $0.amount > 0 } || items.allSatisfy { $0.amount < 0 })
+        else {
+            error = "합칠 수 없어요. 같은 통장·같은 방향의 수기 항목만 합쳐져요."
+            return
+        }
+        let sum = items.reduce(0) { $0 + $1.amount }
+        let datetime = items.map(\.datetime).min() ?? items[0].datetime
+        var seen = Set<String>()
+        let receipts = items.flatMap { $0.receipts }.filter { seen.insert($0).inserted }
+        let categories = Set(items.compactMap { $0.category })
+        let category = categories.count == 1 ? categories.first : nil
+        let d = description.trimmingCharacters(in: .whitespaces)
+
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let created: FinanceItem = try await supabase
+                .from("finance_items")
+                .insert(FinanceItemInsert(accountId: accountId, datetime: datetime, amount: sum,
+                                          category: category, description: d.isEmpty ? nil : d,
+                                          receiptUrls: receipts))
+                .select().single().execute().value
+            try await supabase.from("finance_items")
+                .delete()
+                .in("id", values: items.map { $0.id.uuidString })
+                .execute()
+            let removed = Set(items.map(\.id))
+            self.items.removeAll { removed.contains($0.id) }
+            self.items.append(created)
+            self.items.sort { $0.datetime > $1.datetime }
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("병합 실패: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - 삭제
 
     /// 항목을 지운다.
