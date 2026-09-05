@@ -29,6 +29,8 @@ struct ItemEditView: View {
     @State private var accountId: UUID
     @State private var keptUrls: [String]
     @State private var pendingImages: [PendingImage]
+    /// DB 에 실제로 들어 있는 영수증. 삭제분 계산의 기준이고, 저장 성공 때마다 갱신한다.
+    @State private var savedReceipts: [String]
     @State private var editField: EditField?
     @State private var showReceiptManager = false
     @State private var showDeleteConfirm = false
@@ -48,11 +50,11 @@ struct ItemEditView: View {
         _accountId = State(initialValue: item.accountId)
         _keptUrls = State(initialValue: item.receipts)
         _pendingImages = State(initialValue: [])
+        _savedReceipts = State(initialValue: item.receipts)
     }
 
     private var editedMagnitude: Int { Int(amountText) ?? 0 }
     private var receiptCount: Int { keptUrls.count + pendingImages.count }
-    private var canSave: Bool { !editable || editedMagnitude > 0 }
 
     /// 이 항목이 속한 은행 거래의 형제 항목 수. 2 이상이면 "속한 출금" 맥락을 보인다.
     private var siblings: [FinanceItem] {
@@ -107,20 +109,19 @@ struct ItemEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("취소") { dismiss() }
+                    Button("닫기") { dismiss() }.disabled(isSaving)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if isSaving {
-                        ProgressView()
-                    } else if !isTransfer {
-                        Button("저장") { Task { await save() } }
-                            .fontWeight(.semibold)
-                            .disabled(!canSave)
-                    }
+                    // 편집은 필드 시트에서 완료를 누르는 순간 바로 저장된다.
+                    // 여기 따로 저장 버튼을 두지 않는다 — 저장 중 표시만 한다.
+                    if isSaving { ProgressView() }
                 }
             }
             .sheet(item: $editField) { field in editSheet(field) }
-            .sheet(isPresented: $showReceiptManager) {
+            .sheet(isPresented: $showReceiptManager, onDismiss: {
+                // 영수증 시트를 닫으면 바뀐 것(추가·삭제)을 그 자리에서 저장한다.
+                Task { await persist(newImages: pendingImages.map(\.image)) }
+            }) {
                 ReceiptManagerView(keptUrls: $keptUrls, pendingImages: $pendingImages, isSaving: isSaving)
             }
             .confirmationDialog("이 항목을 삭제할까요?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -201,27 +202,35 @@ struct ItemEditView: View {
         return "이 항목과 영수증이 지워져요. 되돌릴 수 없어요."
     }
 
+    /// 필드 시트. **완료를 누르면 그 값을 반영하고 곧바로 저장한다** — 상세에 따로
+    /// 저장 버튼을 두지 않는다.
     @ViewBuilder
     private func editSheet(_ field: EditField) -> some View {
         switch field {
         case .amount:
             AmountEditSheet(magnitude: editedMagnitude, isDeposit: isDeposit) { m, d in
                 amountText = String(m); isDeposit = d
+                Task { await persist() }
             }
         case .date:
-            DateEditSheet(date: datetime) { datetime = $0 }
+            DateEditSheet(date: datetime) { datetime = $0; Task { await persist() } }
         case .account:
-            AccountEditSheet(title: "통장", choices: viewModel.accounts, selected: accountId) { accountId = $0 }
+            AccountEditSheet(title: "통장", choices: viewModel.accounts, selected: accountId) { newId in
+                accountId = newId
+                Task { await persist() }
+            }
         case .description:
-            DescriptionEditSheet(text: descriptionText) { descriptionText = $0 }
+            DescriptionEditSheet(text: descriptionText) { descriptionText = $0; Task { await persist() } }
         case .category:
-            CategoryEditSheet(text: category, suggestions: suggestions) { category = $0 }
+            CategoryEditSheet(text: category, suggestions: suggestions) { category = $0; Task { await persist() } }
         }
     }
 
-    private func save() async {
+    /// 지금 상태를 DB 에 반영한다. 필드 시트 완료·영수증 시트 닫기 때마다 불린다.
+    /// 은행 증명이 있는 항목은 사람 값(카테고리·적요·영수증)만, 농협 수기는 전 필드.
+    private func persist(newImages: [UIImage] = []) async {
+        guard !isSaving else { return }
         isSaving = true
-        let newImages = pendingImages.map { $0.image }
         let cat = category.isEmpty ? nil : category
         let desc = descriptionText.isEmpty ? nil : descriptionText
         if editable {
@@ -229,15 +238,20 @@ struct ItemEditView: View {
                 id: item.id, accountId: accountId, datetime: datetime,
                 amount: isDeposit ? editedMagnitude : -editedMagnitude,
                 category: cat, description: desc,
-                keptUrls: keptUrls, newImages: newImages, originalUrls: item.receipts
+                keptUrls: keptUrls, newImages: newImages, originalUrls: savedReceipts
             )
         } else {
             await viewModel.saveItemFields(
                 id: item.id, category: cat, description: desc,
-                keptUrls: keptUrls, newImages: newImages, originalUrls: item.receipts
+                keptUrls: keptUrls, newImages: newImages, originalUrls: savedReceipts
             )
         }
+        // 저장 성공이면 뷰모델이 항목을 갱신해 뒀다. 영수증 상태를 DB 기준으로 맞춘다.
+        if let updated = viewModel.items.first(where: { $0.id == item.id }) {
+            keptUrls = updated.receipts
+            savedReceipts = updated.receipts
+            pendingImages = []
+        }
         isSaving = false
-        if viewModel.error == nil { dismiss() }
     }
 }
