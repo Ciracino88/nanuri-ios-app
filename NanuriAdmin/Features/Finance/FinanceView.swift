@@ -18,10 +18,14 @@ struct FinanceView: View {
     @State private var showAccounts = false
     /// ⋯ 메뉴가 여는 거래 추가 시트. 농협 거래를 옮겨 적는 자리다.
     @State private var showAddTransaction = false
-    /// 카테고리 추가 모드. 켜지면 항목이 "눌러서 고르는 것" 이 된다.
+    /// 선택 모드. 켜지면 항목이 "눌러서 고르는 것" 이 되고, 아래 바에서 병합·삭제·
+    /// 카테고리 중 하나를 한다.
     @State private var isSelecting = false
     @State private var selection: Set<String> = []
     @State private var showCategorySheet = false
+    @State private var showMergeInput = false
+    @State private var mergeDescription = ""
+    @State private var showDeleteSelectedConfirm = false
     /// 햄버거(≡)가 여는 풀스크린 메뉴.
     @State private var showMenu = false
     /// 메뉴에서 고른 동작. 메뉴가 닫힌 **뒤에** 실행한다 — 풀스크린 위에 바로
@@ -79,7 +83,8 @@ struct FinanceView: View {
                     if !isSelecting {
                         // 선택 모드는 이제 메뉴 안이 아니라 헤더의 제 버튼이다 —
                         // 장부를 쓰는 본업이라 두 단계 안에 숨길 자리가 아니다.
-                        HeaderIconButton(systemName: "tag", label: "카테고리 추가") {
+                        // 고른 뒤 아래 바에서 병합·삭제·카테고리 중 하나를 한다.
+                        HeaderIconButton(systemName: "checklist", label: "항목 고르기") {
                             enterSelection()
                         }
                         .disabled(viewModel.ledgerRows.isEmpty)
@@ -167,6 +172,30 @@ struct FinanceView: View {
                     }
                 }
             }
+            // 병합: 합쳐질 항목의 적요를 새로 입력받는다 (c안).
+            .alert("합쳐서 적을 이름", isPresented: $showMergeInput) {
+                TextField("적요 (예: 8월 심방비 모음)", text: $mergeDescription)
+                Button("병합") {
+                    Task {
+                        await viewModel.mergeItems(selectedRows, description: mergeDescription)
+                        exitSelection()
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("고른 \(selection.count)개 항목을 한 줄로 합쳐요. 금액은 합이 되고, 영수증은 모두 옮겨져요.")
+            }
+            .confirmationDialog("고른 항목을 삭제할까요?", isPresented: $showDeleteSelectedConfirm, titleVisibility: .visible) {
+                Button("\(selection.count)개 삭제", role: .destructive) {
+                    Task {
+                        await viewModel.deleteItems(selectedRows)
+                        exitSelection()
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("영수증까지 함께 지워져요. 되돌릴 수 없어요.")
+            }
             .safeAreaInset(edge: .bottom) {
                 if isSelecting { selectionBar }
             }
@@ -201,17 +230,29 @@ struct FinanceView: View {
         selection = []
     }
 
-    /// 고르는 중에 바닥에 서는 바. 묶어 보내기의 `selectionBar` 와 같은 문법이다.
+    /// 고른 항목들.
+    private var selectedItems: [FinanceItem] { selectedRows.map(\.item) }
+
+    /// 병합할 수 있는 선택인가. **농협 수기 항목만**(은행 증명 없음), 같은 통장·같은
+    /// 방향, 둘 이상일 때. 뷰모델도 저장 직전에 한 번 더 막는다.
+    private var canMerge: Bool {
+        let items = selectedItems
+        guard items.count >= 2,
+              items.allSatisfy({ $0.sourceTransactionId == nil && !$0.isInternalTransfer }),
+              let acc = items.first?.accountId, items.allSatisfy({ $0.accountId == acc })
+        else { return false }
+        return items.allSatisfy { $0.amount > 0 } || items.allSatisfy { $0.amount < 0 }
+    }
+
+    /// 고르는 중에 바닥에 서는 바. 골라 둔 게 있으면 **병합·삭제·카테고리** 셋을 준다.
     private var selectionBar: some View {
         VStack(spacing: 0) {
             Divider()
             VStack(spacing: DS.Spacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(selection.isEmpty ? "카테고리를 추가할 줄을 고르세요" : "\(selection.count)줄 선택")
+                    Text(selection.isEmpty ? "항목을 고르세요" : "\(selection.count)줄 선택")
                         .rowTitle()
                     Spacer(minLength: DS.Spacing.small)
-                    // **아무것도 안 골랐을 때 가장 쓸모 있다.** 카테고리를 붙이는 일은
-                    // 대개 "남은 것 전부" 로 시작해서 몇 줄을 빼는 식이다.
                     if !viewModel.uncategorizedRows.isEmpty {
                         Button("미지정 전체") {
                             selection = Set(viewModel.uncategorizedRows.map(\.id))
@@ -221,7 +262,15 @@ struct FinanceView: View {
                     }
                 }
                 if !selection.isEmpty {
-                    ActionButton(title: "카테고리 추가", kind: .primary) { showCategorySheet = true }
+                    HStack(spacing: DS.Spacing.small) {
+                        ActionButton(title: "병합", kind: .tinted) {
+                            mergeDescription = ""
+                            showMergeInput = true
+                        }
+                        .disabled(!canMerge)
+                        ActionButton(title: "삭제", kind: .destructive) { showDeleteSelectedConfirm = true }
+                        ActionButton(title: "카테고리", kind: .primary) { showCategorySheet = true }
+                    }
                 }
             }
             .padding(.horizontal, DS.Spacing.screen)
