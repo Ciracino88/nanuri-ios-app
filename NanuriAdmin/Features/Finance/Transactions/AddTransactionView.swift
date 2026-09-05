@@ -59,31 +59,17 @@ struct AddTransactionView: View {
             VStack(spacing: 0) {
                 // 날짜 셀렉터는 헤더에 밀착한다.
                 WeekDatePicker(viewModel: viewModel, selection: $datetime)
-                Divider()
 
-                // 적요 — 날짜 바로 아래.
-                VStack(alignment: .leading, spacing: DS.Spacing.tight) {
-                    Text("적요")
-                        .typeStyle(DS.Typo.labelS)
-                        .foregroundColor(DS.Ink.secondary)
-                    TextField("예: 헌금, 심방비", text: $descriptionText)
-                        .typeStyle(DS.Typo.body1)
-                        .focused($descFocused)
-                        .submitLabel(.next)
-                        .onSubmit { activateAmount() }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, DS.Spacing.screen)
-                .padding(.vertical, DS.Spacing.medium)
+                // 적요 — 라벨 없이 문구로. 날짜와는 구분선 없이 여백으로 가른다.
+                descriptionField
+                    .padding(.top, DS.Spacing.s8)
+                    .padding(.horizontal, DS.Spacing.screen)
 
                 Spacer(minLength: 0)
 
-                // 금액 — 맨 아래 큰 글씨, 숫자패드 바로 위. 누르면 숫자패드로 넣는다.
+                // 금액 — 맨 아래 큰 글씨, 숫자패드 바로 위. 라벨 없이 수만 세운다.
                 Button { activateAmount() } label: {
                     VStack(spacing: DS.Spacing.tight) {
-                        Text("금액")
-                            .typeStyle(DS.Typo.labelS)
-                            .foregroundColor(amountActive ? DS.Ink.brand : DS.Ink.secondary)
                         HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.tight) {
                             Text(amountDigits.isEmpty ? "0" : magnitude.formatted())
                                 .typeStyle(DS.Typo.display2)
@@ -144,6 +130,37 @@ struct AddTransactionView: View {
                 if focused { amountActive = false }
             }
         }
+    }
+
+    /// 적요 — 라벨 없이 가운데 문구로. 비면 "적요를 입력해주세요", 들어오면 뒤에
+    /// 조사가 붙어 "헌금으로"·"심방비로" 처럼 문장으로 읽힌다.
+    private var descriptionField: some View {
+        let trimmed = descriptionText.trimmingCharacters(in: .whitespaces)
+        return HStack(spacing: DS.Spacing.s1) {
+            TextField("적요를 입력해주세요", text: $descriptionText)
+                .typeStyle(DS.Typo.h4)
+                .multilineTextAlignment(.center)
+                .fixedSize()
+                .focused($descFocused)
+                .submitLabel(.next)
+                .onSubmit { activateAmount() }
+            if !trimmed.isEmpty {
+                Text(objectParticle(trimmed))
+                    .typeStyle(DS.Typo.h4)
+                    .foregroundColor(DS.Ink.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// 목적격 조사 "으로/로". 받침이 없거나 ㄹ 이면 "로", 그 밖엔 "으로".
+    /// 한글 음절이 아니면(숫자·영문) 기본값 "으로".
+    private func objectParticle(_ text: String) -> String {
+        guard let scalar = text.unicodeScalars.last, (0xAC00...0xD7A3).contains(scalar.value) else {
+            return "으로"
+        }
+        let jongseong = (Int(scalar.value) - 0xAC00) % 28
+        return (jongseong == 0 || jongseong == 8) ? "로" : "으로"
     }
 
     /// 적요 키보드를 내리고 숫자패드를 띄우며 금액으로 포커스를 옮긴다.

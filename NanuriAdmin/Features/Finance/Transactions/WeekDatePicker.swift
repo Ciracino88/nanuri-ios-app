@@ -31,6 +31,9 @@ struct WeekDatePicker: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.paging)
+            // 가로 ScrollView 는 세로로도 공간을 먹으려 든다. 콘텐츠 높이에 묶어
+            // 위쪽에 빈 공간이 생기지 않게 한다.
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.top, DS.Spacing.small)
             .padding(.bottom, DS.Spacing.medium)
             .onAppear {
