@@ -12,11 +12,15 @@ import UIKit
 ///      패드 위 **다음**이 켜진다. 패드 좌하단 키는 `00` 대신 **입금/출금 토글**이라,
 ///      금액 색과 함께 지금 종류가 무엇인지도 보여준다.
 ///   2단계(적요): 다음을 누르면 적요 칸이 나타나 포커스가 옮겨간다(시스템 키보드).
-///      금액은 위에 작은 요약으로 접히고, 눌러서 1단계로 되돌아간다. 날짜·통장은
-///      기본값("그 달 · 농협")으로 접어 두고 필요할 때만 편다.
+///      금액은 위에 작은 요약으로 접히고, 눌러서 1단계로 되돌아간다. 날짜는 그 달
+///      1일이 기본이라 대개 안 건드린다.
+///
+/// **통장은 안 묻는다 — 늘 농협이다.** "통장은 입력 경로가 정한다" — 모임통장은
+/// 거래내역서로만 들어오고, 손으로 넣는 건 정의상 농협뿐이다. 모임을 손으로 적으면
+/// 나중에 내역서에서 같은 게 또 들어와 두 줄이 된다.
 ///
 /// - **저장해도 닫히지 않는다.** 저장하면 금액과 적요만 비우고 1단계로 돌아가
-///   그 자리에서 다음 건을 받는다. 날짜·통장·종류는 남는다 (같은 날 여러 건이
+///   그 자리에서 다음 건을 받는다. 날짜·종류는 남는다 (같은 날 여러 건이
 ///   몰린다 — 8/5 에 7건).
 /// - **카테고리를 묻지 않는다.** 목록에서 선택 모드로 훑으며 붙이는 편이 낫다.
 /// - 넣은 건수를 제목에 센다.
@@ -38,8 +42,8 @@ struct AddTransactionView: View {
     /// 금액의 숫자만 (콤마 없이). 커스텀 패드가 이걸 민다.
     @State private var amountDigits = ""
     @State private var descriptionText = ""
+    /// 늘 농협이다. 손입력은 정의상 농협뿐이라 고르는 자리를 두지 않는다.
     @State private var accountId: UUID?
-    @State private var showDetails = false
 
     @State private var isSaving = false
     @State private var savedCount = 0
@@ -54,9 +58,6 @@ struct AddTransactionView: View {
     private var magnitude: Int { Int(amountDigits) ?? 0 }
     private var canSave: Bool { magnitude > 0 && accountId != nil && !isSaving }
     private var amountColor: Color { isDeposit ? DS.Palette.deposit : DS.Palette.withdrawal }
-    private func accountName(_ id: UUID?) -> String {
-        viewModel.accounts.first { $0.id == id }?.name ?? "농협"
-    }
 
     var body: some View {
         NavigationView {
@@ -69,7 +70,7 @@ struct AddTransactionView: View {
                         TextField("적요 (예: 헌금, 심방비)", text: $descriptionText)
                             .focused($descFocused)
                     }
-                    detailsSection
+                    dateSection
                 }
             }
             .navigationTitle(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)")
@@ -160,38 +161,13 @@ struct AddTransactionView: View {
         }
     }
 
-    /// 날짜·통장은 접어 둔다. 요약 줄을 눌러 펼친다.
-    private var detailsSection: some View {
+    /// 날짜 한 줄. 통장은 안 묻는다(늘 농협). 기기 언어가 영어여도 달력은 한국어로 뜬다.
+    private var dateSection: some View {
         Section {
-            Button {
-                descFocused = false
-                withAnimation(DS.Motion.control) { showDetails.toggle() }
-            } label: {
-                LabeledContent("날짜 · 통장") {
-                    HStack(spacing: DS.Spacing.tight) {
-                        Text("\(datetime.koreanDateString) · \(accountName(accountId))")
-                            .foregroundColor(DS.Ink.secondary)
-                        Image(systemName: showDetails ? "chevron.up" : "chevron.down")
-                            .font(DS.Icon.font(DS.Icon.s))
-                            .foregroundColor(DS.Ink.placeholder)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-
-            if showDetails {
-                // 기기 언어가 영어여도 달력은 한국어로 뜬다.
-                DatePicker("날짜", selection: $datetime, displayedComponents: [.date])
-                    .environment(\.locale, Locale(identifier: "ko_KR"))
-                Picker("통장", selection: Binding(
-                    get: { accountId ?? viewModel.accounts.first?.id ?? UUID() },
-                    set: { accountId = $0 }
-                )) {
-                    ForEach(viewModel.accounts) { Text($0.name).tag($0.id) }
-                }
-            }
+            DatePicker("날짜", selection: $datetime, displayedComponents: [.date])
+                .environment(\.locale, Locale(identifier: "ko_KR"))
         } footer: {
-            Text("저장해도 안 닫혀요. 날짜·통장·종류는 그대로 남아 다음 건을 바로 넣어요. 모임통장은 거래내역서를 불러오면 자동으로 채워져요.")
+            Text("저장해도 안 닫혀요. 날짜·종류는 그대로 남아 다음 건을 바로 넣어요. 손으로 넣는 건 늘 농협이에요 — 모임통장은 거래내역서를 불러오면 자동으로 채워져요.")
         }
     }
 
