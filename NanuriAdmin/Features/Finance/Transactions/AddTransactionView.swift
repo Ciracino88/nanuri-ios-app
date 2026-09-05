@@ -21,6 +21,10 @@ import SwiftUI
 /// **통장을 묻지 않는다** — 기본이 농협이다. 손으로 넣는 건 곧 농협이라
 /// (`ARCHITECTURE.md` "통장은 입력 경로가 정한다") 고르는 자리를 앞에 두지 않고,
 /// 예외는 아래쪽 통장 칸에서 바꾼다.
+///
+/// **내부 이체 토글은 없다.** 농협↔모임 이체는 반드시 모임통장을 지나 거래내역서에
+/// 찍히므로 불러오기로 들어온다 — 여기서 손으로 적으면 같은 사건이 두 줄이 된다.
+/// 판정이 못 잡은 이체를 바로잡는 건 편집 화면(`TransactionEditView`)이 맡는다.
 struct AddTransactionView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
@@ -34,7 +38,6 @@ struct AddTransactionView: View {
     @State private var amountText = ""
     @State private var descriptionText = ""
     @State private var accountId: UUID?
-    @State private var counterAccountId: UUID?
 
     @State private var isSaving = false
     /// 이번에 몇 건 넣었나. 연달아 넣는 화면이라 진행이 보여야 한다.
@@ -84,7 +87,6 @@ struct AddTransactionView: View {
                     )) {
                         ForEach(viewModel.accounts) { Text($0.name).tag($0.id) }
                     }
-                    transferRows
                 } footer: {
                     Text("농협 거래를 옮겨 적는 화면이에요. 모임통장은 거래내역서를 불러오면 자동으로 채워져요.")
                 }
@@ -110,28 +112,6 @@ struct AddTransactionView: View {
         }
     }
 
-    /// 내부 이체 표시. 농협에서 모임으로 예산을 넘긴 줄이 이걸로 들어간다.
-    /// **한 줄이 양쪽 통장을 안다** — 두 줄로 적지 않는다.
-    @ViewBuilder
-    private var transferRows: some View {
-        let others = viewModel.accounts.filter { $0.id != accountId }
-        if let fallback = others.first {
-            Toggle("통장 사이 이체", isOn: Binding(
-                get: { counterAccountId != nil },
-                set: { counterAccountId = $0 ? fallback.id : nil }
-            ))
-
-            if counterAccountId != nil {
-                Picker("상대 통장", selection: Binding(
-                    get: { counterAccountId ?? fallback.id },
-                    set: { counterAccountId = $0 }
-                )) {
-                    ForEach(others) { Text($0.name).tag($0.id) }
-                }
-            }
-        }
-    }
-
     /// 저장하고 **그 자리에서 다음 건을 받는다.** 비우는 건 금액과 적요뿐이다.
     private func save() {
         guard let accountId else { return }
@@ -139,8 +119,9 @@ struct AddTransactionView: View {
             isSaving = true
             let ok = await viewModel.addTransaction(
                 accountId: accountId,
-                // 자기 자신과의 이체는 이체가 아니다 (DB 에도 check 가 걸려 있다).
-                counterAccountId: counterAccountId == accountId ? nil : counterAccountId,
+                // 수기 추가는 내부 이체를 만들지 않는다 — 이체는 반드시 모임통장을
+                // 지나 거래내역서로 들어오므로 여기서 적으면 같은 사건이 두 줄이 된다.
+                counterAccountId: nil,
                 datetime: datetime,
                 amount: isDeposit ? magnitude : -magnitude,
                 description: descriptionText.isEmpty ? nil : descriptionText
