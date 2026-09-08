@@ -130,6 +130,20 @@ struct ItemSpec {
 /// 결과를 쓰기만 한다.
 enum StatementMatcher {
 
+    /// 청구가 이 내역서 줄과 **시간상 맞을 수 있는 창.**
+    ///
+    /// 청구는 송금이라 승인(`processed_at`) 직후 통장에 찍힌다 — 몇 초~몇 분 차이다.
+    /// 그래서 금액이 우연히 같을 뿐 **몇 주씩 떨어진 청구가 자동으로 붙는 것**을 막는다.
+    /// (2026-09-08: 8/20 현금 5만 인출이 9/5 결혼축의금 5만에 붙었다. 8/20 출금의
+    /// 원인이 9/5 승인일 수 없다.) 체크카드(최대 27h)엔 애초에 청구가 없어 이 창이
+    /// 좁아도 놓치는 게 없다. 2일은 사람이 늦게 확인해 `processed_at` 이 밀리는 경우까지
+    /// 넉넉히 덮는다.
+    static let matchWindow: TimeInterval = 2 * 24 * 60 * 60
+
+    private static func plausibleTime(_ processedAt: Date, _ lineDate: Date) -> Bool {
+        abs(processedAt.timeIntervalSince(lineDate)) <= matchWindow
+    }
+
     /// 승인된 청구를 `processed_at` + 이름으로 묶는다.
     static func groups(from bills: [Bill]) -> [BillGroup] {
         var buckets: [String: [Bill]] = [:]
@@ -192,7 +206,7 @@ enum StatementMatcher {
             let nameKey = (line.description ?? "").normalizedName
 
             let found = groups
-                .filter { $0.total == magnitude }
+                .filter { $0.total == magnitude && plausibleTime($0.processedAt, line.datetime) }
                 .sorted { a, b in
                     let aName = a.submitterName.normalizedName == nameKey
                     let bName = b.submitterName.normalizedName == nameKey
