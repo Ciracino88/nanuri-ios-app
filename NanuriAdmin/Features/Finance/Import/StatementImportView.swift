@@ -140,10 +140,7 @@ struct StatementImportView: View {
             showsNotifications: false,
             center: { Text("청구 내역 확인").headerTitle() },
             leading: {
-                Button("닫기") { closeRequested() }
-                    .typeStyle(DS.Typo.labelM)
-                    .foregroundColor(DS.Ink.primary)
-                    .padding(.horizontal, DS.Spacing.small)
+                HeaderBackButton(label: "닫기") { closeRequested() }
                     .disabled(isImporting)
             },
             trailing: { EmptyView() }

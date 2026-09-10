@@ -91,32 +91,34 @@ struct ItemEditView: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                AmountHeroSection(displayAmount: heroSignedAmount, color: heroColor, caption: heroCaption,
-                                  onEdit: editable ? { editField = .amount } : nil)
-                if !isTransfer { infoSection }
-                contextSection
-                if !isTransfer {
-                    ReceiptButtonSection(receiptCount: receiptCount, isSaving: isSaving) {
-                        showReceiptManager = true
+            VStack(spacing: 0) {
+                // 타이틀이 필요한 화면이라 풀스크린 + 공용 헤더다 (DESIGN.md §1).
+                // 저장은 필드 시트에서 즉시 되므로 헤더엔 저장 중 표시만 둔다.
+                AdminHeaderView(
+                    showsNotifications: false,
+                    center: { Text("항목 상세").headerTitle() },
+                    leading: { HeaderBackButton(label: "닫기") { dismiss() }.disabled(isSaving) },
+                    trailing: { if isSaving { ProgressView() } }
+                )
+
+                Form {
+                    AmountHeroSection(displayAmount: heroSignedAmount, color: heroColor, caption: heroCaption,
+                                      onEdit: editable ? { editField = .amount } : nil)
+                    if !isTransfer { infoSection }
+                    contextSection
+                    if !isTransfer {
+                        ReceiptButtonSection(receiptCount: receiptCount, isSaving: isSaving) {
+                            showReceiptManager = true
+                        }
+                    }
+                    DeleteSection(label: deleteLabel, message: deleteMessage, isSaving: isSaving) {
+                        showDeleteConfirm = true
                     }
                 }
-                DeleteSection(label: deleteLabel, message: deleteMessage, isSaving: isSaving) {
-                    showDeleteConfirm = true
-                }
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("항목 상세")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("닫기") { dismiss() }.disabled(isSaving)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    // 편집은 필드 시트에서 완료를 누르는 순간 바로 저장된다.
-                    // 여기 따로 저장 버튼을 두지 않는다 — 저장 중 표시만 한다.
-                    if isSaving { ProgressView() }
-                }
-            }
+            .screenBackground(DS.Surface.page)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $editField) { field in editSheet(field) }
             .sheet(isPresented: $showReceiptManager, onDismiss: {
                 // 영수증 시트를 닫으면 바뀐 것(추가·삭제)을 그 자리에서 저장한다.

@@ -70,8 +70,8 @@ struct FinanceView: View {
                 center: { FinanceMonthStepper(viewModel: viewModel) },
                 leading: {
                     if isSelecting {
-                        HeaderIconButton(systemName: "xmark", label: "고르기 그만두기",
-                                         tint: DS.Palette.accent) { exitSelection() }
+                        // 선택 모드를 끄는 것뿐 화면은 안 닫는다 → 취소(xmark) 버튼.
+                        HeaderCancelButton(label: "고르기 그만두기") { exitSelection() }
                     } else {
                         HeaderIconButton(systemName: "plus", label: "거래 추가") {
                             showAddTransaction = true
@@ -131,7 +131,8 @@ struct FinanceView: View {
             } message: {
                 Text(viewModel.error ?? "")
             }
-            .sheet(item: $editingRow) { row in
+            // 타이틀이 필요한 화면이라 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            .fullScreenCover(item: $editingRow) { row in
                 ItemEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
             // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
