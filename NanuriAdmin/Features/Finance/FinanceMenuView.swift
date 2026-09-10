@@ -6,6 +6,7 @@ import SwiftUI
 /// 오버레이·공유 시트가 그쪽에 있어서, 메뉴는 갈래만 고른다.
 enum FinanceMenuAction {
     case accounts
+    case categoryIcons
     case reportPreview
     case exportReportPDF
     case exportReceiptsPDF
@@ -48,6 +49,14 @@ struct FinanceMenuView: View {
                         menuRow(icon: "wallet.bifold", label: "통장 잔액",
                                 tint: DS.Ink.primary, enabled: true) {
                             onSelect(.accounts)
+                        }
+                    }
+
+                    // 목록을 어떻게 보이느냐에 관한 것이라 통장과 내보내기 사이에 둔다.
+                    menuGroup(title: "카테고리") {
+                        menuRow(icon: "square.grid.2x2", label: "카테고리 아이콘",
+                                tint: DS.Ink.primary, enabled: true) {
+                            onSelect(.categoryIcons)
                         }
                     }
 

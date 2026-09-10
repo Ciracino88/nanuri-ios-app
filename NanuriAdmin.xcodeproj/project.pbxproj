@@ -24,6 +24,9 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Features/README.md,
+				Features/Finance/README.md,
+				Features/Finance/Import/README.md,
 			);
 			target = FAB45B492FCF578E00601EFF /* NanuriAdmin */;
 		};

@@ -8,6 +8,30 @@
 
 ---
 
+## 2026-09-10 · `xcodebuild` 이 README.md 로 "Multiple commands produce" 오류
+
+**증상** — 문서용 `README.md` 를 폴더마다 넣은 뒤(피쳐 README 규약 커밋)
+`xcodebuild` 이 컴파일도 시작 못 하고 죽었다. `error: Multiple commands produce
+'.../NanuriAdmin.app/README.md'` — `Features/README.md` · `Features/Finance/README.md`
+· `Features/Finance/Import/README.md` 셋이 같은 자리를 만든다고 했다.
+
+**원인** — 이 프로젝트는 **파일시스템 동기화 그룹**(Xcode 16)이라 소스 아닌 파일을
+전부 앱 타깃의 **리소스 복사** 단계에 자동으로 넣는다. 그리고 번들로 복사할 때
+**폴더 구조를 버리고 루트로 평평하게** 넣어서, 이름이 같은 `README.md` 셋이
+`NanuriAdmin.app/README.md` **한 자리**로 몰렸다. "README 가 하나여야 한다"가 아니라
+**문서가 애초에 번들 리소스로 실릴 이유가 없는데 실리고, 실리면서 겹친** 것이다.
+
+**해결** — `project.pbxproj` 의 동기화 그룹 `membershipExceptions` 에 README 셋을
+더해 **앱 타깃에서 제외**했다(`Info.plist` 가 이미 같은 방식으로 빠져 있었다).
+파일은 저장소에 그대로 남고 번들에만 안 들어간다. 초록 빌드로 확인.
+
+**재발 방지** — 동기화 그룹에 **소스 아닌 파일(문서·데이터 등)을 넣을 때는
+`membershipExceptions` 에 같이 등록**한다. 특히 같은 이름의 파일을 여러 폴더에
+두면 번들 루트에서 반드시 충돌한다. (새 `.swift` 는 그대로 자동 인식돼 문제없다 —
+리소스로 복사되는 게 아니라 컴파일되기 때문이다.)
+
+---
+
 ## 2026-09-08 · 8/20 현금 5만 인출이 9/5 결혼축의금 5만에 매핑됐다
 
 **증상** — 8월 토스 내역서를 불러왔더니, 8/20 에 5만원 현금 인출한 줄이 **9/5 에

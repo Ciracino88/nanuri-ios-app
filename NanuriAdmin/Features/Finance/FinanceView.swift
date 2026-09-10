@@ -31,6 +31,12 @@ struct FinanceView: View {
     /// 메뉴에서 고른 동작. 메뉴가 닫힌 **뒤에** 실행한다 — 풀스크린 위에 바로
     /// 다른 시트를 얹으면 둘이 부딪혀 조용히 안 뜬다. `onDismiss` 가 이걸 집어 연다.
     @State private var pendingMenuAction: FinanceMenuAction?
+    /// 메뉴가 여는 카테고리 아이콘 관리 화면.
+    @State private var showCategoryIcons = false
+    /// 카테고리 → 아이콘 매핑(기기 로컬). 목록 행이 이걸 보고 왼쪽 썸네일을 그린다.
+    /// **하나만 만들어** 목록·관리 화면이 같은 것을 본다 — 관리 화면에서 아이콘을
+    /// 붙이면 `@Published` 가 바뀌어 이 화면이 다시 그려지고 목록에 바로 반영된다.
+    @StateObject private var iconStore = CategoryIconStore()
 
     /// 통장은 마이그레이션에서 심겨 늘 둘이라, 고르거나 만드는 화면이 없다.
     /// 받는 중이면 로딩, 다 받으면 바로 장부를 연다.
@@ -166,6 +172,9 @@ struct FinanceView: View {
                     pendingMenuAction = action
                     showMenu = false
                 }
+            }
+            .fullScreenCover(isPresented: $showCategoryIcons) {
+                CategoryIconManagerView(viewModel: viewModel, store: iconStore)
             }
             .fullScreenCover(isPresented: $showCategorySheet) {
                 CategoryAssignView(suggestions: viewModel.usedCategories,
@@ -428,7 +437,8 @@ struct FinanceView: View {
                 // **누른 줄(조각) 그대로 넘긴다.** 편집 화면이 조각을 중심으로
                 // 보여주고, 금액·통장·영수증·삭제는 "속한 출금 전체" 로 밝힌다.
                 LedgerRowView(row: row,
-                              isSelected: isSelecting ? selection.contains(row.id) : nil)
+                              isSelected: isSelecting ? selection.contains(row.id) : nil,
+                              iconId: iconStore.iconId(for: row.category))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if isSelecting { toggle(row) } else { editingRow = row }
@@ -485,6 +495,8 @@ struct FinanceView: View {
         switch action {
         case .accounts:
             showAccounts = true
+        case .categoryIcons:
+            showCategoryIcons = true
         case .reportPreview:
             if let html = viewModel.reportHTML() {
                 reportPreview = ReportPreview(html: html, title: "월별 회계 보고서")

@@ -19,11 +19,22 @@ extension FinanceViewModel {
 
     /// 지금까지 입력된 카테고리를 사용 빈도순으로 반환 (편집 시 추천용).
     var usedCategories: [String] {
+        categoryUsage.map(\.name)
+    }
+
+    /// 카테고리별 **이름 + 쓰인 항목 수**를 많이 쓴 것부터 돌려준다.
+    ///
+    /// 아이콘 관리 화면이 "자주 쓴 카테고리" 를 이 순서로 보여주고, `usedCategories`
+    /// 추천 칩도 여기서 이름만 뽑아 쓴다. **온 기간을 다 센다** — 아이콘은 이 달만의
+    /// 취향이 아니라 그 카테고리 전체에 붙는 것이라, 달 필터를 타면 안 된다.
+    var categoryUsage: [(name: String, count: Int)] {
         let all = items
             .compactMap { $0.category?.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let counts = Dictionary(grouping: all, by: { $0 }).mapValues { $0.count }
-        return counts.keys.sorted { counts[$0]! > counts[$1]! }
+        let counts = Dictionary(grouping: all, by: { $0 }).mapValues(\.count)
+        return counts
+            .map { (name: $0.key, count: $0.value) }
+            .sorted { $0.count == $1.count ? $0.name < $1.name : $0.count > $1.count }
     }
 
     var totalDeposit: Int { deposits.reduce(0) { $0 + $1.amount } }

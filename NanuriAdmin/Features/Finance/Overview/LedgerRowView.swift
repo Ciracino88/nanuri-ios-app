@@ -15,20 +15,40 @@ struct LedgerRowView: View {
     let row: LedgerRow
     /// 고르는 중일 때만 값이 있다. `nil` 이면 평소 목록이다.
     var isSelected: Bool?
+    /// 이 항목의 카테고리에 정해 둔 아이콘 `id`. 없으면 `nil` — 왼쪽 타일을 안 그린다.
+    /// (매칭 결과 화면의 썸네일 문법을 재정 목록에 들여온 것이다.)
+    var iconId: String?
 
     var body: some View {
         HStack(spacing: DS.Spacing.medium) {
             if let isSelected {
-                // 청구서 탭 선택 모드와 같은 표식이다.
+                // 청구서 탭 선택 모드와 같은 표식이다. 고르는 중엔 왼쪽 자리가
+                // 체크 것이라 아이콘 타일은 안 그린다 — 왼쪽에 둘을 겹치지 않는다.
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(DS.Icon.font(DS.Icon.action))
                     .foregroundColor(isSelected ? DS.Palette.accent : DS.Ink.placeholder)
+            } else if let iconId {
+                iconTile(iconId)
             }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DS.Spacing.s4)
         .padding(.vertical, DS.Spacing.medium)
+    }
+
+    /// 왼쪽 카테고리 아이콘 타일. 매칭 결과 행의 썸네일과 같은 크기·모서리다
+    /// (`DS.Size.rowAvatar`, `DS.Radius.m`). 색은 뜻을 타지 않는다 — 카테고리 표식일
+    /// 뿐이라 입금 파랑·출금 검정을 빌리지 않고 본문색으로 둔다(§5).
+    private func iconTile(_ id: String) -> some View {
+        RoundedRectangle(cornerRadius: DS.Radius.m)
+            .fill(DS.Surface.secondary)
+            .overlay(
+                CategoryIconImage(iconId: id)
+                    .frame(width: DS.Icon.feature, height: DS.Icon.feature)
+                    .foregroundColor(DS.Ink.primary)
+            )
+            .frame(width: DS.Size.rowAvatar, height: DS.Size.rowAvatar)
     }
 
     private var content: some View {
