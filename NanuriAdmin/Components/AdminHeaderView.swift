@@ -85,7 +85,7 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
         .padding(.horizontal, DS.Spacing.small)
         // 배경도 구분선도 주지 않는다. 헤더는 화면 배경 위에 그냥 얹힌다.
         // 목록이 헤더 아래로 지나가지 않으므로(같은 VStack 안이다) 경계를 그릴 이유가 없다.
-        .sheet(isPresented: $showNotifications) {
+        .fullScreenCover(isPresented: $showNotifications) {
             NotificationListView()
         }
     }

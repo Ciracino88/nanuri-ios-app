@@ -142,12 +142,43 @@ struct DeleteSection: View {
     }
 }
 
-// MARK: - 필드별 편집 시트
+// MARK: - 필드별 편집 화면 (풀스크린)
 
-/// 어느 필드를 편집 중인가. 상세 화면이 `.sheet(item:)` 로 하나만 띄운다.
+/// 어느 필드를 편집 중인가. 상세 화면이 `.fullScreenCover(item:)` 로 하나만 띄운다.
 enum EditField: Int, Identifiable {
     case amount, date, account, description, category
     var id: Int { rawValue }
+}
+
+/// 필드 편집 화면의 공통 뼈대 — **풀스크린 + 공용 헤더(취소 / 완료).**
+///
+/// 타이틀·버튼이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1). 왼쪽은 화면을
+/// 닫는 `HeaderBackButton`(취소), 오른쪽은 확정(완료)이다. **완료는 로컬 반영일 뿐,
+/// DB 저장은 상세가 한다.** (구조체 이름의 `...Sheet` 는 옛 이름이라 그대로 둔다.)
+private struct FieldEditScaffold<Content: View>: View {
+    let title: String
+    let onDone: () -> Void
+    @ViewBuilder let content: () -> Content
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text(title).headerTitle() },
+                leading: { HeaderBackButton(label: "취소") { dismiss() } },
+                trailing: {
+                    Button("완료") { onDone(); dismiss() }
+                        .typeStyle(DS.Typo.labelM)
+                        .foregroundColor(DS.Ink.brand)
+                        .padding(.horizontal, DS.Spacing.small)
+                }
+            )
+            Form { content() }
+                .scrollContentBackground(.hidden)
+        }
+        .screenBackground(DS.Surface.page)
+    }
 }
 
 /// 금액 + 입금/출금. 크기와 부호를 한 자리에서 고친다 (부호는 종류가 정한다).
@@ -155,7 +186,6 @@ struct AmountEditSheet: View {
     @State private var magnitude: Int
     @State private var isDeposit: Bool
     let onSave: (Int, Bool) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     init(magnitude: Int, isDeposit: Bool, onSave: @escaping (Int, Bool) -> Void) {
         _magnitude = State(initialValue: magnitude)
@@ -164,24 +194,18 @@ struct AmountEditSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            Form {
-                Section("금액") {
-                    TextField("금액", value: $magnitude, format: .number)
-                        .keyboardType(.numberPad)
-                }
-                Section("종류") {
-                    Picker("종류", selection: $isDeposit) {
-                        Text("입금").tag(true)
-                        Text("출금").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                }
+        FieldEditScaffold(title: "금액", onDone: { onSave(magnitude, isDeposit) }) {
+            Section("금액") {
+                TextField("금액", value: $magnitude, format: .number)
+                    .keyboardType(.numberPad)
             }
-            .navigationTitle("금액")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { editToolbar(dismiss: dismiss) { onSave(magnitude, isDeposit) } }
-            .presentationDetents([.medium])
+            Section("종류") {
+                Picker("종류", selection: $isDeposit) {
+                    Text("입금").tag(true)
+                    Text("출금").tag(false)
+                }
+                .pickerStyle(.segmented)
+            }
         }
     }
 }
@@ -190,7 +214,6 @@ struct AmountEditSheet: View {
 struct DateEditSheet: View {
     @State private var date: Date
     let onSave: (Date) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     init(date: Date, onSave: @escaping (Date) -> Void) {
         _date = State(initialValue: date)
@@ -198,15 +221,9 @@ struct DateEditSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            Form {
-                DatePicker("일시", selection: $date, displayedComponents: [.date])
-                    .datePickerStyle(.graphical)
-            }
-            .navigationTitle("일시")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { editToolbar(dismiss: dismiss) { onSave(date) } }
-            .presentationDetents([.medium, .large])
+        FieldEditScaffold(title: "일시", onDone: { onSave(date) }) {
+            DatePicker("일시", selection: $date, displayedComponents: [.date])
+                .datePickerStyle(.graphical)
         }
     }
 }
@@ -217,7 +234,6 @@ struct AccountEditSheet: View {
     let choices: [Account]
     @State private var selected: UUID
     let onSave: (UUID) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     init(title: String, choices: [Account], selected: UUID, onSave: @escaping (UUID) -> Void) {
         self.title = title
@@ -227,18 +243,12 @@ struct AccountEditSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            Form {
-                Picker(title, selection: $selected) {
-                    ForEach(choices) { Text($0.name).tag($0.id) }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
+        FieldEditScaffold(title: title, onDone: { onSave(selected) }) {
+            Picker(title, selection: $selected) {
+                ForEach(choices) { Text($0.name).tag($0.id) }
             }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { editToolbar(dismiss: dismiss) { onSave(selected) } }
-            .presentationDetents([.medium])
+            .pickerStyle(.inline)
+            .labelsHidden()
         }
     }
 }
@@ -247,7 +257,6 @@ struct AccountEditSheet: View {
 struct DescriptionEditSheet: View {
     @State private var text: String
     let onSave: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     init(text: String, onSave: @escaping (String) -> Void) {
         _text = State(initialValue: text)
@@ -255,19 +264,13 @@ struct DescriptionEditSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            Form {
-                Section {
-                    TextField("적요 (예: 아침식사, 8월 헌금)", text: $text, axis: .vertical)
-                        .lineLimit(1...4)
-                } footer: {
-                    Text("장부에 적힐 이름이에요. 비워 두면 은행 적요가 그대로 남아요.")
-                }
+        FieldEditScaffold(title: "적요", onDone: { onSave(text) }) {
+            Section {
+                TextField("적요 (예: 아침식사, 8월 헌금)", text: $text, axis: .vertical)
+                    .lineLimit(1...4)
+            } footer: {
+                Text("장부에 적힐 이름이에요. 비워 두면 은행 적요가 그대로 남아요.")
             }
-            .navigationTitle("적요")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { editToolbar(dismiss: dismiss) { onSave(text) } }
-            .presentationDetents([.medium])
         }
     }
 }
@@ -277,7 +280,6 @@ struct CategoryEditSheet: View {
     @State private var text: String
     let suggestions: [String]
     let onSave: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     init(text: String, suggestions: [String], onSave: @escaping (String) -> Void) {
         _text = State(initialValue: text)
@@ -286,30 +288,13 @@ struct CategoryEditSheet: View {
     }
 
     var body: some View {
-        NavigationView {
-            Form {
-                Section {
-                    TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $text)
-                    CategorySuggestionChips(suggestions: suggestions, selected: $text)
-                } footer: {
-                    Text("성격에 맞게 묶는 꼬리표예요. 합계·보고서가 이걸로 묶어요.")
-                }
+        FieldEditScaffold(title: "카테고리", onDone: { onSave(text) }) {
+            Section {
+                TextField("카테고리 (예: 회비, 후원금, 행사비)", text: $text)
+                CategorySuggestionChips(suggestions: suggestions, selected: $text)
+            } footer: {
+                Text("성격에 맞게 묶는 꼬리표예요. 합계·보고서가 이걸로 묶어요.")
             }
-            .navigationTitle("카테고리")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { editToolbar(dismiss: dismiss) { onSave(text) } }
-            .presentationDetents([.medium, .large])
         }
-    }
-}
-
-/// 편집 시트 공통 툴바 — 취소 / 완료. **완료는 로컬 반영일 뿐, DB 저장은 상세의 "저장".**
-@ToolbarContentBuilder
-private func editToolbar(dismiss: DismissAction, onDone: @escaping () -> Void) -> some ToolbarContent {
-    ToolbarItem(placement: .navigationBarLeading) {
-        Button("취소") { dismiss() }
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-        Button("완료") { onDone(); dismiss() }.fontWeight(.semibold)
     }
 }

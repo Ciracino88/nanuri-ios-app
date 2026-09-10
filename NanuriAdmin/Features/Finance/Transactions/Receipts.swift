@@ -29,7 +29,15 @@ struct ReceiptManagerView: View {
     private var receiptCount: Int { keptUrls.count + pendingImages.count }
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1). 변경은 바인딩에
+            // 바로 반영되고, 닫으면 부모가 저장한다.
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text(receiptCount == 0 ? "영수증" : "영수증 (\(receiptCount)장)").headerTitle() },
+                leading: { HeaderBackButton(label: "완료") { dismiss() } },
+                trailing: { EmptyView() }
+            )
             Form {
                 if receiptCount > 0 {
                     Section {
@@ -82,13 +90,7 @@ struct ReceiptManagerView: View {
                     .disabled(isSaving)
                 }
             }
-            .navigationTitle(receiptCount == 0 ? "영수증" : "영수증 (\(receiptCount)장)")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("완료") { dismiss() }.fontWeight(.semibold)
-                }
-            }
+            .scrollContentBackground(.hidden)
             .onChange(of: photoItem) { item in
                 guard let item else { return }
                 Task {
@@ -109,6 +111,7 @@ struct ReceiptManagerView: View {
                 ReceiptViewerView(source: preview.source)
             }
         }
+        .screenBackground(DS.Surface.page)
     }
 
     private var fallbackTile: some View {

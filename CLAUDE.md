@@ -112,9 +112,10 @@
     그리던 `‹` 헤더(불러오기 상세·편집)와 거래 추가의 시스템 내비바를 걷어냈다.
     상세 시트(`BillDetailView`·`AccountBalanceView`·`SpendingDetailView`)의 ✕ 는 뗐다.
     근거·규칙은 [DESIGN.md](DESIGN.md) §1 "시트냐 풀스크린이냐". 초록 빌드, 실기기 확인은 아직.
-  ⑥ **편집 폼 시트 풀스크린 이관(A그룹)** — 아직 시스템 내비바 + 시트로 남은 편집
-    화면들(`ItemEditView`·`TransactionEditShared`·`ProfileEditView`·`PayeeEditView`·
-    `CategoryAssignView`·`ReceiptManagerView`·`FinanceReportPreviewView`)을 위 규칙에
-    맞춰 풀스크린으로 올리는 일. 위험이 있어 별도로 뺐다 (DESIGN.md §1 의 A그룹 주석).
+  ⑥ ~~편집 폼 시트 풀스크린 이관(A그룹)~~ **끝.** 2026-09-10 에 시스템 내비바를 쓰던
+    편집·목록 화면을 전부 풀스크린 + `AdminHeaderView` 로 옮겼다(항목 상세·필드 편집·
+    프로필·계좌·카테고리 붙이기·영수증 관리·보고서 미리보기·알림함·영수증 뷰어).
+    **앱에 `navigationTitle` 은 이제 없다.** 남은 시트는 그래버형 콘텐츠 시트뿐이다.
+    선택 모드 취소도 원형 `HeaderCancelButton` 으로 통일. 초록 빌드, 실기기 확인은 아직.
 - 안 본 것은 여전히 **큰 글씨(Dynamic Type)** 와, 다크 모드의 **상태 배지·보고서
   미리보기**다 ([DESIGN.md](DESIGN.md) 맨 아래).

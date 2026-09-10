@@ -146,7 +146,7 @@ struct FinanceView: View {
             .sheet(item: $exportFile) { file in
                 ShareSheet(items: [file.url])
             }
-            .sheet(item: $reportPreview) { preview in
+            .fullScreenCover(item: $reportPreview) { preview in
                 FinanceReportPreviewView(html: preview.html, title: preview.title)
             }
             .sheet(isPresented: $showSpendingDetail) {
@@ -167,7 +167,7 @@ struct FinanceView: View {
                     showMenu = false
                 }
             }
-            .sheet(isPresented: $showCategorySheet) {
+            .fullScreenCover(isPresented: $showCategorySheet) {
                 CategoryAssignView(suggestions: viewModel.usedCategories,
                                    count: selection.count) { category in
                     Task {
