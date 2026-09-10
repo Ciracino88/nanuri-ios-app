@@ -53,13 +53,14 @@ struct BillListView: View {
     var body: some View {
         VStack(spacing: 0) {
             AdminHeaderView(title: "청구서", leading: {
-                HeaderIconButton(
-                    systemName: isSelecting ? "xmark" : "checklist",
-                    label: isSelecting ? "고르기 그만두기" : "묶어서 보낼 청구서 고르기",
-                    tint: isSelecting ? DS.Palette.deposit : .primary
-                ) {
-                    withAnimation(DS.Motion.control) {
-                        if isSelecting { exitSelection() } else { enterSelection() }
+                if isSelecting {
+                    // 화면은 안 닫고 선택 모드만 끈다 → 취소(xmark) 버튼.
+                    HeaderCancelButton(label: "고르기 그만두기") {
+                        withAnimation(DS.Motion.control) { exitSelection() }
+                    }
+                } else {
+                    HeaderIconButton(systemName: "checklist", label: "묶어서 보낼 청구서 고르기") {
+                        withAnimation(DS.Motion.control) { enterSelection() }
                     }
                 }
             })
