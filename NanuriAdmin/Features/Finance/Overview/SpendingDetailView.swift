@@ -5,7 +5,7 @@ import SwiftUI
 /// 밴드가 한 줄로 흘려 말한 것을 **크게 다시 말하고, 왜 그런지까지 붙인다.**
 ///
 /// ```
-/// 닫기 ✕                        ← 오른쪽 위. 상세 시트와 같은 자리다
+/// ───                           ← 그래버. 닫기 버튼은 없다 (시트는 그래버로 내린다)
 /// 2026년 8월                     ← 어느 달인지. 여기서는 달을 넘기지 않는다
 /// 지난달보다 62만원 더 나갔어요      ← 밴드와 **같은 문장**을 키운 것
 ///                    ● 8월 ● 7월  ← 두 선이 무엇인지
@@ -26,7 +26,6 @@ import SwiftUI
 struct SpendingDetailView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
-    @Environment(\.dismiss) private var dismiss
     /// 0 이 출금, 1 이 입금. **출금이 먼저다** — 견주는 문장이 지출 이야기다.
     @State private var segment = 0
 
@@ -35,33 +34,22 @@ struct SpendingDetailView: View {
     private var comparison: SpendingComparison { viewModel.comparison }
 
     var body: some View {
-        VStack(spacing: 0) {
-            closeBar
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: DS.Spacing.section) {
-                    headline
-                    if comparison.hasPrevious {
-                        chart
-                    }
-                    Divider()
-                    breakdown
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.section) {
+                headline
+                if comparison.hasPrevious {
+                    chart
                 }
-                .padding(.horizontal, DS.Spacing.screen)
-                .padding(.bottom, DS.Spacing.sheetEdge)
+                Divider()
+                breakdown
             }
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.vertical, DS.Spacing.sheetEdge)
         }
+        // 닫기 버튼은 두지 않는다 — 시트는 그래버로 내린다 (DESIGN.md §1).
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .screenBackground(DS.Surface.card)
-    }
-
-    /// 오른쪽 위 ✕. 청구서 상세 시트와 같은 자리다 (`BillDetailView`).
-    private var closeBar: some View {
-        HStack {
-            Spacer()
-            HeaderIconButton(systemName: "xmark", label: "닫기") { dismiss() }
-        }
-        .padding(.horizontal, DS.Spacing.small)
     }
 
     // MARK: - 머리
@@ -81,7 +69,6 @@ struct SpendingDetailView: View {
                 .foregroundColor(DS.Ink.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, DS.Spacing.medium)
     }
 
     /// 어느 달을 보고 있는지. 장부가 전부 월별이라 늘 달 이름이다.

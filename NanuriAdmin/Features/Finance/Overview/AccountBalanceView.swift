@@ -3,7 +3,7 @@ import SwiftUI
 /// 통장별 잔액과 총 재정을 보는 화면. 재정 탭 헤더 왼쪽의 통장 버튼이 연다.
 ///
 /// ```
-/// 닫기 ✕                        ← 오른쪽 위. 다른 시트와 같은 자리다
+/// ───                           ← 그래버. 닫기 버튼은 없다 (시트는 그래버로 내린다)
 /// 9,128,884원                   ← 총 재정. 큰 수 하나가 홀로 선다
 /// 지금 통장에 있는 돈을 모두 합한 금액이에요
 /// ────────────────
@@ -37,8 +37,6 @@ import SwiftUI
 struct AccountBalanceView: View {
     @ObservedObject var viewModel: FinanceViewModel
 
-    @Environment(\.dismiss) private var dismiss
-
     /// 잔액을 세는 시점. 보고 있는 달의 마지막 순간이다.
     private var asOf: Date { viewModel.endDate }
 
@@ -48,43 +46,32 @@ struct AccountBalanceView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            closeBar
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: DS.Spacing.section) {
-                    if viewModel.accounts.isEmpty {
-                        EmptyStateView(
-                            title: "통장이 아직 없어요",
-                            message: "장부에 통장이 등록돼야 잔액을 셀 수 있어요"
-                        ) { EmptyView() }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, DS.Spacing.s12)
-                    } else {
-                        headline
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.section) {
+                if viewModel.accounts.isEmpty {
+                    EmptyStateView(
+                        title: "통장이 아직 없어요",
+                        message: "장부에 통장이 등록돼야 잔액을 셀 수 있어요"
+                    ) { EmptyView() }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, DS.Spacing.s12)
+                } else {
+                    headline
+                    Divider()
+                    accountList
+                    if !flows.isEmpty {
                         Divider()
-                        accountList
-                        if !flows.isEmpty {
-                            Divider()
-                            transferSection
-                        }
+                        transferSection
                     }
                 }
-                .padding(.horizontal, DS.Spacing.screen)
-                .padding(.bottom, DS.Spacing.sheetEdge)
             }
+            .padding(.horizontal, DS.Spacing.screen)
+            .padding(.vertical, DS.Spacing.sheetEdge)
         }
+        // 닫기 버튼은 두지 않는다 — 시트는 그래버로 내린다 (DESIGN.md §1).
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .screenBackground(DS.Surface.card)
-    }
-
-    /// 오른쪽 위 ✕. 청구서 상세·분석 화면과 같은 자리다.
-    private var closeBar: some View {
-        HStack {
-            Spacer()
-            HeaderIconButton(systemName: "xmark", label: "닫기") { dismiss() }
-        }
-        .padding(.horizontal, DS.Spacing.small)
     }
 
     // MARK: - 머리
@@ -109,7 +96,6 @@ struct AccountBalanceView: View {
                 .foregroundColor(DS.Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, DS.Spacing.medium)
     }
 
     // MARK: - 통장별

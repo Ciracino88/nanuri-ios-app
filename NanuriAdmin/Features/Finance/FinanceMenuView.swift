@@ -36,7 +36,7 @@ struct FinanceMenuView: View {
                 showsNotifications: false,
                 center: { Text("메뉴").headerTitle() },
                 leading: {
-                    HeaderIconButton(systemName: "chevron.left", label: "닫기") { dismiss() }
+                    HeaderBackButton(label: "닫기") { dismiss() }
                 },
                 trailing: { EmptyView() }
             )
