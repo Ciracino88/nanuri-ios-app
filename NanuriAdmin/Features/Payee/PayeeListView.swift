@@ -47,7 +47,7 @@ struct PayeeListView: View {
             }
         }
         .screenBackground()
-        .sheet(item: $editing) { target in
+        .fullScreenCover(item: $editing) { target in
             PayeeEditView(viewModel: viewModel, target: target)
         }
         .alert("계좌를 삭제할까요?", isPresented: deleteAlertBinding, presenting: deleteTarget) { payee in
@@ -194,7 +194,20 @@ struct PayeeEditView: View {
     }
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀·저장이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text(editingId == nil ? "계좌 추가" : "계좌 수정").headerTitle() },
+                leading: { HeaderBackButton(label: "취소") { dismiss() } },
+                trailing: {
+                    Button("저장") { save() }
+                        .typeStyle(DS.Typo.labelM)
+                        .foregroundColor(DS.Ink.brand)
+                        .padding(.horizontal, DS.Spacing.small)
+                        .disabled(!canSave)
+                }
+            )
             Form {
                 Section {
                     TextField("이름", text: $name)
@@ -221,18 +234,9 @@ struct PayeeEditView: View {
                         .lineLimit(1...3)
                 }
             }
-            .navigationTitle(editingId == nil ? "계좌 추가" : "계좌 수정")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("취소") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("저장") { save() }
-                        .disabled(!canSave)
-                }
-            }
+            .scrollContentBackground(.hidden)
         }
+        .screenBackground(DS.Surface.page)
         .onAppear {
             switch target {
             case .create(let prefilled):

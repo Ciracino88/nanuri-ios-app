@@ -85,7 +85,7 @@ struct AdminHeaderView<Leading: View, Trailing: View>: View {
         .padding(.horizontal, DS.Spacing.small)
         // 배경도 구분선도 주지 않는다. 헤더는 화면 배경 위에 그냥 얹힌다.
         // 목록이 헤더 아래로 지나가지 않으므로(같은 VStack 안이다) 경계를 그릴 이유가 없다.
-        .sheet(isPresented: $showNotifications) {
+        .fullScreenCover(isPresented: $showNotifications) {
             NotificationListView()
         }
     }
@@ -181,6 +181,63 @@ struct HeaderIconButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// 헤더 왼쪽 **원형 내비게이션 버튼**의 공통 몸통. `HeaderBackButton`(chevron)과
+/// `HeaderCancelButton`(xmark)이 이걸 쓴다.
+///
+/// **흰 원 배경 + 검정 아이콘**이다(인스타·토스식, DESIGN.md §1). 흰 헤더 위에서도
+/// 원이 읽히게 옅은 그림자를 얹는다 — 헤더의 **닫기·취소 컨트롤에만** 원을 두르고,
+/// 알림 종·메뉴 같은 다른 아이콘(`HeaderIconButton`)은 평면으로 둔다. 색은 시맨틱
+/// 토큰이라 다크 모드에서 배경·아이콘이 함께 뒤집힌다.
+struct HeaderCircleButton: View {
+    let systemName: String
+    /// VoiceOver 가 읽을 말. 아이콘뿐이라 없으면 심볼 이름을 읽는다.
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(DS.Icon.font(DS.Icon.m))
+                .foregroundColor(DS.Ink.primary)
+                .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
+                .background(Circle().fill(DS.Surface.card))
+                .elevation(.tooltip)
+                .frame(width: DS.Size.headerButton, height: DS.Size.headerButton)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+/// **현재 화면을 닫는** 버튼 — 뒤로 가기든 모달 닫기든 화면을 벗어나는 동작은 전부
+/// 이거다(chevron). `AdminHeaderView` 의 `leading:` 에 넣는다.
+///
+/// **손으로 `chevron.left` HStack 을 그리지 말고 이걸 쓴다** — 크기·여백·아이콘
+/// 굵기(.regular, DESIGN.md §6)·원형 배경이 한 곳에서 정해진다. 라벨은 되돌아가면
+/// "뒤로", 흐름을 통째로 닫으면 "닫기" 로 준다(VoiceOver 전용).
+struct HeaderBackButton: View {
+    var label: String = "뒤로"
+    let action: () -> Void
+
+    var body: some View {
+        HeaderCircleButton(systemName: "chevron.left", label: label, action: action)
+    }
+}
+
+/// **화면은 닫지 않고 현재 상태만 취소하는** 버튼(xmark). 선택 모드처럼 화면 안의
+/// 한 상태를 되돌릴 때만 쓴다 — 화면을 벗어나는 건 `HeaderBackButton` 이다
+/// (DESIGN.md §1). 겉모습은 뒤로가기와 같은 원형이라 아이콘(chevron↔xmark)으로 뜻이
+/// 갈린다.
+struct HeaderCancelButton: View {
+    var label: String = "취소"
+    let action: () -> Void
+
+    var body: some View {
+        HeaderCircleButton(systemName: "xmark", label: label, action: action)
     }
 }
 

@@ -6,234 +6,235 @@ import OSLog
 extension FinanceViewModel {
 
     /// 고른 항목들에 **카테고리를 한 번에 붙인다.** 빈 문자열이면 지운다.
-    ///
-    /// **건별로 나눠 보내지 않는다.** 조각은 조각끼리, 거래는 거래끼리 한 요청씩
-    /// 두 번이다. 나눠 보내면 중간에 끊겼을 때 일부만 붙은 채로 남는다.
+    /// 항목이 곧 장부 줄이라 한 표(`finance_items`)에 한 요청이면 된다.
     func applyCategory(_ category: String, to rows: [LedgerRow]) async {
         let trimmed = category.trimmingCharacters(in: .whitespaces)
         let value: String? = trimmed.isEmpty ? nil : trimmed
-        let splitIds = rows.compactMap { $0.split?.id }
-        let txIds = rows.filter { $0.split == nil }.map { $0.transaction.id }
-        guard !splitIds.isEmpty || !txIds.isEmpty else { return }
-
+        let ids = rows.map { $0.item.id }
+        guard !ids.isEmpty else { return }
         do {
-            if !splitIds.isEmpty {
-                try await supabase.from("finance_splits")
-                    .update(CategoryPatch(category: value))
-                    .in("id", values: splitIds.map(\.uuidString))
-                    .execute()
-            }
-            if !txIds.isEmpty {
-                try await supabase.from("finance_transactions")
-                    .update(CategoryPatch(category: value))
-                    .in("id", values: txIds.map(\.uuidString))
-                    .execute()
-            }
+            try await supabase.from("finance_items")
+                .update(CategoryPatch(category: value))
+                .in("id", values: ids.map(\.uuidString))
+                .execute()
         } catch {
             self.error = error.localizedDescription
             Log.finance.error("카테고리 추가 실패: \(error.localizedDescription)")
             return
         }
-
-        // 목록을 다시 받지 않고 그 자리에 꽂는다. 스무 줄에 붙이고 나서 화면이
-        // 통째로 다시 그려지면 어디를 보고 있었는지를 잃는다.
-        let splitSet = Set(splitIds)
-        for (txId, pieces) in splitsByTransaction {
-            guard pieces.contains(where: { splitSet.contains($0.id) }) else { continue }
-            splitsByTransaction[txId] = pieces.map { piece in
-                var copy = piece
-                if splitSet.contains(piece.id) { copy.category = value }
-                return copy
-            }
-        }
-        let txSet = Set(txIds)
-        for idx in transactions.indices where txSet.contains(transactions[idx].id) {
-            transactions[idx].category = value
+        // 목록을 다시 받지 않고 그 자리에 꽂는다.
+        let idSet = Set(ids)
+        for idx in items.indices where idSet.contains(items[idx].id) {
+            items[idx].category = value
         }
     }
 
-    // MARK: - 거래 쓰기
+    // MARK: - 농협 수기 항목
 
-    /// 거래를 손으로 넣는다.
+    /// 농협 입출금을 손으로 넣는다. **은행 증명이 없어 항목으로 바로 들어간다**
+    /// (`sourceTransactionId == nil`). 농협은 인터넷뱅킹이 없어 이 길뿐이다.
     ///
-    /// **농협은 이 길뿐이다.** 인터넷뱅킹이 없어 거래내역 파일이 안 나오므로 사람이
-    /// 앱 화면을 보고 옮겨 적는 수밖에 없다. 2026-08 기준 농협 25건 / 모임 22건이라
-    /// **절반은 영영 수기다** — 한 건 넣는 데 손이 많이 가면 안 쓰게 된다.
-    ///
-    /// 넣은 뒤 목록을 다시 받지 않고 **돌려받은 행을 그 자리에 꽂는다.** 연달아
-    /// 넣는 화면이라 한 건마다 273건을 다시 받으면 입력이 끊긴다.
+    /// 넣은 뒤 목록을 다시 받지 않고 돌려받은 행을 그 자리에 꽂는다 — 연달아 넣는
+    /// 화면이라 한 건마다 전부 다시 받으면 입력이 끊긴다.
     @discardableResult
-    func addTransaction(
-        accountId: UUID,
-        counterAccountId: UUID? = nil,
-        datetime: Date,
-        amount: Int,
-        description: String?
-    ) async -> Bool {
-        guard let ledgerId = currentLedger?.id else {
-            error = "장부를 먼저 선택해주세요."
-            return false
-        }
-        let row = BankTransactionInsert(
-            ledgerId: ledgerId,
-            accountId: accountId,
-            counterAccountId: counterAccountId,
-            datetime: datetime,
-            // 토스가 주는 값(이자입금·체크카드결제·ATM출금…)과 달리 손으로 넣는 건
-            // 부호만으로 충분하다. 통장에 찍힌 유형이 아니라 사람이 적는 줄이다.
-            type: amount >= 0 ? "입금" : "출금",
-            amount: amount,
-            description: description,
-            // **카테고리는 여기서 안 받는다.** 넣을 때마다 고르는 건 스무 번 넘게
-            // 반복하기에 무거운 동작이고, 그 자리에서는 무엇으로 묶을지 정하기도
-            // 어렵다. 목록을 훑으며 붙이는 편이 낫다 — 비슷한 항목이 나란히 보이니
-            // 이름이 저절로 정해진다.
-            source: .manual
-        )
+    func addManualItem(accountId: UUID, datetime: Date, amount: Int, description: String?) async -> Bool {
+        let insert = FinanceItemInsert(accountId: accountId, datetime: datetime,
+                                       amount: amount, description: description)
         do {
-            let created: BankTransaction = try await supabase
-                .from("finance_transactions")
-                .insert(row)
+            let created: FinanceItem = try await supabase
+                .from("finance_items")
+                .insert(insert)
                 .select()
                 .single()
                 .execute()
                 .value
-            transactions.append(created)
-            // `fetchTransactions` 가 datetime 내림차순으로 받으므로 같은 순서를 지킨다.
-            transactions.sort { $0.datetime > $1.datetime }
+            items.append(created)
+            items.sort { $0.datetime > $1.datetime }
             return true
         } catch {
             self.error = error.localizedDescription
-            Log.finance.error("거래 추가 실패: \(error.localizedDescription)")
+            Log.finance.error("항목 추가 실패: \(error.localizedDescription)")
             return false
         }
     }
 
-    /// 거래를 지운다. 분할은 `on delete cascade` 로 같이 사라진다.
+    /// 고른 항목들을 지운다. 은행 증명이 있는 항목은 그 거래 전체가 지워진다
+    /// (`deleteItem` 규칙 그대로). 한 요청씩이 아니라 순서대로 지운다.
+    func deleteItems(_ rows: [LedgerRow]) async {
+        for row in rows { await deleteItem(row.item) }
+    }
+
+    /// 고른 항목들을 **한 항목으로 합친다.**
     ///
-    /// **영수증을 먼저 지운다.** 청구서 삭제와 같은 순서이고 이유도 같다 — 행이
-    /// 먼저 사라지면 이미지 삭제가 실패했을 때 R2 에 주인 없는 파일이 남고 그 URL 을
-    /// 아는 사람이 없어진다. 반대 순서면 최악이 "이미지는 지워졌는데 행이 남는"
-    /// 것이고, 그건 눈에 보여서 다시 지울 수 있다.
-    func deleteTransaction(_ transaction: BankTransaction) async {
-        for url in transaction.receipts {
-            await ReceiptStorage.delete(receiptUrl: url)
+    /// **농협 수기 항목만**(은행 증명 없음), 같은 통장·같은 방향일 때만이다. 은행 증명이
+    /// 있는 항목은 합이 거래액과 맞아야 하는 대조가 있어서 함부로 못 합친다(분할 편집이
+    /// 따로 맡는다). 영수증은 **합쳐서 병합 항목으로 물려주고**, 원본은 줄만 지운다 —
+    /// `deleteItem` 을 안 쓴다(그건 R2 영수증까지 지워서, 방금 옮긴 걸 날린다).
+    func mergeItems(_ rows: [LedgerRow], description: String) async {
+        let items = rows.map(\.item)
+        guard items.count >= 2,
+              items.allSatisfy({ $0.sourceTransactionId == nil && !$0.isInternalTransfer }),
+              let accountId = items.first?.accountId,
+              items.allSatisfy({ $0.accountId == accountId }),
+              (items.allSatisfy { $0.amount > 0 } || items.allSatisfy { $0.amount < 0 })
+        else {
+            error = "합칠 수 없어요. 같은 통장·같은 방향의 수기 항목만 합쳐져요."
+            return
         }
+        let sum = items.reduce(0) { $0 + $1.amount }
+        let datetime = items.map(\.datetime).min() ?? items[0].datetime
+        var seen = Set<String>()
+        let receipts = items.flatMap { $0.receipts }.filter { seen.insert($0).inserted }
+        let categories = Set(items.compactMap { $0.category })
+        let category = categories.count == 1 ? categories.first : nil
+        let d = description.trimmingCharacters(in: .whitespaces)
+
+        isLoading = true
+        defer { isLoading = false }
         do {
-            try await supabase
-                .from("finance_transactions")
+            let created: FinanceItem = try await supabase
+                .from("finance_items")
+                .insert(FinanceItemInsert(accountId: accountId, datetime: datetime, amount: sum,
+                                          category: category, description: d.isEmpty ? nil : d,
+                                          receiptUrls: receipts))
+                .select().single().execute().value
+            try await supabase.from("finance_items")
                 .delete()
-                .eq("id", value: transaction.id)
+                .in("id", values: items.map { $0.id.uuidString })
                 .execute()
-            transactions.removeAll { $0.id == transaction.id }
-            splitsByTransaction[transaction.id] = nil
+            let removed = Set(items.map(\.id))
+            self.items.removeAll { removed.contains($0.id) }
+            self.items.append(created)
+            self.items.sort { $0.datetime > $1.datetime }
         } catch {
             self.error = error.localizedDescription
-            Log.finance.error("거래 삭제 실패: \(error.localizedDescription)")
+            Log.finance.error("병합 실패: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - 거래 편집 저장 (영수증 R2는 청구서와 동일한 저장소 재사용)
+    // MARK: - 삭제
 
-    /// 거래 편집을 한 번에 커밋한다.
-    /// 저장 시점에만 R2 업로드/삭제와 DB 반영이 일어난다 (취소하면 아무 일도 없음).
-    /// - Parameters:
-    ///   - keptUrls: 유지할 기존 영수증 URL 목록
-    ///   - newImages: 새로 추가한 이미지 (여기서 업로드)
-    ///   - originalUrls: 편집 시작 시점의 영수증 목록 (제거분 계산용)
-    func saveTransactionEdits(
+    /// 항목을 지운다.
+    ///
+    /// **은행 증명이 있으면 그 거래 전체를 지운다** — 한 거래에서 나온 형제 항목까지
+    /// 함께다(거래를 지우면 항목이 cascade 로 사라진다). 은행 줄 하나를 통째로
+    /// 무르는 것이라, 조각 하나만 떼는 건 대조가 어긋나 뜻이 없다. 농협 수기 항목은
+    /// 뒤에 거래가 없으니 그 항목만 지운다.
+    ///
+    /// **영수증을 먼저 지운다** — 행이 먼저 사라지면 R2 에 주인 없는 파일이 남는다.
+    func deleteItem(_ item: FinanceItem) async {
+        let victims: [FinanceItem] = item.sourceTransactionId
+            .map { txId in items.filter { $0.sourceTransactionId == txId } } ?? [item]
+        for victim in victims {
+            for url in victim.receipts { await ReceiptStorage.delete(receiptUrl: url) }
+        }
+        do {
+            if let txId = item.sourceTransactionId {
+                try await supabase.from("finance_transactions").delete().eq("id", value: txId).execute()
+                transactions.removeAll { $0.id == txId }
+                items.removeAll { $0.sourceTransactionId == txId }
+            } else {
+                try await supabase.from("finance_items").delete().eq("id", value: item.id).execute()
+                items.removeAll { $0.id == item.id }
+            }
+        } catch {
+            self.error = error.localizedDescription
+            Log.finance.error("항목 삭제 실패: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - 항목 편집 저장 (영수증 R2 는 청구서와 같은 저장소 재사용)
+
+    /// 항목의 **사람 값**(카테고리·적요·영수증)을 고친다. 은행 증명이 있는 항목도
+    /// 이건 고칠 수 있다 — 금액·일시·통장은 은행 값이라 안 건드린다.
+    func saveItemFields(
         id: UUID,
-        datetime: Date,
-        amount: Int,
-        description: String?,
-        accountId: UUID,
-        counterAccountId: UUID?,
         category: String?,
+        description: String?,
         keptUrls: [String],
         newImages: [UIImage],
-        originalUrls: [String],
-        splits: [(category: String?, amount: Int, description: String?)] = []
+        originalUrls: [String]
     ) async {
-        // 거래내역서에서 온 거래는 **금액·일시·통장이 통장의 기록**이다. 화면이
-        // 그 칸을 잠그지만, 잠그는 판단은 여기서도 한 번 더 한다 — 규칙이 화면에만
-        // 있으면 화면이 하나 더 생길 때 조용히 새어 나간다.
-        let existing = transactions.first { $0.id == id }
-        let locked = existing?.isFromStatement ?? false
-        let finalDatetime = locked ? (existing?.datetime ?? datetime) : datetime
-        let finalAmount   = locked ? (existing?.amount ?? amount) : amount
-        let finalAccount  = locked ? (existing?.accountId ?? accountId) : accountId
-        // **상대 통장은 잠그지 않는다.** 금액·일시·통장은 은행이 말해 주는 사실이지만
-        // "이게 통장 사이 이체인가" 는 **은행이 말해 줄 수 없는 회계 판단**이다 —
-        // 거래내역서에는 그 정보가 없고, 적요를 보고 사람이 정한다. 매처가 대신
-        // 해 주지만 못 잡을 수도 있고, 판정이 생기기 전에 들어온 줄은 아예 못 만난다.
-        // 잠그면 그런 줄을 앱 안에서 고칠 길이 없어진다 (2026-09-03 에 실제로 그랬다).
-        let finalCounter  = counterAccountId
-        // 1. 새 이미지 업로드 (해상도 축소 후)
-        var newlyUploaded: [String] = []
-        for image in newImages {
-            guard let jpeg = image.resized(maxDimension: 2000).jpegData(compressionQuality: 0.7) else { continue }
-            if let uploaded = try? await ReceiptStorage.upload(
-                imageData: jpeg,
-                filename: "receipt.jpg",
-                folder: "finance"
-            ) {
-                newlyUploaded.append(uploaded)
-            }
-        }
-
-        let finalUrls = keptUrls + newlyUploaded
-
-        // 2. DB 반영 (한 번에)
+        let uploaded = await uploadReceipts(newImages)
+        let finalUrls = keptUrls + uploaded
         do {
-            try await supabase
-                .from("finance_transactions")
-                .update(TransactionEditUpdate(
-                    datetime: finalDatetime, amount: finalAmount, description: description,
-                    category: category, receiptUrls: finalUrls,
-                    accountId: finalAccount, counterAccountId: finalCounter
-                ))
+            try await supabase.from("finance_items")
+                .update(ItemFieldsUpdate(category: category, description: description, receiptUrls: finalUrls))
                 .eq("id", value: id)
                 .execute()
-            if let idx = transactions.firstIndex(where: { $0.id == id }) {
-                transactions[idx].datetime = finalDatetime
-                transactions[idx].amount = finalAmount
-                transactions[idx].description = description
-                transactions[idx].accountId = finalAccount
-                transactions[idx].counterAccountId = finalCounter
-                transactions[idx].category = category
-                transactions[idx].receiptUrls = finalUrls
+            patchItem(id) {
+                $0.category = category
+                $0.description = description
+                $0.receiptUrls = finalUrls
             }
         } catch {
             self.error = error.localizedDescription
-            // DB 반영 실패 시 방금 올린 이미지는 롤백(R2에서 삭제)
-            for url in newlyUploaded { await ReceiptStorage.delete(receiptUrl: url) }
+            for url in uploaded { await ReceiptStorage.delete(receiptUrl: url) }
             return
         }
+        await deleteRemovedReceipts(originalUrls: originalUrls, keptUrls: keptUrls)
+    }
 
-        // 3. DB 반영 성공 후, 제거된 기존 영수증을 R2에서 삭제
-        let removed = originalUrls.filter { !keptUrls.contains($0) }
-        for url in removed { await ReceiptStorage.delete(receiptUrl: url) }
-
-        // 4. 분할 항목 교체 (기존 삭제 후 새로 삽입)
+    /// 농협 수기 항목의 **전 필드**를 고친다. 은행 증명이 없어 금액·일시·통장까지 열려 있다.
+    func saveManualItem(
+        id: UUID,
+        accountId: UUID,
+        datetime: Date,
+        amount: Int,
+        category: String?,
+        description: String?,
+        keptUrls: [String],
+        newImages: [UIImage],
+        originalUrls: [String]
+    ) async {
+        let uploaded = await uploadReceipts(newImages)
+        let finalUrls = keptUrls + uploaded
         do {
-            try await supabase.from("finance_splits").delete().eq("transaction_id", value: id).execute()
-            if splits.isEmpty {
-                splitsByTransaction[id] = nil
-            } else {
-                let inserts = splits.enumerated().map { index, s in
-                    TransactionSplitInsert(transactionId: id, amount: s.amount,
-                                           category: s.category, description: s.description,
-                                           sortOrder: index)
-                }
-                try await supabase.from("finance_splits").insert(inserts).execute()
-                splitsByTransaction[id] = splits.enumerated().map { index, s in
-                    TransactionSplit(id: UUID(), transactionId: id, amount: s.amount,
-                                     category: s.category, description: s.description,
-                                     sortOrder: index)
-                }
+            try await supabase.from("finance_items")
+                .update(ItemFullUpdate(accountId: accountId, datetime: datetime, amount: amount,
+                                       category: category, description: description, receiptUrls: finalUrls))
+                .eq("id", value: id)
+                .execute()
+            patchItem(id) {
+                $0.accountId = accountId
+                $0.datetime = datetime
+                $0.amount = amount
+                $0.category = category
+                $0.description = description
+                $0.receiptUrls = finalUrls
             }
+            items.sort { $0.datetime > $1.datetime }
         } catch {
             self.error = error.localizedDescription
+            for url in uploaded { await ReceiptStorage.delete(receiptUrl: url) }
+            return
+        }
+        await deleteRemovedReceipts(originalUrls: originalUrls, keptUrls: keptUrls)
+    }
+
+    // MARK: - 거들이
+
+    private func patchItem(_ id: UUID, _ mutate: (inout FinanceItem) -> Void) {
+        guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&items[idx])
+    }
+
+    /// 새 이미지들을 해상도 축소 후 올리고 URL 을 돌려준다.
+    private func uploadReceipts(_ images: [UIImage]) async -> [String] {
+        var urls: [String] = []
+        for image in images {
+            guard let jpeg = image.resized(maxDimension: 2000).jpegData(compressionQuality: 0.7) else { continue }
+            if let uploaded = try? await ReceiptStorage.upload(imageData: jpeg, filename: "receipt.jpg", folder: "finance") {
+                urls.append(uploaded)
+            }
+        }
+        return urls
+    }
+
+    /// 편집에서 뺀 기존 영수증을 R2 에서 지운다 (DB 반영 성공 뒤에).
+    private func deleteRemovedReceipts(originalUrls: [String], keptUrls: [String]) async {
+        for url in originalUrls where !keptUrls.contains(url) {
+            await ReceiptStorage.delete(receiptUrl: url)
         }
     }
 }

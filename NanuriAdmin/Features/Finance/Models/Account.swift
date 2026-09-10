@@ -9,32 +9,31 @@ import Foundation
 /// 않고 유도하므로 출발점이 어딘가에 있어야 한다.
 struct Account: Identifiable, Codable {
     var id: UUID
-    let ledgerId: UUID
     let name: String
     /// 장부가 이 통장을 적기 시작하는 시점에 이미 들어 있던 돈.
     let openingBalance: Int
-    /// **이 통장이 상대 내역서의 적요에 찍히는 이름**(예금주).
+    /// **이 통장의 예금주 이름**(은행이 상대 내역서 적요에 찍는 값).
     ///
     /// 농협↔모임 이체는 반드시 모임통장을 지나므로 토스 내역서에 찍히는데, 토스는
     /// 상대 예금주 이름을 적요에 넣는다. 그래서 **적요가 이 이름이면 내부 이체다.**
-    /// `name`('농협'·'모임')은 사람이 부르는 이름이라 이 자리에 못 쓴다.
-    let statementAlias: String?
+    /// `name`('농협'·'모임')은 사람이 부르는 별명이라 이 자리에 못 쓴다. 농협은
+    /// '예수교대한성결고천교', 모임은 농협 내역서가 없어 비어 있다.
+    let holderName: String?
     let sortOrder: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name
-        case ledgerId = "ledger_id"
         case openingBalance = "opening_balance"
-        case statementAlias = "statement_alias"
+        case holderName = "holder_name"
         case sortOrder = "sort_order"
     }
 }
 
 /// 이 달에 한 방향으로 오간 내부 이체의 합.
 ///
-/// 거래 한 줄이 양쪽 통장을 알고 있어서(`counter_account_id`) 방향은 **부호에서
-/// 나온다.** 표에 따로 적어 두는 값이 아니라 `FinanceViewModel.internalTransferFlows`
-/// 가 그때그때 세는 값이다.
+/// 항목이 `is_internal_transfer` 로 이체임을 알고, 통장이 둘뿐이라 상대는 늘 '다른
+/// 통장 하나'다. 방향은 **부호에서 나온다**(그 통장 기준 +면 받은 것). 표에 따로
+/// 적어 두는 값이 아니라 `FinanceViewModel.internalTransferFlows` 가 세는 값이다.
 struct AccountFlow: Identifiable {
     /// 보낸 통장 → 받은 통장. 같은 방향끼리 합치려고 키로 쓴다.
     struct Direction: Hashable {

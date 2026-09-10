@@ -62,17 +62,15 @@ extension FinanceViewModel {
 
     /// 확인이 끝난 것을 장부에 넣는다.
     ///
-    /// 거래는 **통장에 찍힌 그대로** 넣고(적요도 은행 값 그대로), 장부에 적힐 항목은
-    /// **분할**로 만든다. 청구가 하나뿐일 때도 분할을 만든다 — 그래야 은행 적요를
-    /// 덮어쓰지 않고 항목에 제 이름을 줄 수 있다.
+    /// 거래(은행 증명)는 **통장에 찍힌 그대로** 넣고, 장부에 적힐 것은 **항목**으로
+    /// 만든다. 무엇이 항목이 되는지는 `StatementMatch.itemSpecs` 가 정한다 — 청구
+    /// 묶음의 제목들이거나, 사람이 적은 적요 한 줄이거나, 내부 이체 한 줄이거나,
+    /// 아무것도 없으면 통짜 한 줄이다. **모든 거래는 최소 한 항목으로 완전히 풀려야**
+    /// 은행 증명(거래)과 장부(항목)가 대조된다.
     ///
-    /// 거래를 한 번에 넣고 돌려받은 행을 **금액·시각으로 되찾아** 분할을 붙인다.
+    /// 거래를 한 번에 넣고 돌려받은 행을 **금액·시각으로 되찾아** 항목을 붙인다.
     /// 돌아오는 순서를 믿지 않는다.
     func importStatement(_ matches: [StatementMatch], into account: Account) async {
-        guard let ledgerId = currentLedger?.id else {
-            error = "장부를 먼저 선택해주세요."
-            return
-        }
         let todo = matches.filter { !$0.alreadyImported }
         guard !todo.isEmpty else { return }
 
@@ -81,20 +79,11 @@ extension FinanceViewModel {
 
         let rows = todo.map { match in
             BankTransactionInsert(
-                ledgerId: ledgerId,
                 accountId: account.id,
-                // 통장 사이 이체면 상대 통장을 적는다. **한 줄이 양쪽을 안다** —
-                // 이 칸이 차 있으면 합계·보고서에서 저절로 빠지고, 상대 통장 잔액도
-                // 부호를 뒤집어 여기서 유도된다.
-                counterAccountId: match.isInternalTransfer ? match.counterAccountId : nil,
                 datetime: match.line.datetime,
                 type: match.line.type,
                 amount: match.line.amount,
-                description: match.line.description,
-                // 고른 청구 묶음의 영수증을 그대로 물려준다. 청구가 이미 갖고 있는
-                // 것을 거래가 다시 받는 것이라 사람이 다시 찍어 올릴 일이 없다.
-                receiptUrls: match.chosen?.receiptUrls ?? [],
-                source: .statement
+                description: match.line.description
             )
         }
         do {
@@ -105,36 +94,31 @@ extension FinanceViewModel {
                 .execute()
                 .value
 
-            // 장부에 적힐 항목은 **분할**로 만든다. 무엇이 조각이 되는지는
-            // `StatementMatch.ledgerLines` 가 정한다 — 청구 묶음의 제목들이거나,
-            // 사람이 적은 적요 한 줄이거나, 내부 이체면 없다. 화면이 미리 보여준
-            // 것과 저장되는 것이 같아야 해서 그 계산을 한 곳에 뒀다.
-            //
-            // **청구가 하나뿐일 때도 조각을 만든다.** 그래야 은행 적요를 덮어쓰지
-            // 않고 항목에 제 이름을 줄 수 있다.
-            var splitInserts: [TransactionSplitInsert] = []
+            // 거래마다 항목을 만든다. `itemSpecs` 가 청구 묶음의 영수증까지 항목별로
+            // 실어 준다 — 청구가 이미 갖고 있는 것을 항목이 복사해 받는 것이라
+            // 사람이 다시 찍어 올릴 일이 없다.
+            var itemInserts: [FinanceItemInsert] = []
             for match in todo {
-                let lines = match.ledgerLines
-                guard !lines.isEmpty else { continue }
                 guard let tx = created.first(where: {
                     $0.amount == match.line.amount
                         && abs($0.datetime.timeIntervalSince(match.line.datetime)) < 1
                 }) else { continue }
-                // 카테고리는 이 줄에서 나온 **모든 조각에 같이** 붙는다. 청구엔 없는
-                // 값이라 사람이 확인 화면에서 준 것뿐이다.
-                let category = match.manualCategory.trimmingCharacters(in: .whitespaces)
-                for (index, line) in lines.enumerated() {
-                    splitInserts.append(TransactionSplitInsert(
-                        transactionId: tx.id,
-                        amount: line.amount,
-                        category: category.isEmpty ? nil : category,
-                        description: line.title,
+                for (index, spec) in match.itemSpecs(txAmount: tx.amount).enumerated() {
+                    itemInserts.append(FinanceItemInsert(
+                        accountId: account.id,
+                        datetime: tx.datetime,
+                        amount: spec.amount,
+                        isInternalTransfer: spec.isInternalTransfer,
+                        category: spec.category,
+                        description: spec.description,
+                        receiptUrls: spec.receiptUrls,
+                        sourceTransactionId: tx.id,
                         sortOrder: index
                     ))
                 }
             }
-            if !splitInserts.isEmpty {
-                try await supabase.from("finance_splits").insert(splitInserts).execute()
+            if !itemInserts.isEmpty {
+                try await supabase.from("finance_items").insert(itemInserts).execute()
             }
             await fetchTransactions()
         } catch {

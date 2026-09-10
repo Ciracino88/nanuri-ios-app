@@ -53,13 +53,14 @@ struct BillListView: View {
     var body: some View {
         VStack(spacing: 0) {
             AdminHeaderView(title: "청구서", leading: {
-                HeaderIconButton(
-                    systemName: isSelecting ? "xmark" : "checklist",
-                    label: isSelecting ? "고르기 그만두기" : "묶어서 보낼 청구서 고르기",
-                    tint: isSelecting ? DS.Palette.deposit : .primary
-                ) {
-                    withAnimation(DS.Motion.control) {
-                        if isSelecting { exitSelection() } else { enterSelection() }
+                if isSelecting {
+                    // 화면은 안 닫고 선택 모드만 끈다 → 취소(xmark) 버튼.
+                    HeaderCancelButton(label: "고르기 그만두기") {
+                        withAnimation(DS.Motion.control) { exitSelection() }
+                    }
+                } else {
+                    HeaderIconButton(systemName: "checklist", label: "묶어서 보낼 청구서 고르기") {
+                        withAnimation(DS.Motion.control) { enterSelection() }
                     }
                 }
             })
@@ -77,6 +78,9 @@ struct BillListView: View {
             if isSelecting { selectionBar }
         }
         .screenBackground()
+        // 선택 모드에서는 하단 탭바를 숨긴다 — 아래 선택 바(`selectionBar`)가
+        // 그 자리를 쓰고, 고르는 동안엔 탭을 옮길 일이 없다. 끄면 탭바가 돌아온다.
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
         .sheet(item: $detailBill, onDismiss: {
             // 상세 시트가 완전히 닫힌 뒤에 다음 시트를 연다. 같은 순간에 둘을
             // 겹치면 SwiftUI 가 뒤엣것을 조용히 삼킨다.
@@ -102,7 +106,7 @@ struct BillListView: View {
             // 높이는 시트가 자기 내용을 재서 정한다 (`BillDetailView.detents`).
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $payeeEdit) { target in
+        .fullScreenCover(item: $payeeEdit) { target in
             PayeeEditView(viewModel: payeeViewModel, target: target)
         }
         .sheet(item: $pendingTransfer) { transfer in

@@ -11,7 +11,20 @@ struct NotificationListView: View {
     @State private var showClearAlert = false
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀·버튼이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text("알림").headerTitle() },
+                leading: { HeaderBackButton(label: "닫기") { dismiss() } },
+                trailing: {
+                    Button("모두 지우기") { showClearAlert = true }
+                        .typeStyle(DS.Typo.labelM)
+                        .foregroundColor(DS.Palette.withdrawal)
+                        .padding(.horizontal, DS.Spacing.small)
+                        .disabled(store.items.isEmpty)
+                }
+            )
             Group {
                 if store.items.isEmpty {
                     EmptyStateView(
@@ -23,26 +36,14 @@ struct NotificationListView: View {
                     list
                 }
             }
-            // 헤더는 흰색으로 두고 **목록 영역만** 물들인다.
-            .screenBackground(DS.Surface.notice)
-            .navigationTitle("알림")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("닫기") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("모두 지우기") { showClearAlert = true }
-                        .foregroundColor(DS.Palette.withdrawal)
-                        .disabled(store.items.isEmpty)
-                }
-            }
-            .alert("알림을 모두 지울까요?", isPresented: $showClearAlert) {
-                Button("모두 지우기", role: .destructive) { store.removeAll() }
-                Button("취소", role: .cancel) {}
-            } message: {
-                Text("청구서는 그대로 남아요. 이 목록만 비워져요.")
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .screenBackground(DS.Surface.notice)
+        .alert("알림을 모두 지울까요?", isPresented: $showClearAlert) {
+            Button("모두 지우기", role: .destructive) { store.removeAll() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("청구서는 그대로 남아요. 이 목록만 비워져요.")
         }
         .task {
             await store.syncFromNotificationCenter()

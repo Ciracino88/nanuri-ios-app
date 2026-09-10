@@ -18,27 +18,26 @@ struct FinanceView: View {
     @State private var showAccounts = false
     /// ⋯ 메뉴가 여는 거래 추가 시트. 농협 거래를 옮겨 적는 자리다.
     @State private var showAddTransaction = false
-    /// 카테고리 추가 모드. 켜지면 항목이 "눌러서 고르는 것" 이 된다.
+    /// 선택 모드. 켜지면 항목이 "눌러서 고르는 것" 이 되고, 아래 바에서 병합·삭제·
+    /// 카테고리 중 하나를 한다.
     @State private var isSelecting = false
     @State private var selection: Set<String> = []
     @State private var showCategorySheet = false
+    @State private var showMergeInput = false
+    @State private var mergeDescription = ""
+    @State private var showDeleteSelectedConfirm = false
     /// 햄버거(≡)가 여는 풀스크린 메뉴.
     @State private var showMenu = false
     /// 메뉴에서 고른 동작. 메뉴가 닫힌 **뒤에** 실행한다 — 풀스크린 위에 바로
     /// 다른 시트를 얹으면 둘이 부딪혀 조용히 안 뜬다. `onDismiss` 가 이걸 집어 연다.
     @State private var pendingMenuAction: FinanceMenuAction?
 
-    /// 장부를 고르는 화면이 없다. 통장이 하나라 고를 것이 없고, 하나뿐인 걸 매번
-    /// 손으로 고르게 하는 건 아무 뜻이 없다. `start()` 가 받는 즉시 연다.
-    ///
-    /// 그래서 갈래가 셋이다 — **열어 둔 장부 / 정말 장부가 없음 / 아직 받는 중.**
-    /// 뒤의 둘을 안 가르면 받아 오는 사이에 "장부가 없어요" 가 깜빡 스친다.
+    /// 통장은 마이그레이션에서 심겨 늘 둘이라, 고르거나 만드는 화면이 없다.
+    /// 받는 중이면 로딩, 다 받으면 바로 장부를 연다.
     var body: some View {
         Group {
-            if viewModel.currentLedger != nil {
+            if viewModel.loaded {
                 content()
-            } else if viewModel.ledgersLoaded {
-                FinanceLedgerGateView(viewModel: viewModel)
             } else {
                 loadingView
             }
@@ -71,8 +70,8 @@ struct FinanceView: View {
                 center: { FinanceMonthStepper(viewModel: viewModel) },
                 leading: {
                     if isSelecting {
-                        HeaderIconButton(systemName: "xmark", label: "고르기 그만두기",
-                                         tint: DS.Palette.accent) { exitSelection() }
+                        // 선택 모드를 끄는 것뿐 화면은 안 닫는다 → 취소(xmark) 버튼.
+                        HeaderCancelButton(label: "고르기 그만두기") { exitSelection() }
                     } else {
                         HeaderIconButton(systemName: "plus", label: "거래 추가") {
                             showAddTransaction = true
@@ -84,7 +83,8 @@ struct FinanceView: View {
                     if !isSelecting {
                         // 선택 모드는 이제 메뉴 안이 아니라 헤더의 제 버튼이다 —
                         // 장부를 쓰는 본업이라 두 단계 안에 숨길 자리가 아니다.
-                        HeaderIconButton(systemName: "tag", label: "카테고리 추가") {
+                        // 고른 뒤 아래 바에서 병합·삭제·카테고리 중 하나를 한다.
+                        HeaderIconButton(systemName: "checklist", label: "항목 고르기") {
                             enterSelection()
                         }
                         .disabled(viewModel.ledgerRows.isEmpty)
@@ -102,7 +102,7 @@ struct FinanceView: View {
                     Spacer()
                     ProgressView()
                     Spacer()
-                } else if viewModel.transactions.isEmpty {
+                } else if viewModel.items.isEmpty {
                     emptyView
                 } else {
                     scrollingContent()
@@ -131,16 +131,14 @@ struct FinanceView: View {
             } message: {
                 Text(viewModel.error ?? "")
             }
-            .sheet(item: $editingRow) { row in
-                // 조각을 눌렀으면 항목 편집, 분할 없는 거래를 눌렀으면 거래 편집.
-                if row.split != nil {
-                    PieceEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
-                } else {
-                    TransactionEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
-                }
+            // 타이틀이 필요한 화면이라 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            .fullScreenCover(item: $editingRow) { row in
+                ItemEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
             // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
-            .sheet(item: $viewModel.incomingStatement) { incoming in
+            // 시트가 아니라 풀스크린이다 — 확인 화면이 상세를 push 로 받는다
+            // (레퍼런스식 내비게이션, DESIGN.md §13). AddTransactionView 와 같은 문법.
+            .fullScreenCover(item: $viewModel.incomingStatement) { incoming in
                 if let account = viewModel.account(named: "모임") {
                     StatementImportView(viewModel: viewModel, url: incoming.url, account: account)
                 }
@@ -148,7 +146,7 @@ struct FinanceView: View {
             .sheet(item: $exportFile) { file in
                 ShareSheet(items: [file.url])
             }
-            .sheet(item: $reportPreview) { preview in
+            .fullScreenCover(item: $reportPreview) { preview in
                 FinanceReportPreviewView(html: preview.html, title: preview.title)
             }
             .sheet(isPresented: $showSpendingDetail) {
@@ -157,7 +155,8 @@ struct FinanceView: View {
             .sheet(isPresented: $showAccounts) {
                 AccountBalanceView(viewModel: viewModel)
             }
-            .sheet(isPresented: $showAddTransaction) {
+            // 토스처럼 풀스크린으로 연다 (시트 아님).
+            .fullScreenCover(isPresented: $showAddTransaction) {
                 AddTransactionView(viewModel: viewModel)
             }
             // 드롭다운이 아니라 화면을 통째로 덮는 풀스크린이다. 닫힌 뒤 고른 동작을
@@ -168,7 +167,7 @@ struct FinanceView: View {
                     showMenu = false
                 }
             }
-            .sheet(isPresented: $showCategorySheet) {
+            .fullScreenCover(isPresented: $showCategorySheet) {
                 CategoryAssignView(suggestions: viewModel.usedCategories,
                                    count: selection.count) { category in
                     Task {
@@ -177,6 +176,30 @@ struct FinanceView: View {
                     }
                 }
             }
+            // 병합: 합쳐질 항목의 적요를 새로 입력받는다 (c안).
+            .alert("합쳐서 적을 이름", isPresented: $showMergeInput) {
+                TextField("적요 (예: 8월 심방비 모음)", text: $mergeDescription)
+                Button("병합") {
+                    Task {
+                        await viewModel.mergeItems(selectedRows, description: mergeDescription)
+                        exitSelection()
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("고른 \(selection.count)개 항목을 한 줄로 합쳐요. 금액은 합이 되고, 영수증은 모두 옮겨져요.")
+            }
+            .confirmationDialog("고른 항목을 삭제할까요?", isPresented: $showDeleteSelectedConfirm, titleVisibility: .visible) {
+                Button("\(selection.count)개 삭제", role: .destructive) {
+                    Task {
+                        await viewModel.deleteItems(selectedRows)
+                        exitSelection()
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("영수증까지 함께 지워져요. 되돌릴 수 없어요.")
+            }
             .safeAreaInset(edge: .bottom) {
                 if isSelecting { selectionBar }
             }
@@ -184,6 +207,9 @@ struct FinanceView: View {
         // 목록이 흰 바탕에 그냥 앉는 구조라 페이지가 흰색이다. 회색으로 서는 건
         // 요약 밴드 하나뿐이고, 그 대비가 화면 위쪽을 잡아 준다.
         .screenBackground(DS.Surface.card)
+        // 선택 모드에서는 하단 탭바를 숨긴다 — 아래 선택 바(`selectionBar`)가 그
+        // 자리를 쓰고, 고르는 동안엔 탭을 옮길 일이 없다 (청구서 탭과 같은 규칙).
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
         .task {
             await viewModel.fetchTransactions()
         }
@@ -208,17 +234,29 @@ struct FinanceView: View {
         selection = []
     }
 
-    /// 고르는 중에 바닥에 서는 바. 묶어 보내기의 `selectionBar` 와 같은 문법이다.
+    /// 고른 항목들.
+    private var selectedItems: [FinanceItem] { selectedRows.map(\.item) }
+
+    /// 병합할 수 있는 선택인가. **농협 수기 항목만**(은행 증명 없음), 같은 통장·같은
+    /// 방향, 둘 이상일 때. 뷰모델도 저장 직전에 한 번 더 막는다.
+    private var canMerge: Bool {
+        let items = selectedItems
+        guard items.count >= 2,
+              items.allSatisfy({ $0.sourceTransactionId == nil && !$0.isInternalTransfer }),
+              let acc = items.first?.accountId, items.allSatisfy({ $0.accountId == acc })
+        else { return false }
+        return items.allSatisfy { $0.amount > 0 } || items.allSatisfy { $0.amount < 0 }
+    }
+
+    /// 고르는 중에 바닥에 서는 바. 골라 둔 게 있으면 **병합·삭제·카테고리** 셋을 준다.
     private var selectionBar: some View {
         VStack(spacing: 0) {
             Divider()
             VStack(spacing: DS.Spacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(selection.isEmpty ? "카테고리를 추가할 줄을 고르세요" : "\(selection.count)줄 선택")
+                    Text(selection.isEmpty ? "항목을 고르세요" : "\(selection.count)줄 선택")
                         .rowTitle()
                     Spacer(minLength: DS.Spacing.small)
-                    // **아무것도 안 골랐을 때 가장 쓸모 있다.** 카테고리를 붙이는 일은
-                    // 대개 "남은 것 전부" 로 시작해서 몇 줄을 빼는 식이다.
                     if !viewModel.uncategorizedRows.isEmpty {
                         Button("미지정 전체") {
                             selection = Set(viewModel.uncategorizedRows.map(\.id))
@@ -228,7 +266,15 @@ struct FinanceView: View {
                     }
                 }
                 if !selection.isEmpty {
-                    ActionButton(title: "카테고리 추가", kind: .primary) { showCategorySheet = true }
+                    HStack(spacing: DS.Spacing.small) {
+                        ActionButton(title: "병합", kind: .tinted) {
+                            mergeDescription = ""
+                            showMergeInput = true
+                        }
+                        .disabled(!canMerge)
+                        ActionButton(title: "삭제", kind: .destructive) { showDeleteSelectedConfirm = true }
+                        ActionButton(title: "카테고리", kind: .primary) { showCategorySheet = true }
+                    }
                 }
             }
             .padding(.horizontal, DS.Spacing.screen)
@@ -243,30 +289,29 @@ struct FinanceView: View {
     /// 정렬 줄. **오른쪽 끝에 붙는다** — 왼쪽은 날짜 셀렉터가 이미 다 쓴 폭이라
     /// 비어 있고, 정렬은 목록의 성질이라 목록 바로 위 오른쪽에 있어야 눈이 잇는다.
     ///
-    /// 두 갈래뿐이라(최신순·오래된 순) 세그먼트로 폭을 나누지 않고 `Menu` 로
-    /// 접어 둔다. 고른 갈래가 라벨에 그대로 적혀서 펼치지 않아도 지금 무슨 순인지
-    /// 읽힌다. 정렬 자체는 뷰모델의 `oldestFirst` 한 값이 갖는다.
+    /// 두 갈래뿐이라(최신순·오래된 순) 메뉴로 고르게 하지 않고 **눌러서 바로
+    /// 뒤집는 토글**이다 — 옵션을 펼쳐 다시 한 번 고르는 손품이 없다. 라벨은
+    /// 지금 무슨 순인지를 적고, 누르면 반대 순으로 바뀐다. 정렬 자체는 뷰모델의
+    /// `oldestFirst` 한 값이 갖는다.
     private var sortRow: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
-            Menu {
-                Picker("정렬", selection: $viewModel.oldestFirst) {
-                    Text("최신순").tag(false)
-                    Text("오래된 순").tag(true)
-                }
+            Button {
+                withAnimation(DS.Motion.list) { viewModel.oldestFirst.toggle() }
             } label: {
                 HStack(spacing: DS.Spacing.tight) {
                     Image(systemName: "arrow.up.arrow.down")
                         .font(DS.Icon.font(DS.Icon.s))
                     Text(viewModel.oldestFirst ? "오래된 순" : "최신순")
                         .typeStyle(DS.Typo.labelS)
-                    Image(systemName: "chevron.down")
-                        .font(DS.Icon.font(DS.Icon.s))
                 }
                 .foregroundColor(DS.Ink.secondary)
                 .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("정렬 순서")
+            .accessibilityValue(viewModel.oldestFirst ? "오래된 순" : "최신순")
+            .accessibilityHint("두 번 누르면 정렬 순서를 바꿔요")
         }
         .padding(.horizontal, DS.Spacing.s4)
         .padding(.bottom, DS.Spacing.small)

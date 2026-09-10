@@ -14,7 +14,19 @@ struct CategoryAssignView: View {
     @State private var category = ""
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀·붙이기가 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text("카테고리 추가").headerTitle() },
+                leading: { HeaderBackButton(label: "취소") { dismiss() } },
+                trailing: {
+                    Button("붙이기") { onApply(category); dismiss() }
+                        .typeStyle(DS.Typo.labelM)
+                        .foregroundColor(DS.Ink.brand)
+                        .padding(.horizontal, DS.Spacing.small)
+                }
+            )
             Form {
                 Section {
                     TextField("카테고리 (예: 회비, 행사비, 심방비)", text: $category)
@@ -23,20 +35,8 @@ struct CategoryAssignView: View {
                     Text("\(count)줄에 같이 붙어요. 비워 두고 누르면 카테고리가 지워져요.")
                 }
             }
-            .navigationTitle("카테고리 추가")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("취소") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("붙이기") {
-                        onApply(category)
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
+            .scrollContentBackground(.hidden)
         }
+        .screenBackground(DS.Surface.page)
     }
 }

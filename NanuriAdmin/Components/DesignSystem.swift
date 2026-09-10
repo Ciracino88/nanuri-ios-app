@@ -196,6 +196,13 @@ enum DS {
         /// 주요 동작. **화면당 하나만 쓴다** — 원문이 단일 강조색 정책을 못 박는다.
         static let accent = Ink.brand
 
+        /// 묶음(여러 청구가 한 출금으로 나간 것). **거래내역서 확인 계열 전용이다.**
+        ///
+        /// ⚠️ 원문에 없는 색이고 재정 탭 본체는 안 쓴다 — 불러오기 화면에서만
+        /// "이 출금은 여러 항목이 묶인 것" 을 한눈에 갈라 보이려고 더한 보라다
+        /// (DESIGN.md §13 의 문서화된 예외). 강조색(파랑)과 부딪히지 않게 색상만 뗀다.
+        static let group = Color.adaptive(light: Ramp.purple500, dark: 0x9B8CFF)
+
         /// 카테고리 비중 막대의 사다리. 큰 것부터 이 순서로 쓴다.
         ///
         /// ⚠️ **원문에 없는 값이다.** `blue500` 에서 명도만 올려 이 앱이 뜬 세 단이다.
@@ -244,6 +251,11 @@ enum DS {
         static let done = ColorTone(
             content: Palette.done,
             surface: .adaptive(light: 0xE3F5EA, dark: 0x14301F)
+        )
+        /// 묶음 배지·아이콘 타일. **거래내역서 확인 계열 전용** (DESIGN.md §13 예외).
+        static let group = ColorTone(
+            content: Palette.group,
+            surface: .adaptive(light: 0xF0EEFF, dark: 0x221E3A)
         )
         /// 뜻이 없는 회색 배지.
         static let neutral = ColorTone(content: Ink.secondary, surface: Surface.secondary)

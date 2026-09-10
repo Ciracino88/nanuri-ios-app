@@ -1,32 +1,28 @@
 import Foundation
 
-/// **장부의 한 항목.** 거래 자체이거나, 분할 조각이다.
+/// **장부의 한 줄 = 항목 하나.**
 ///
-/// 재정 목록이 이걸 그린다. 예전에는 거래를 그렸는데, 그러면 묶어 보낸 출금 하나가
-/// 한 항목으로 뭉쳐서(`아침식사 외 8`) **목록만 통장 시점이고 보고서·분석은 장부 시점**
-/// 이라 한 앱 안에 단위가 둘이 됐다. 사람이 쓰던 엑셀도 항목 단위다.
+/// 재정 목록이 이걸 그린다. 장부 정본이 `FinanceItem` 이므로 목록도 항목 단위다 —
+/// 묶어 보낸 출금 하나는 여기서 여러 줄이 된다. 사람이 쓰던 엑셀도 항목 단위고,
+/// 보고서·분석도 이미 그 단위로 센다.
 ///
-/// 통장과 한 줄씩 대조하는 일은 잃지 않는다 — 중복 방지도 월말 검산도 **데이터가
-/// 하는 일**이고, 통장을 나란히 놓고 보는 자리는 거래내역서 확인 화면이 맡는다.
-///
-/// **내부 이체는 쪼개지 않는다.** 사람 장부에 없는 줄이라 조각이 아예 없다.
+/// **은행 증명이 뒤에 있으면**(모임) 그 거래를 `transaction` 으로 함께 들고 온다 —
+/// 상세 화면이 은행 적요·대조 맥락을 보여주는 데 쓴다. 농협 수기 항목은 `nil`.
 struct LedgerRow: Identifiable {
-    let transaction: BankTransaction
-    /// `nil` 이면 이 항목이 거래 자체다 (분할이 없는 거래).
-    let split: TransactionSplit?
+    let item: FinanceItem
+    /// 이 항목이 나온 은행 거래(모임). 농협 수기 항목은 `nil`.
+    let transaction: BankTransaction?
 
-    var id: String { split?.id.uuidString ?? transaction.id.uuidString }
-    var datetime: Date { transaction.datetime }
-    var isInternalTransfer: Bool { transaction.isInternalTransfer }
+    var id: String { item.id.uuidString }
+    var datetime: Date { item.datetime }
+    var amount: Int { item.amount }
+    var isDeposit: Bool { item.isDeposit }
+    var isInternalTransfer: Bool { item.isInternalTransfer }
 
-    /// 조각 금액은 **크기만** 저장돼 있다. 부호는 거래가 준다.
-    var amount: Int {
-        guard let split else { return transaction.amount }
-        return transaction.isDeposit ? split.amount : -split.amount
+    /// 장부에 적힌 이름. 항목의 적요(사람 값)를 먼저, 비면 은행 적요로 떨어진다.
+    var title: String? {
+        let d = item.description?.trimmingCharacters(in: .whitespaces) ?? ""
+        return d.isEmpty ? transaction?.description : d
     }
-    var isDeposit: Bool { transaction.isDeposit }
-
-    /// 장부에 적힌 이름. 조각이면 조각의 적요, 아니면 거래의 적요(은행 값)다.
-    var title: String? { split?.description ?? transaction.description }
-    var category: String? { split?.category ?? transaction.category }
+    var category: String? { item.category }
 }
