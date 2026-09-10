@@ -6,8 +6,8 @@
 
 - 매칭의 진실(정본)은 이 문서다.
 - 기본 용어(항목·거래·적요·카테고리·청구 내역·내부 이체)는 [../README.md](../README.md) 에.
-- 규칙화된 불변식은 [ARCHITECTURE.md](../../../ARCHITECTURE.md) "거래내역서는 청구서와 맞춰서 들어온다" 에.
-- 화면 규칙(불러오기 계열의 문서화된 예외)은 [DESIGN.md](../../../DESIGN.md) §13 에.
+- 규칙화된 불변식은 [ARCHITECTURE.md](../../../../ARCHITECTURE.md) "거래내역서는 청구서와 맞춰서 들어온다" 에.
+- 화면 규칙(불러오기 계열의 문서화된 예외)은 [DESIGN.md](../../../../DESIGN.md) §13 에.
 
 ---
 
@@ -156,7 +156,7 @@ flowchart TD
 
 ## 저장 — 두 층으로 나뉜다
 
-`importStatement` 이 두 가지를 넣는다. 근거는 [ARCHITECTURE.md](../../../ARCHITECTURE.md)
+`importStatement` 이 두 가지를 넣는다. 근거는 [ARCHITECTURE.md](../../../../ARCHITECTURE.md)
 "통장은 둘, 장부는 하나".
 
 1. **거래(`finance_transactions`)** — 통장에 찍힌 **은행 증명**. 손대지 않고 그대로 넣는다.
@@ -179,8 +179,8 @@ INSERT 가 돌려주는 순서를 믿지 않기 때문이다.
 
 ## 되돌리지 말 것 (이 폴더 몫)
 
-전체 목록과 근거는 [ARCHITECTURE.md](../../../ARCHITECTURE.md) 와 루트
-[CLAUDE.md](../../../CLAUDE.md) 에. 여기서 특히 조심할 것:
+전체 목록과 근거는 [ARCHITECTURE.md](../../../../ARCHITECTURE.md) 와 루트
+[CLAUDE.md](../../../../CLAUDE.md) 에. 여기서 특히 조심할 것:
 
 - **내부 이체 판정을 하드로 잠그지 말 것** — `holderName` 매칭이라 오탐이 날 수 있어
   확인 화면에서 사람이 끈다. 예금주명 상수를 코드에 박으면 안 된다.
