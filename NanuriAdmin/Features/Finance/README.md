@@ -25,7 +25,7 @@
 | 기능 | 하는 일 | 주요 파일 |
 | --- | --- | --- |
 | 조회 및 분석 | 목록 조회, 요약, 그래프 시각화, 잔액 확인 | `FinanceView`, `FinanceSummaryBand`, `FinanceDaySelector`, `FinanceMonthStepper`, `SpendingDetailView`, `AccountBalanceView`, `+Summary`/`+Balance`/`+Month` |
-| 거래 CRUD | 수기 추가, 편집, 삭제, 카테고리 라벨링 | `AddTransactionView`, `TransactionEditView`, `+Edit` |
+| 거래 CRUD | 수기 추가, 항목 편집, 삭제, 병합, 카테고리 라벨링 | `AddTransactionView`, `ItemEditView`, `+Edit` |
 | 불러오기 및 매칭 | 토스 거래내역서 파싱 → 매칭 → 거래 생성 | `StatementImportView`, `StatementMatcher`, `TossPdfParser`, `+Statement` |
 | 내보내기 | 월별 보고서, 영수증 부록 | `FinanceReportExporter`, `FinanceReportPreviewView`, `+Export` |
 
@@ -40,22 +40,25 @@
 
 ```mermaid
 flowchart TD
-    bills["청구서 (bills)<br/>승인됨"]
+    bills["청구서 (bills)<br/>송금 완료"]
     parser["TossPdfParser<br/>거래내역서 파싱"]
     matcher["StatementMatcher<br/>청구 내역과 매칭"]
     imp["StatementImportView<br/>확인 후 장부에 추가"]
     add["AddTransactionView<br/>농협 수기 작성"]
-    tx["BankTransaction<br/>(+ TransactionSplit)"]
-    rows["LedgerRow (항목)"]
+    tx["BankTransaction<br/>은행 증명 (모임)"]
+    items["FinanceItem<br/>장부 정본 (항목)"]
+    rows["LedgerRow"]
     out["목록, 요약, 보고서"]
 
     bills --> matcher
     parser --> matcher
     matcher --> imp
-    imp -->|거래 생성| tx
-    add -->|거래 생성| tx
-    bills -. 영수증 한 번 복사 .-> tx
-    tx --> rows --> out
+    imp -->|거래 + 항목 생성| tx
+    imp --> items
+    add -->|항목만 생성 (거래 없음)| items
+    bills -. 영수증 한 번 복사 .-> items
+    tx -. 은행 증명 .-> items
+    items --> rows --> out
 ```
 
 ## 파일 지도
@@ -67,8 +70,8 @@ flowchart TD
 - **`FinanceView.swift`** — 탭 화면 조립. 헤더(거래추가 · 월넘김 · 카테고리 · 메뉴), 칩
   셀렉터, 목록(`scrollingContent`/`daySection`), 선택 모드, 상태를 갖는다.
 - **`FinanceViewModel.swift`** — 저장 프로퍼티(@Published) + 조회 코어
-  (`filtered`·`ledgerRows`·`splits(for:)` 등). 모든 파생값이 여기서 시작한다.
-- **`FinanceViewModel+Ledger.swift`** — 장부·통장·거래 로드(`start`·`fetch*`).
+  (`filtered`·`filteredExternal`·`ledgerRows`·`rows(of:)` 등). 모든 파생값이 여기서 시작한다.
+- **`FinanceViewModel+Load.swift`** — 항목·통장·거래 로드(`start`·`fetch*`).
 - **`FinanceMenuView.swift`** — 헤더 햄버거(≡)가 여는 풀스크린 메뉴(통장 잔액·내보내기).
 - **`FinanceHelpers.swift`** — UI 보조 타입/뷰(`DayGroup`·`ExportFile`·`ReportPreview`
   ·`SpendingComparison`·`ChipFlowLayout`·`FinanceLedgerGateView` 등).
@@ -85,18 +88,19 @@ flowchart TD
 - **`FinanceViewModel+Month.swift`** — 달 넘김·달력(주/일 계산).
 
 ### `Transactions/` (거래 CRUD)
-- **`TransactionEditView.swift`** — **분할 없는 거래 편집.** 금액·일시·통장·적요·카테고리
-  ·분할·영수증. (거래내역서 거래는 금액·일시·통장이 잠긴다)
-- **`PieceEditView.swift`** — **분할된 항목(조각) 편집.** 그 항목의 적요·카테고리만 고치고,
-  총액·통장·일시는 "속한 출금"으로 읽기 전용. (탭 라우팅은 아래 "핵심 모델" 참고)
-- **`TransactionEditShared.swift`** — 두 편집 화면 공용 섹션(`AmountHeroSection`
-  ·`ReceiptButtonSection`·`DeleteSection`).
-- **`SplitEditSheet.swift`** — 분할 항목 하나 입력·편집 바텀 시트(`SplitDraft` 포함).
+- **`ItemEditView.swift`** — **항목 하나의 상세·편집.** 거래·조각 구분 없이 이 화면
+  하나가 다 받는다. 값을 죽 나열하고 고칠 수 있는 것에만 chevron 을 달아 필드별 시트로
+  고친다. **무엇을 고칠 수 있나는 은행 증명 유무(`item.isBankBacked`)가 정한다** —
+  농협 수기 항목은 금액·일시·통장까지 열리고, 거래내역서에서 온 모임 항목은 그 셋이
+  은행 값이라 잠긴다(카테고리·적요·영수증만).
+- **`TransactionEditShared.swift`** — 편집 화면 공용 섹션(`DetailRow` 등). 값을 나열하고
+  chevron 이 있는 줄만 편집 시트를 여는 상세 문법을 담는다.
 - **`Receipts.swift`** — 영수증 관리·전체화면 뷰어·카메라(`ReceiptManagerView`
   ·`ReceiptViewerView`·`CameraPicker`·`PendingImage`·`ReceiptSource`).
 - **`AddTransactionView.swift`** — 농협 수기 추가(빠른 반복 입력. 카테고리·분할 없음).
+- **`WeekDatePicker.swift`** — 거래 추가에서 날짜를 고르는 가로 주 단위 셀렉터.
 - **`CategoryAssignView.swift`** — 선택 모드에서 여러 항목에 카테고리를 한 번에 붙이는 시트.
-- **`FinanceViewModel+Edit.swift`** — 거래 쓰기(추가·편집·삭제·카테고리 추가).
+- **`FinanceViewModel+Edit.swift`** — 항목 쓰기(수기 추가·필드 편집·삭제·병합·카테고리 추가).
 
 ### `Import/` (불러오기 및 매칭)
 - **`StatementImportView.swift`** — 거래내역서를 장부에 넣기 전 사람이 확인하는 화면.
@@ -111,193 +115,77 @@ flowchart TD
 
 ### `Models/`
 순수 데이터 타입(`import Foundation`). 엔티티 + 그 DTO(Insert/Patch)를 한 파일로.
-- `Ledger` · `Account` · `BankTransaction` · `TransactionSplit` · `LedgerRow`
+- `Account` · `BankTransaction`(은행 증명) · `FinanceItem`(장부 정본, + `FinanceItemInsert`
+  ·`ItemFieldsUpdate`·`CategoryPatch`) · `LedgerRow`(항목을 감싼 목록 한 줄)
   · `ReportModels`(ReportLineItem·CategoryTotal) · `IncomingStatement`.
 
 ---
 
 ## 핵심 모델
 
-### 항목 = 거래 또는 조각(split)
-목록·보고서의 한 줄은 **은행 거래가 아니라 "항목"**이다. 조각(`TransactionSplit`)은
-항목을 여러 개로 만들어 내는 **내부 장치**일 뿐, 사람이 보는 단위는 늘 항목이다.
-- 거래가 분할돼 있으면(매칭·수동분할) → **조각마다 한 항목**. 묶어보내기 출금 하나는
-  여러 항목이 된다.
-- 분할이 없으면(미매칭·수기) → 거래 하나가 한 항목.
-- 내부 이체는 안 쪼갠다 → 한 항목.
+### 항목이 곧 장부 줄이다 (`FinanceItem`)
+목록·보고서의 한 줄은 은행 거래가 아니라 **항목(`FinanceItem`)**이다. 항목이 장부
+정본이고, 거래(`BankTransaction`)는 그 뒤의 **은행 증명**일 뿐이다. 근거는
+[ARCHITECTURE.md](../../../ARCHITECTURE.md) "통장은 둘, 장부는 하나".
+- 불러오기 묶음 출금 하나(모임) → **항목 여럿.** 같은 `sourceTransactionId` 를 공유한다.
+- 미매칭·내부 이체(모임) → 항목 하나.
+- 농협 수기 → 거래 없이 **항목만**(`sourceTransactionId == nil`).
 
-`ledgerRows(of:)`([FinanceViewModel.swift](FinanceViewModel.swift))가 이 펼침을 한다.
-칩 개수도 항목 수(=엑셀 장부 줄 수)와 같다.
+`rows(of:)`([FinanceViewModel.swift](FinanceViewModel.swift))가 항목을 정렬해
+`LedgerRow`(항목 + 그 은행 거래)로 감싼다. 칩 개수도 항목 수(=엑셀 장부 줄 수)와 같다.
 
 ```mermaid
 flowchart LR
-    subgraph g1["분할된 거래 (매칭 또는 수동 분할)"]
-      t1["BankTransaction<br/>458,000원 출금 1건"]
-      t1 --> r1["수영장 260,000"]
-      t1 --> r2["카페 138,000"]
-      t1 --> r3["파라솔 60,000"]
+    subgraph g1["불러오기 묶음 출금 (모임)"]
+      t1["BankTransaction<br/>458,000원 출금 1건<br/>은행 증명"]
+      t1 -. source_transaction_id .-> r1["FinanceItem 수영장 260,000"]
+      t1 -. source_transaction_id .-> r2["FinanceItem 카페 138,000"]
+      t1 -. source_transaction_id .-> r3["FinanceItem 파라솔 60,000"]
     end
-    subgraph g2["분할 없는 거래 (미매칭 또는 수기)"]
-      t2["BankTransaction 1건"] --> r4["항목 1개"]
+    subgraph g2["농협 수기 (거래 없음)"]
+      r4["FinanceItem 1개<br/>source_transaction_id = nil"]
     end
 ```
 
-### 탭 → 항목 편집 / 거래 편집
-목록에서 항목을 누르면 **그 항목(`LedgerRow`, 어느 조각인지 포함)**을 넘긴다.
-`FinanceView` 가 `row.split != nil` 로 화면을 가른다 — 조각이면 **`PieceEditView`**
-(그 항목의 적요·카테고리만, 총액·통장·일시는 "속한 출금 전체"로 읽기 전용), 분할 없는
-거래면 **`TransactionEditView`**. 두 화면은 히어로·영수증·삭제 섹션을
-`TransactionEditShared` 로 공유하고, 저장은 둘 다 `saveTransactionEdits` 로 수렴한다.
+### 목록 → 항목 편집 (`ItemEditView`)
+목록에서 줄을 누르면 그 항목(`LedgerRow`)을 `.fullScreenCover(item:)` 로
+`ItemEditView` 에 넘긴다. **거래·조각 구분 없이 화면 하나가 다 받는다** — 예전의
+`TransactionEditView`/`PieceEditView` 두 갈래를 하나로 합쳤다. 무엇을 고칠 수 있나는
+`item.isBankBacked`(= `sourceTransactionId != nil`)가 정한다:
+- **농협 수기 항목** → 금액·일시·통장까지 열림.
+- **거래내역서에서 온 모임 항목** → 그 셋은 은행 값이라 chevron 이 없다(잠김).
+  카테고리·적요·영수증만 고친다.
+
+값을 죽 나열하고 chevron 이 있는 줄만 필드별 시트를 여는 문법을 `TransactionEditShared`
+로 공유하고, 저장은 `saveItemFields`(모임)·`saveManualItem`(농협)으로 수렴한다.
 
 ```mermaid
 flowchart TD
-    tap["목록에서 항목을 누름 → LedgerRow 전달"] --> q{"row.split != nil?"}
-    q -->|조각인 항목| piece["PieceEditView<br/>그 항목의 적요·카테고리만<br/>총액, 통장, 일시, 영수증, 삭제는 출금 전체"]
-    q -->|거래 자체인 항목| edit["TransactionEditView<br/>금액, 통장, 일시, 적요, 카테고리, 분할"]
+    tap["목록에서 항목을 누름 → LedgerRow"] --> edit["ItemEditView"]
+    edit --> q{"item.isBankBacked?"}
+    q -->|"수기 (nil)"| a["금액·일시·통장·적요·카테고리·영수증 전부 열림"]
+    q -->|"모임 (거래내역서)"| b["금액·일시·통장 잠김<br/>적요·카테고리·영수증만"]
 ```
 
 ### 매칭은 일회성 복사다 (bill_id 없음)
-청구↔거래 연결은 불러오기 순간에 청구의 `receipt_url` 을 거래 `receipt_urls` 로
-**복사**할 뿐, `finance_transactions` 에 `bill_id` 는 없다. 이미 들어온 거래에
-뒤늦게 청구를 넣어도 **자동으로 안 붙는다** — 그때는 편집창에서 수동 분할/영수증
-첨부로 바로잡는다. (분할 "생성"이 미매칭 거래에서만 뜨는 이유)
+청구↔항목 연결은 불러오기 순간에 청구의 `receipt_url` 을 항목 `receipt_urls` 로
+**복사**할 뿐, `finance_items`·`finance_transactions` 에 `bill_id` 는 없다. 이미
+들어온 거래에 뒤늦게 청구를 자동으로 붙이지 않는다 — 사후 편집(분할 재편집·이체
+토글)은 아직 없고, 지금은 불러오기 확인 화면에서 미리 잡는다.
 
 ### 잔액은 저장하지 않는다
-`balance`컬럼이 없다. 통장 개시잔액에서 거래를 누적해 유도한다(`+Balance`).
+`balance` 컬럼이 없다. 통장 개시잔액에서 항목을 누적해 유도한다(`+Balance`).
 합계·보고서·그래프는 내부이체를 뺀 `filteredExternal` 을 쓴다.
 
 ---
 
 ## 매칭 알고리즘
 
-이 앱의 청구 탭에서는 `묶어서 송금하기` 기능을 제공한다. 즉, 청구 내역이 여러 개이더라도 한 사람에게 묶어서 송금을 해버리면, 모임 통장에는 묶어서 송금한 큰 금액 내역 하나만이 찍히게 된다. 따라서 모임통장에서 불러온 거래내역서에 찍힌 송금 내역은 묶어서 처리한 것일 수도 있고, 개별로 처리한 것일 수도 있다.
-
-매칭 알고리즘은 이러한 거래 내역에 대응하는 청구 내역들을 찾고, 청구 내역의 제목을 항목의 적요에 매핑시키는 과정이다.
-
-```mermaid
-flowchart TD
-
-    START([매칭 시작])
-
-    START --> STEP1
-
-    subgraph STEP1["Step 1 · 청구내역 묶음 만들기"]
-        A1["송금 완료된 청구 내역 조회"]
-        A2["processed_at이 정확히 같은<br/>청구 내역끼리 그룹화"]
-        A3["청구내역 묶음 생성<br/>묶음 금액 = 청구 금액 합계"]
-
-        A1 --> A2 --> A3
-    end
-
-    STEP1 --> STEP2
-
-    subgraph STEP2["Step 2 · 매칭 후보 선별"]
-        B1["토스 거래내역 순회"]
-        B2{"적요에<br/>'예수교대한성결고천교'가 있는가?"}
-        B3["통장 사이 이체"]
-        B4{"금액이 0원 이상인가?"}
-        B5["입금 / 이자<br/>→ 매칭 대상 아님"]
-        B6["출금 거래"]
-
-        B1 --> B2
-        B2 -->|Yes| B3
-        B2 -->|No| B4
-        B4 -->|Yes| B5
-        B4 -->|No| B6
-    end
-
-    STEP2 --> STEP3
-
-    subgraph STEP3["Step 3 · 후보 순위 매기기"]
-        C1["출금 금액과<br/>청구내역 묶음 금액 비교"]
-        C2{"금액이 일치하는<br/>묶음이 있는가?"}
-        C3["매칭 후보 생성"]
-        C4["1순위 · 이름 일치 여부"]
-        C5["2순위 · processed_at과<br/>거래 시각의 차이"]
-        C6{"청구 묶음 ↔ 거래가<br/>서로 1:1로 대응하는가?"}
-        C7["청구서와 맞았어요"]
-        C8["확인이 필요해요<br/>사용자가 후보 선택"]
-        C9["청구가 없어요"]
-
-        C1 --> C2
-        C2 -->|Yes| C3
-        C2 -->|No| C9
-        C3 --> C4 --> C5 --> C6
-        C6 -->|Yes| C7
-        C6 -->|No| C8
-    end
-
-    STEP3 --> STEP4
-
-    subgraph STEP4["Step 4 · 이미 항목화된 거래 필터링"]
-        D1["Supabase에 저장된<br/>기존 거래 조회"]
-        D2["기존 거래와 새 거래의<br/>datetime 차이 계산"]
-        D3{"시간 차이가<br/>1초 미만인가?"}
-        D4["이미 장부에 있어요"]
-        D5["새로운 거래"]
-
-        D1 --> D2 --> D3
-        D3 -->|Yes| D4
-        D3 -->|No| D5
-    end
-
-    STEP4 --> STEP5
-
-    subgraph STEP5["Step 5 · 결과 확인 및 항목 추가"]
-        E1{"매칭 결과"}
-        E2["청구서와 맞았어요"]
-        E3["청구가 없어요"]
-        E4["통장 사이 이체에요"]
-        E5["이미 장부에 있어요"]
-        E6["장부 항목으로 추가"]
-
-        E1 --> E2
-        E1 --> E3
-        E1 --> E4
-        E1 --> E5
-
-        E2 --> E6
-        E3 --> E6
-        E4 --> E6
-    end
-
-    STEP5 --> END([매칭 완료])
-```
-
-### Step 1 - `청구내역 묶음` 만들기
-우선, 청구 탭에서 송금 완료 처리가 된 것들만 본다. 이때, 청구가 처리된 시각(processd_at) 을 확인하여 정확히 일치하는 것들만 묶는다. 청구 내역을 묶어서 한 사람에게 송금하면 해당 청구 내역들은 전부 처리 시간이 정확히 같을 수밖에 없다.
-
-### Step 2 - 매칭 후보 선별
-다음으로, 불러온 모임통장 거래내역서의 거래 내역들을 순회하며 다음을 검사한다.
-
-1. 적요 부분에 ‘예수교대한성결고천교’ 가 찍혀있는가 - 이 경우는 농협 통장에서 모임통장으로 내부 이체를 한 케이스다. 따라서 총 자산 상 변동이 없는 것이므로, 이 경우는 ‘내부 이체’로 분류한다.
-2. 금액이 0원 이상인가 - 이 경우, 입금 혹은 이자이다. 따라서 청구 내역이랑 매칭되는 것이 없다.
-3. 나머지 - 모임 통장에서 발생한 출금 내역이다. 따라서 앞서 청구내역을 묶은 것과 비교하여 금액이 일치한다면, 모임통장에서 빠져나간 금액에 해당하는 청구 내역들을 후보로 뽑아낼 수 있다.
-
-### Step 3 - 후보 순위 매기기
-모임통장 출금 내역 중, 청구내역 묶음 금액과 일치하는 경우가 여러 개 발생할 수 있다. 따라서 후보들을 다음 순으로 정렬시킨다.
-
-1. 청구 폼에 적은 ‘이름’ 과 모임통장 적요 부분에 적힌 값을 비교하여 일치하는 경우 -  토스뱅크에서 따로 예금주명을 적지 않으면 받는 사람의 이름이 들어가게 되는데, 이 점을 이용한다. 보낸 금액과 보낸 사람의 이름이 같다면 매칭이 올바르게 성공했을 가능성이 높음.
-2. 앱에서 송금완료 버튼을 누른 시각(processd_at) 과 모임통장에서 거래가 일어난 시각의 차이값이 작은 순서 - 앱에서 송금하기 버튼을 누르고, 토스 앱에서 송금 처리 후, 앱에서 송금 완료 버튼을 눌러 청구 내역을 처리하는 경우가 일반적임.
-
-청구내역 묶음이 단 하나의 모임통장 거래내역과 일치하고, 그 역도 성립한다면 바로 매칭을 시킨다.
-
-### Step 4 - 이미 항목화된 거래 내역 필터링
-이미 한 번 항목화하여 `supabase` 에 저장한 거래 내역을 다시 항목화할 필요는 없다. 이를 걸러내기 위해 supabase DB 상에 저장되어 있는 거래 내역을 조회하여 거래 내역 시간(datetime) 과 모임통장 거래내역의 거래 시각을 비교한다. 이 값의 차이가 1보다 작으면 동일한 거래로 취급하고, 이미 DB에 거래가 저장되어 있으므로 장부에 들어가지 않도록 제외시킨다.
-
-#### 왜 체크 기준이 1보다 작은지?
-`Date` 는 `2001년 1월 1일 00시 00분 00초`부터 센 초를 `TimeInterval` 로 들고 있다. 이는 초 단위 부분 비교까지는 `==` 로 맞아떨어지나, 소수점 단위로 초를 계산할 때는 소수 부분에서 오차가 발생할 여지가 있다.  1보다 작은가로 체크하는 이유는 이를 방지하기 위함이다.
-
-### Step 5 - 결과 확인 및 항목 추가
-매칭 결과는 다음과 같이 5가지로 정해진다.
-
-1. 확인이 필요해요 - 여러 가지 후보가 있으므로 사용자의 판단이 필요함.
-2. 청구서와 맞았어요 - 위 로직에 의해 매칭이 성사되거나, 사용자가 후보군에서 직접 매칭시킨 경우
-3. 청구가 없어요 - 후보가 없음
-4. 통장 사이 이체에요 - 내부 이체의 경우(예수교대한성결고천교)
-5. 이미 장부에 있어요 - 과거에 한 번 저장해둔 데이터를 또 읽어들임.
-
-여기서 5번을 제외한 나머지는 전부 항목으로 추가된다.
+**매칭의 정본은 [`Import/README.md`](Import/README.md) 로 옮겼다.** 청구 묶기
+(`processed_at`), 후보 순위(금액 1차 키·시각 창·이름), 내부 이체 판정(`holderName`),
+중복 방지, 결과 다섯 가지, 그리고 두 층(거래·항목) 저장까지 거기에 있다. 규칙화된
+불변식은 [ARCHITECTURE.md](../../../ARCHITECTURE.md) "거래내역서는 청구서와 맞춰서
+들어온다" 에.
 
 ---
 
