@@ -68,20 +68,61 @@ struct StatementMatch: Identifiable {
     /// 적으면 조각 하나짜리 분할이 된다 — 거래의 적요(은행 값)를 덮어쓰지 않는다.
     /// 청구 묶음을 골랐으면 그 제목들이 적요라 이 칸은 안 쓴다.
     var manualDescription: String = ""
-    /// 사람이 적은 카테고리. 이 줄에서 생기는 **모든 조각**에 같이 붙는다.
-    var manualCategory: String = ""
+    /// **항목별 카테고리.** `previewItems`(=생성될 항목) 순서에 맞춘 병렬 배열이다.
+    /// 비어 있거나 짧으면 그 자리는 카테고리 없음으로 본다. **묶음도 조각마다 다르게
+    /// 붙일 수 있다** — 장부(finance_items)가 원래 항목별 카테고리라서다.
+    /// 예전엔 거래 하나에 카테고리 한 값이었는데(모든 조각 동일), 항목별로 승격했다.
+    var itemCategories: [String] = []
 
     var id: String { "\(line.datetime.timeIntervalSince1970)|\(line.amount)" }
     var chosen: BillGroup? { candidates.first { $0.id == chosenId } }
 
-    /// 이 줄이 **미리보기**에 보여줄 장부 조각들. 내부 이체나 "청구 없이 그냥 넣기"는
-    /// 따로 보여줄 조각이 없어 빈 배열이다(저장은 `itemSpecs` 가 통짜 항목을 만든다).
+    /// `previewItems`/`itemSpecs` 순서의 i번째 항목 카테고리 (없으면 nil).
+    func category(at i: Int) -> String? {
+        guard i >= 0, i < itemCategories.count else { return nil }
+        let c = itemCategories[i].trimmingCharacters(in: .whitespaces)
+        return c.isEmpty ? nil : c
+    }
+
+    /// 이 줄이 장부에 만들 항목들의 **미리보기.** 목록·상세가 이걸 그린다.
+    /// 부호 없는 크기다 — 부호는 저장 때 `itemSpecs(txAmount:)` 가 붙인다.
+    /// 모든 줄이 최소 하나를 내놓는다(청구 없이 넣는 줄·이체 포함).
+    struct Preview: Identifiable {
+        let index: Int
+        let title: String
+        let amount: Int
+        let category: String?
+        let receiptUrls: [String]
+        let isInternalTransfer: Bool
+        var id: Int { index }
+    }
+    var previewItems: [Preview] {
+        if isInternalTransfer {
+            return [Preview(index: 0, title: line.description ?? line.type,
+                            amount: abs(line.amount), category: nil,
+                            receiptUrls: [], isInternalTransfer: true)]
+        }
+        if let group = chosen {
+            return group.ledgerLinesWithReceipts.enumerated().map { i, l in
+                Preview(index: i, title: l.title, amount: l.amount,
+                        category: category(at: i), receiptUrls: l.receiptUrls,
+                        isInternalTransfer: false)
+            }
+        }
+        let d = manualDescription.trimmingCharacters(in: .whitespaces)
+        let title = d.isEmpty ? (line.description ?? line.type) : d
+        return [Preview(index: 0, title: title, amount: abs(line.amount),
+                        category: category(at: 0), receiptUrls: [],
+                        isInternalTransfer: false)]
+    }
+
+    /// 조각 하나 이상이 실제 내용(적요·카테고리)을 갖는가. 예전 `ledgerLines` 자리.
     var ledgerLines: [(title: String, amount: Int)] {
         if isInternalTransfer { return [] }
         if let group = chosen { return group.ledgerLines }
         let d = manualDescription.trimmingCharacters(in: .whitespaces)
-        let c = manualCategory.trimmingCharacters(in: .whitespaces)
-        guard !d.isEmpty || !c.isEmpty else { return [] }
+        let hasCategory = itemCategories.contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !d.isEmpty || hasCategory else { return [] }
         return [(d.isEmpty ? (line.description ?? "") : d, abs(line.amount))]
     }
 
@@ -93,19 +134,18 @@ struct StatementMatch: Identifiable {
             return [ItemSpec(amount: txAmount, category: nil, description: nil,
                              receiptUrls: [], isInternalTransfer: true)]
         }
-        let c = manualCategory.trimmingCharacters(in: .whitespaces)
-        let category: String? = c.isEmpty ? nil : c
         if let group = chosen {
             let sign = txAmount < 0 ? -1 : 1
-            return group.ledgerLinesWithReceipts.map { line in
-                ItemSpec(amount: sign * line.amount, category: category,
+            return group.ledgerLinesWithReceipts.enumerated().map { i, line in
+                ItemSpec(amount: sign * line.amount, category: category(at: i),
                          description: line.title, receiptUrls: line.receiptUrls,
                          isInternalTransfer: false)
             }
         }
         let d = manualDescription.trimmingCharacters(in: .whitespaces)
-        if !d.isEmpty || category != nil {
-            return [ItemSpec(amount: txAmount, category: category,
+        let cat0 = category(at: 0)
+        if !d.isEmpty || cat0 != nil {
+            return [ItemSpec(amount: txAmount, category: cat0,
                              description: d.isEmpty ? nil : d, receiptUrls: [],
                              isInternalTransfer: false)]
         }
@@ -113,6 +153,13 @@ struct StatementMatch: Identifiable {
         return [ItemSpec(amount: txAmount, category: nil, description: nil,
                          receiptUrls: [], isInternalTransfer: false)]
     }
+}
+
+/// 목록이 그리는 한 줄 — (거래, 조각) 한 쌍. `ForEach` 식별자로 쓰려고 감싼다.
+struct StatementFlatRow: Identifiable {
+    let match: StatementMatch
+    let preview: StatementMatch.Preview
+    var id: String { "\(match.id)#\(preview.index)" }
 }
 
 /// 거래 하나가 만들 항목 하나의 명세. 화면과 저장이 같은 답을 쓰도록 한 벌만 둔다.
