@@ -119,8 +119,8 @@ struct ItemEditView: View {
             }
             .screenBackground(DS.Surface.page)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(item: $editField) { field in editSheet(field) }
-            .sheet(isPresented: $showReceiptManager, onDismiss: {
+            .fullScreenCover(item: $editField) { field in editSheet(field) }
+            .fullScreenCover(isPresented: $showReceiptManager, onDismiss: {
                 // 영수증 시트를 닫으면 바뀐 것(추가·삭제)을 그 자리에서 저장한다.
                 Task { await persist(newImages: pendingImages.map(\.image)) }
             }) {

@@ -68,7 +68,7 @@ struct BillDetailView: View {
             bottomBar
         }
         .presentationDetents(detents)
-        .sheet(isPresented: $showReceipt) {
+        .fullScreenCover(isPresented: $showReceipt) {
             ReceiptSheetView(receiptUrl: bill.receiptUrl)
         }
         .alert("이 청구서를 거절할까요?", isPresented: $showRejectAlert) {
@@ -214,7 +214,14 @@ struct ReceiptSheetView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text("영수증").headerTitle() },
+                leading: { HeaderBackButton(label: "닫기") { dismiss() } },
+                trailing: { EmptyView() }
+            )
             Group {
                 if let url = URL(string: receiptUrl) {
                     // 화면에 그릴 크기로 줄여서 디코드하고, 받은 건 캐시에 남는다.
@@ -235,13 +242,8 @@ struct ReceiptSheetView: View {
                     .padding()
                 }
             }
-            .navigationTitle("영수증")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("닫기") { dismiss() }
-                }
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .screenBackground(DS.Surface.card)
     }
 }

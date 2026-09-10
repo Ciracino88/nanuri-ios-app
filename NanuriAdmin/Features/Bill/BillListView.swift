@@ -106,7 +106,7 @@ struct BillListView: View {
             // 높이는 시트가 자기 내용을 재서 정한다 (`BillDetailView.detents`).
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $payeeEdit) { target in
+        .fullScreenCover(item: $payeeEdit) { target in
             PayeeEditView(viewModel: payeeViewModel, target: target)
         }
         .sheet(item: $pendingTransfer) { transfer in

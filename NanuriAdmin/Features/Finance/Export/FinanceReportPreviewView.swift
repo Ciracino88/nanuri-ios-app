@@ -14,17 +14,18 @@ struct FinanceReportPreviewView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text(title).headerTitle() },
+                leading: { HeaderBackButton(label: "닫기") { dismiss() } },
+                trailing: { EmptyView() }
+            )
             ReportWebView(html: html)
                 .ignoresSafeArea(edges: .bottom)
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("닫기") { dismiss() }
-                    }
-                }
         }
+        .screenBackground(DS.Surface.page)
     }
 }
 

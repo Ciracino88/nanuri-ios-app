@@ -38,7 +38,7 @@ struct ProfileView: View {
             }
         }
         .screenBackground()
-        .sheet(isPresented: $showProfileEdit, onDismiss: {
+        .fullScreenCover(isPresented: $showProfileEdit, onDismiss: {
             Task { await load() }
         }) {
             ProfileEditView()

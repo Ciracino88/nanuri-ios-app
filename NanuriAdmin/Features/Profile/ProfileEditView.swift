@@ -20,7 +20,20 @@ struct ProfileEditView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // 타이틀·저장이 있어 시트가 아니라 풀스크린이다 (DESIGN.md §1).
+            AdminHeaderView(
+                showsNotifications: false,
+                center: { Text("프로필 수정").headerTitle() },
+                leading: { HeaderBackButton(label: "취소") { dismiss() } },
+                trailing: {
+                    Button("저장") { Task { await saveProfile() } }
+                        .typeStyle(DS.Typo.labelM)
+                        .foregroundColor(DS.Ink.brand)
+                        .padding(.horizontal, DS.Spacing.small)
+                        .disabled(isSaving || name.isEmpty)
+                }
+            )
             Form {
                 // 아바타
                 Section {
@@ -114,18 +127,10 @@ struct ProfileEditView: View {
                     }
                 }
             }
-            .navigationTitle("프로필 수정")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("취소") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("저장") { Task { await saveProfile() } }
-                        .disabled(isSaving || name.isEmpty)
-                }
-            }
-            .task { await loadProfile() }
+            .scrollContentBackground(.hidden)
+        }
+        .screenBackground(DS.Surface.page)
+        .task { await loadProfile() }
             .onChange(of: selectedPhoto) { _, item in
                 Task {
                     guard let item else { return }
@@ -143,7 +148,6 @@ struct ProfileEditView: View {
                         .background(DS.State.scrim.opacity(0.2))
                 }
             }
-        }
     }
 
     private var defaultAvatarIcon: some View {
