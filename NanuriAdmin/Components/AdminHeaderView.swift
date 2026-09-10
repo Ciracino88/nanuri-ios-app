@@ -184,6 +184,24 @@ struct HeaderIconButton: View {
     }
 }
 
+/// 헤더 왼쪽 **뒤로 가기 · 닫기** 버튼. `AdminHeaderView` 의 `leading:` 에 넣는다.
+///
+/// 풀스크린 흐름에서 이전 화면으로 돌아가는 자리다. **손으로 `chevron.left` HStack 을
+/// 그리지 말고 이걸 쓴다** — 크기·여백·아이콘 굵기(.regular, DESIGN.md §6)가 헤더의
+/// 다른 요소와 맞고, 화면마다 색·굵기가 갈라지지 않는다. 색은 본문 검정이다
+/// (파랑은 화면당 하나뿐인 주요 동작에 예약, §5).
+///
+/// 라벨은 되돌아가면 "뒤로", 흐름을 통째로 닫으면 "닫기" 로 준다 — VoiceOver 만
+/// 읽는 말이라 화면엔 안 보인다.
+struct HeaderBackButton: View {
+    var label: String = "뒤로"
+    let action: () -> Void
+
+    var body: some View {
+        HeaderIconButton(systemName: "chevron.left", label: label, action: action)
+    }
+}
+
 /// `Menu` 처럼 버튼이 아닌 컨트롤의 라벨. 헤더 버튼과 크기가 같아야 줄이 안 어긋난다.
 struct HeaderIcon: View {
     let systemName: String

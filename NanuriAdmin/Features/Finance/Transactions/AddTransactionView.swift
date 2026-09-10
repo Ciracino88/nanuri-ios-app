@@ -57,6 +57,15 @@ struct AddTransactionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // 풀스크린 입력 폼이라 헤더는 공용 컴포넌트로 그린다 (DESIGN.md §1).
+                // 취소는 왼쪽 뒤로(‹), 오른쪽은 비운다.
+                AdminHeaderView(
+                    showsNotifications: false,
+                    center: { Text(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)").headerTitle() },
+                    leading: { HeaderBackButton { dismiss() }.disabled(isSaving) },
+                    trailing: { EmptyView() }
+                )
+
                 // 날짜 셀렉터는 헤더에 밀착한다.
                 WeekDatePicker(viewModel: viewModel, selection: $datetime)
 
@@ -95,17 +104,7 @@ struct AddTransactionView: View {
                 Spacer(minLength: 0)
             }
             .screenBackground(DS.Surface.card)
-            .navigationTitle(savedCount == 0 ? "거래 추가" : "거래 추가 (\(savedCount)건)")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    // 취소 = 뒤로가기(‹).
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(isSaving)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .interactiveDismissDisabled(isSaving)
             // 금액을 넣는 중에만 하단에 커스텀 숫자패드 + 저장 CTA 를 고정한다.
             .safeAreaInset(edge: .bottom) {
