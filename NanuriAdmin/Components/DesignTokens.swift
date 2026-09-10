@@ -77,6 +77,10 @@ enum Ramp {
     static let red600: UInt32 = 0xEE3848   // ≈ oklch(0.626 0.216 22)
     static let green500: UInt32 = 0x007738 // ≈ oklch(0.493 0.143 154) — 성공
     static let orange500: UInt32 = 0xFF8800 // ≈ oklch(0.748 0.183 56) — 주의
+    /// 묶음(여러 청구가 한 출금으로 나간 것) 표식. **원문에 없는 값이다** —
+    /// 거래내역서 확인 계열 화면 전용으로 이 앱이 더한 색이다(레퍼런스의 보라 #6B4EFF).
+    /// 재정 탭 본체는 이 색을 쓰지 않는다.
+    static let purple500: UInt32 = 0x6B4EFF
     static let navy900: UInt32 = 0x010A25  // ≈ oklch(0.155 0.060 261) — 그림자·알파의 베이스
 
     /// 일러스트 자산의 얼굴색. **표면 색이 아니다** — UI 에 칠하지 않는다.

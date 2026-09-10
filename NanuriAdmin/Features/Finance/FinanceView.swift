@@ -135,7 +135,9 @@ struct FinanceView: View {
                 ItemEditView(row: row, suggestions: viewModel.usedCategories, viewModel: viewModel)
             }
             // 공유로 들어오면 목록을 거치지 않고 여기서 바로 뜬다.
-            .sheet(item: $viewModel.incomingStatement) { incoming in
+            // 시트가 아니라 풀스크린이다 — 확인 화면이 상세를 push 로 받는다
+            // (레퍼런스식 내비게이션, DESIGN.md §13). AddTransactionView 와 같은 문법.
+            .fullScreenCover(item: $viewModel.incomingStatement) { incoming in
                 if let account = viewModel.account(named: "모임") {
                     StatementImportView(viewModel: viewModel, url: incoming.url, account: account)
                 }
