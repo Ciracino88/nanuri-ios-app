@@ -31,6 +31,20 @@ const MAX_AMOUNT = 10_000_000;
 // 선행 업로드 토큰의 유효 시간. 폼 하나 채우는 시간보다 넉넉하면 된다.
 const RECEIPT_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+// Turnstile 세션 패스 유효 시간. 한 사람이 폼 하나 채워 제출하는 시간보다 넉넉하되,
+// 봇이 한 번 푼 패스로 오래 밀어넣지 못하게 짧게 둔다.
+const PASS_TTL_MS = 30 * 60 * 1000;
+
+// Turnstile 위젯에 준 data-action 과 폼이 실제로 서빙되는 호스트. siteverify 응답의
+// action·hostname 을 이 둘과 맞춰, 다른 사이트에서 받은 토큰을 재사용하지 못하게 한다.
+// (localhost 는 `wrangler dev` 로컬 확인용 — 공개 폼은 workers.dev 에서만 뜬다)
+const TURNSTILE_ACTION = 'bill';
+const TURNSTILE_HOSTNAMES = new Set([
+    'nanuri-form.nanuri.workers.dev',
+    'localhost',
+    '127.0.0.1',
+]);
+
 const html = (body, status = 200) =>
     new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8' } });
 
@@ -164,6 +178,69 @@ async function verifyReceiptUrl(env, url, token) {
 }
 
 // ---------------------------------------------------------------------------
+// Turnstile (사람 확인) + 세션 패스
+// ---------------------------------------------------------------------------
+//
+// 공개 폼이라 스크립트가 `/bill/receipt` 로 이미지를 무한히 밀어넣을 수 있다. IP당
+// 상한이 양을 캡하지만, **사람인지**는 Turnstile 이 본다. 다만 `/bill/receipt` 는
+// 사진을 고를 때마다(여러 번) 불리고 Turnstile 토큰은 1회용이라, 토큰을 요청마다
+// 붙이면 취약하다. 그래서 **페이지 로드 때 Turnstile 을 한 번 풀어 세션 패스로
+// 바꾸고**(`/bill/pass`), 그 패스로 `/bill/receipt`·`/bill/submit` 을 통과한다.
+// 패스는 HMAC 서명이라 위조할 수 없고 30분 뒤 만료된다.
+//
+// `TURNSTILE_SECRET` 이 없으면(아직 안 붙였거나 로컬) 검사를 **통과시킨다**
+// (fail-open) — 문제가 생기면 시크릿만 지우면 즉시 Turnstile 이 꺼진다.
+
+async function verifyTurnstile(env, token, ip) {
+    if (!env.TURNSTILE_SECRET) return true; // 미설정 → 통과
+    if (typeof token !== 'string' || token.length === 0 || token.length > 2048) return false;
+    let result;
+    try {
+        const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            signal: AbortSignal.timeout(10_000),
+            body: new URLSearchParams({
+                secret: env.TURNSTILE_SECRET,
+                response: token,
+                ...(ip ? { remoteip: ip } : {}),
+            }),
+        });
+        if (!r.ok) return false;
+        result = await r.json();
+    } catch {
+        return false; // 네트워크·비정상 응답 → 막는다(fail-closed)
+    }
+    return result.success === true
+        && result.action === TURNSTILE_ACTION
+        && TURNSTILE_HOSTNAMES.has(result.hostname);
+}
+
+/** Turnstile 을 통과한 사람에게 주는 짧은 서명 패스. */
+async function signPass(env) {
+    const issuedAt = Date.now();
+    const signature = await crypto.subtle.sign(
+        'HMAC', await receiptKey(env), encoder.encode(`pass:${issuedAt}`),
+    );
+    return `${issuedAt}.${base64url(signature)}`;
+}
+
+async function verifyPass(env, pass) {
+    if (!env.TURNSTILE_SECRET) return true; // Turnstile 꺼져 있으면 패스도 안 본다
+    const [issuedAt, signature] = (pass ?? '').split('.');
+    const at = Number(issuedAt);
+    if (!Number.isFinite(at) || !signature) return false;
+    if (Date.now() - at > PASS_TTL_MS || at > Date.now() + 60_000) return false;
+    try {
+        return await crypto.subtle.verify(
+            'HMAC', await receiptKey(env), fromBase64url(signature), encoder.encode(`pass:${at}`),
+        );
+    } catch {
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 남용 방지
 // ---------------------------------------------------------------------------
 
@@ -180,6 +257,7 @@ async function verifyReceiptUrl(env, url, token) {
 const RATE_LIMITS = {
     receipt: [[60, 20], [3600, 120]],
     submit: [[60, 10]],
+    pass: [[60, 30]],
 };
 
 /**
@@ -238,9 +316,32 @@ async function withinRateLimit(env, request, action) {
 // 라우트
 // ---------------------------------------------------------------------------
 
+/**
+ * Turnstile 세션 패스를 발급한다. 폼이 페이지 로드 때 위젯 토큰을 받아 여기로 보내고,
+ * 통과하면 30분짜리 패스를 받아 `/bill/receipt`·`/bill/submit` 에 붙인다.
+ */
+async function handleIssuePass(request, env) {
+    if (!(await withinRateLimit(env, request, 'pass'))) {
+        return json({ message: '요청이 많아요. 잠시 후 다시 시도해 주세요.' }, 429);
+    }
+    let token = '';
+    try {
+        const body = await request.json();
+        if (typeof body?.token === 'string') token = body.token;
+    } catch { /* 토큰 없음 → 아래 검증에서 걸린다 */ }
+
+    if (!(await verifyTurnstile(env, token, request.headers.get('cf-connecting-ip')))) {
+        return json({ message: '사람인지 확인에 실패했어요. 잠시 후 다시 시도해 주세요.' }, 403);
+    }
+    return json({ pass: await signPass(env), ttl: PASS_TTL_MS });
+}
+
 async function handleSubmit(request, env, ctx) {
     if (!(await withinRateLimit(env, request, 'submit'))) {
         return json({ message: '요청이 많아요. 잠시 후 다시 시도해 주세요.' }, 429);
+    }
+    if (!(await verifyPass(env, request.headers.get('x-bill-pass')))) {
+        return json({ message: '사람인지 확인이 만료됐어요. 새로고침 후 다시 시도해 주세요.' }, 403);
     }
 
     let form;
@@ -325,6 +426,9 @@ async function handleSubmit(request, env, ctx) {
 async function handleReceiptUpload(request, env) {
     if (!(await withinRateLimit(env, request, 'receipt'))) {
         return json({ message: '요청이 많아요. 잠시 후 다시 시도해 주세요.' }, 429);
+    }
+    if (!(await verifyPass(env, request.headers.get('x-bill-pass')))) {
+        return json({ message: '사람인지 확인이 만료됐어요. 새로고침 후 다시 시도해 주세요.' }, 403);
     }
 
     let form;
@@ -483,11 +587,14 @@ async function handleAppReceiptDelete(request, env) {
 // 그냥 죽으면 못 지운다. 그 고아를 주기적으로 쓸어낸다.
 //
 // ⚠️ **일괄 "오래된 것 삭제" 로 하면 진짜 영수증까지 지운다.** 미리 올린 것과 접수까지
-//    간 진짜 영수증이 같은 키 공간에 살기 때문이다. 그래서 **참조된 것은 절대 안
-//    지운다** — DB 에서 실제로 쓰이는 URL 을 다 모아 그 목록에 없는 것만 지운다.
-//    참조는 두 군데다: `bills.receipt_url`(공개 폼) 과 `finance_items.receipt_urls`
-//    (앱/재정). 둘 중 하나라도 못 읽으면 **아무것도 안 지운다**(fail-closed) — 목록이
-//    반쪽이면 멀쩡한 영수증을 고아로 오인하기 때문이다.
+//    간 진짜 영수증이 같은 키 공간에 살기 때문이다. 그래서 **DB 에 그 URL 을 가리키는
+//    행이 하나라도 있으면 안 지운다 — 상태와 무관하다.** "참조됐다"는 매칭·승인·처리
+//    여부가 아니라 행의 존재만 본다. 사람이 보낸 청구는 제출되어 `bills` 에 행이 생긴
+//    순간부터, 관리자가 아직 매칭 안 한 대기 상태여도 보호된다. 실제로 지워지는 건
+//    `bills`·`finance_items` 어디에도 행이 없는 것(제출까지 안 간 미리 올림)뿐이다.
+//    참조는 두 군데다: `bills.receipt_url`(상태 필터 없이 전부) 과
+//    `finance_items.receipt_urls`. 둘 중 하나라도 못 읽으면 **아무것도 안 지운다**
+//    (fail-closed) — 목록이 반쪽이면 멀쩡한 영수증을 고아로 오인하기 때문이다.
 
 const RECEIPT_PREFIX = 'receipts/';
 /** 막 올리고 아직 저장(제출/항목 저장) 전인 파일을 지우지 않도록 두는 유예 시간. */
@@ -577,6 +684,9 @@ export default {
 
         if (method === 'GET' && (pathname === '/' || pathname === '/bill')) {
             return html(renderForm());
+        }
+        if (method === 'POST' && pathname === '/bill/pass') {
+            return handleIssuePass(request, env);
         }
         if (method === 'POST' && pathname === '/bill/receipt') {
             return handleReceiptUpload(request, env);

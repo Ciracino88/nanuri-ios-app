@@ -20,9 +20,11 @@ POST /receipt/delete       앱이 영수증을 지운다              [관리자
 flowchart TD
     U([청구자]) -->|GET /| F[공개 청구 폼]
 
+    F -->|"로드 시 Turnstile 풀고<br/>POST /bill/pass"| PASS{{"사람 확인<br/>세션 패스 발급"}}
+
     F -->|"사진 고르면 바로<br/>POST /bill/receipt"| R1{"IP당 상한<br/>분당 20, 시간당 120"}
     R1 -->|초과| E1[429]
-    R1 -->|통과| BUCKET[("R2 버킷<br/>nanuri-bills")]
+    R1 -->|"통과 → 사진 파일 저장"| BUCKET[("R2 버킷 nanuri-bills<br/>영수증 사진 파일")]
 
     F -->|"제출<br/>POST /bill/submit"| R2{"IP당 상한<br/>분당 10"}
     R2 -->|초과| E2[429]
@@ -30,7 +32,10 @@ flowchart TD
     V -->|"service_role INSERT"| DB[("Supabase bills")]
     V -->|백그라운드| P[APNs 푸시]
     P --> A([관리자 앱])
-    DB -.->|receipt_url| BUCKET
+    DB -.->|"receipt_url 로 사진을 가리킴"| BUCKET
+
+    PASS -.->|"x-bill-pass 필요"| R1
+    PASS -.->|"x-bill-pass 필요"| R2
 
     A -->|"POST /receipt/upload, delete<br/>관리자 인증"| BUCKET
 
@@ -40,7 +45,9 @@ flowchart TD
 ```
 
 - **실선은 요청**, 점선은 참조나 정리처럼 요청 밖에서 일어나는 흐름이다.
+- **R2 버킷은 사진 파일을 담고, DB는 그 사진을 가리키는 `receipt_url`(주소 문자열)만 담는다** — URL 자체가 R2에 들어가는 게 아니다. 사진 바이트는 폼이 R2에 직접 올린다.
 - 공개 폼(`/bill/*`)은 IP당 상한을 지나야 R2나 DB에 닿는다. 앱(`/receipt/*`)은 관리자 인증으로 막는다.
+- R2에 쓰거나 청구를 만들려면 먼저 **Turnstile을 푼 세션 패스**가 있어야 한다(`x-bill-pass`). 봇은 패스를 못 얻어 두 엔드포인트에서 403으로 막힌다.
 - 예약 실행이 R2에 남은 고아 영수증을 쓸어내되, **DB가 참조하는 것은 절대 안 지운다.**
 
 폼에서 받는 값은 네 가지다 — **이름, 청구 항목, 금액, 영수증 사진**.
@@ -94,6 +101,8 @@ flowchart TD
 - 폼에 `noindex`
 - **IP당 요청 횟수 제한** — `/bill/receipt` 는 분당 20건에 시간당 120건, `/bill/submit`
   은 분당 10건. 넘으면 429다.
+- **사람 확인(Turnstile)** — 페이지 로드 때 위젯을 풀어 세션 패스를 받고, R2에 쓰는
+  `/bill/receipt` 와 `/bill/submit` 은 그 패스가 있어야 지난다. 없으면 403이다.
 
 요청 횟수 제한은 KV로 센다 (`RATE_KV`, `src/index.js` 의 `withinRateLimit`). 원래는
 네이티브 `[[ratelimits]]` 바인딩을 썼는데 이 계정에서는 카운팅이 안 됐다(limit=1/10s
@@ -101,25 +110,60 @@ flowchart TD
 공용 와이파이로 **여러 사람이 한 IP로 보일 수 있어서**다. IPv6는 앞 /64로 묶어 센다.
 자세한 근거는 `wrangler.toml` 의 `[[kv_namespaces]]` 주석에 있다.
 
-여기에 R2 고아 정리(아래)가 더해져, 한 사람이 이미지를 계속 밀어넣어도 유입이 IP당
-시간당 120으로 캡되고 접수까지 안 온 파일은 자동으로 지워진다. 그래도 진짜
-브라우저를 돌리는 정교한 공격까지 막으려면 Turnstile을 붙이는 게 다음 수순이다.
+여기에 사람 확인(Turnstile, 아래)과 R2 고아 정리(아래)가 더해진다. 스크립트는
+Turnstile을 풀 수 없어 세션 패스를 못 얻고, 패스 없이는 R2에 쓰는 `/bill/receipt` 도
+`/bill/submit` 도 지나지 못한다(403). 사람 확인을 통과한 경우에도 유입은 IP당 시간당
+120으로 캡되고, 접수까지 안 온 파일은 자동으로 지워진다.
 
 이름을 사칭한 청구는 애초에 기술로 막지 않는다. 관리자가 승인 전에 당사자에게
 직접 확인하는 것을 전제로 한 설계다.
+
+## 사람 확인 (Turnstile)
+
+공개 폼이라 스크립트가 이미지를 무한히 밀어넣을 수 있다. 사람인지는 Cloudflare
+Turnstile이 본다. 다만 `/bill/receipt` 는 사진을 고를 때마다 여러 번 불리고 Turnstile
+토큰은 1회용이라, 토큰을 요청마다 붙이면 취약하다. 그래서 **세션 패스**를 쓴다.
+
+1. 폼이 페이지 로드 때 위젯을 풀어 토큰을 받는다.
+2. 그 토큰을 `POST /bill/pass` 로 보내면, 워커가 siteverify로 확인하고 **30분짜리
+   HMAC 서명 패스**를 준다.
+3. 폼은 그 패스를 `x-bill-pass` 헤더로 `/bill/receipt`·`/bill/submit` 에 붙인다.
+   워커는 패스 서명과 만료를 보고 통과시킨다. 패스는 위조할 수 없다.
+
+봇은 Turnstile을 못 풀어 패스를 못 얻고, 패스 없이는 두 엔드포인트가 다 403이다.
+siteverify는 `success` 외에 `action`(`bill`)과 `hostname`(폼이 뜨는 workers.dev 도메인)도
+맞춰, 다른 사이트에서 받은 토큰을 재사용하지 못하게 한다.
+
+**`TURNSTILE_SECRET` 이 없으면 검사를 통과시킨다(fail-open).** 그래서 Turnstile이
+정상 사용자에게 문제를 일으키면 시크릿만 지우면 즉시 꺼진다.
+
+```bash
+npx wrangler secret delete TURNSTILE_SECRET   # 사람 확인 끄기 (즉시 fail-open)
+```
+
+위젯(사이트키·시크릿)은 `wrangler turnstile widget` 으로 관리한다. 시크릿은 저장소에
+두지 않고 `wrangler secret put TURNSTILE_SECRET` 으로만 넣는다.
 
 ## 고아 영수증 정리
 
 미리 올렸지만 접수까지 오지 않은 영수증을 예약 실행(`scheduled`, 매일 03:00 KST,
 `wrangler.toml` 의 `[triggers]`)이 쓸어낸다.
 
-**참조된 영수증은 절대 안 지운다.** 미리 올린 것과 접수까지 간 진짜 영수증이 같은 키
-공간에 살기 때문에, "오래된 것 삭제" 로 일괄 처리하면 장부의 증거까지 지워진다.
-그래서 DB가 실제로 쓰는 URL을 다 모아 그 목록에 없는 것만 지운다. 참조는 두
-군데다 — `bills.receipt_url`(공개 폼)과 `finance_items.receipt_urls`(앱/재정). 둘 중
-하나라도 못 읽으면 **아무것도 안 지운다**(fail-closed). PostgREST 기본 상한(1000행)에
-걸려 목록이 반쪽이 되지 않도록 페이지를 끝까지 넘겨 읽는다. 막 올려 아직 저장 전인
-파일을 지우지 않도록 6시간 유예를 둔다.
+**`bills` 나 `finance_items` 에 그 URL을 가리키는 줄이 하나라도 있으면 안 지운다 —
+상태와 무관하다.** 여기서 "참조됐다"는 매칭·승인·처리 여부가 아니라 **DB에 그 파일을
+가리키는 행이 있느냐**만 본다. 그래서 사람이 보낸 청구는 제출되어 `bills` 에 행이
+생긴 순간부터, 관리자가 아직 매칭도 승인도 안 한 대기 상태여도 보호된다.
+
+미리 올린 것과 접수까지 간 진짜 영수증이 같은 키 공간에 살기 때문에, "오래된 것
+삭제" 로 일괄 처리하면 장부의 증거까지 지워진다. 그래서 DB가 실제로 쓰는 URL을 다
+모아 그 목록에 없는 것만 지운다. 참조는 두 군데다 — `bills.receipt_url`(공개 폼,
+상태 필터 없이 전부)과 `finance_items.receipt_urls`(앱/재정). 즉 **실제로 지워지는
+것은 `bills`·`finance_items` 어디에도 행이 없는 것**뿐이다 — 제출까지 안 간 미리
+올림처럼.
+
+둘 중 하나라도 못 읽으면 **아무것도 안 지운다**(fail-closed). PostgREST 기본
+상한(1000행)에 걸려 목록이 반쪽이 되지 않도록 페이지를 끝까지 넘겨 읽는다. 막 올려
+아직 저장 전인 파일을 지우지 않도록 6시간 유예를 둔다.
 
 ## 배포
 

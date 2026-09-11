@@ -119,6 +119,7 @@ export function renderForm() {
 <meta name="robots" content="noindex">
 <title>청구서 작성</title>
 <style>${STYLE}</style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 <main>
@@ -147,6 +148,12 @@ export function renderForm() {
         </span>
     </div>
     <div class="bar" id="bar" hidden><i id="bar-fill"></i></div>
+
+    <div class="cf-turnstile" data-sitekey="0x4AAAAAAEv0Bxuhe75XnPuU"
+         data-action="bill" data-callback="onTsToken" style="margin-top:18px"></div>
+    <noscript>
+        <p class="status">이 폼은 자바스크립트가 필요해요. 브라우저에서 자바스크립트를 켜고 다시 열어주세요.</p>
+    </noscript>
 
     <button type="submit" id="submit">
         <span class="spinner" id="spinner" hidden></span>
@@ -194,6 +201,41 @@ export function renderForm() {
 
     // 지금 고른 사진의 준비 상태. { name, blob, ready } — ready 는 {url, token} 로 풀리는 Promise
     var receipt = null;
+
+    // Turnstile 세션 패스. 페이지 로드 때 위젯을 한 번 풀어 패스로 바꾸고, 그 패스를
+    // /bill/receipt·/bill/submit 에 붙인다. 봇은 패스를 못 얻어 R2에 못 쓴다.
+    var billPass = null;
+    var billPassExpiry = 0;
+    var passWaiters = [];
+
+    // 위젯이 사람을 확인하면 토큰을 준다. 그 토큰을 패스로 바꿔 둔다.
+    window.onTsToken = function (token) {
+        fetch('/bill/pass', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: token })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            if (d && d.pass) {
+                billPass = d.pass;
+                billPassExpiry = Date.now() + (d.ttl || 0) - 60000; // 만료 1분 전엔 새로 받는다
+                var waiters = passWaiters;
+                passWaiters = [];
+                waiters.forEach(function (fn) { fn(billPass); });
+            }
+        }).catch(function () { /* 실패는 ensurePass 의 타임아웃이 처리한다 */ });
+    };
+
+    // 유효한 패스를 돌려준다. 없거나 만료면 위젯을 리셋해 새로 받는다. 위젯이 안 뜨거나
+    // 막히면 8초 뒤 null 로 풀어, 폼이 멈추지 않고 서버가 주는 오류를 보이게 한다.
+    function ensurePass() {
+        if (billPass && Date.now() < billPassExpiry) return Promise.resolve(billPass);
+        return new Promise(function (resolve) {
+            var done = false;
+            passWaiters.push(function (p) { if (!done) { done = true; resolve(p); } });
+            try { if (window.turnstile) window.turnstile.reset(); } catch (e) { /* 무시 */ }
+            setTimeout(function () { if (!done) { done = true; resolve(null); } }, 8000);
+        });
+    }
 
     function setBusy(busy, label) {
         submitButton.disabled = busy;
@@ -268,13 +310,14 @@ export function renderForm() {
     }
 
     // 업로드 진행률을 보여주려고 fetch 대신 XHR 을 쓴다 (fetch 는 업로드 진행률을 안 준다).
-    function upload(blob, filename) {
+    function upload(blob, filename, pass) {
         return new Promise(function (resolve, reject) {
             var body = new FormData();
             body.append('receipt', blob, filename);
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/bill/receipt');
+            if (pass) xhr.setRequestHeader('x-bill-pass', pass);
             xhr.upload.onprogress = function (event) {
                 if (event.lengthComputable) setProgress(event.loaded / event.total);
             };
@@ -338,7 +381,7 @@ export function renderForm() {
             if (receipt !== entry) return Promise.reject(new Error('취소됨'));
             entry.blob = blob;
             entry.name = blob === file ? (file.name || 'receipt.jpg') : 'receipt.jpg';
-            return upload(blob, entry.name);
+            return ensurePass().then(function (pass) { return upload(blob, entry.name, pass); });
         }).then(function (result) {
             if (receipt !== entry) return Promise.reject(new Error('취소됨'));
             bar.hidden = true;
@@ -381,7 +424,13 @@ export function renderForm() {
             if (receipt && receipt.blob) body.set('receipt', receipt.blob, receipt.name);
         }).then(function () {
             setStatus('접수하고 있어요');
-            return fetch('/bill/submit', { method: 'POST', body: body });
+            return ensurePass().then(function (pass) {
+                return fetch('/bill/submit', {
+                    method: 'POST',
+                    body: body,
+                    headers: pass ? { 'x-bill-pass': pass } : {}
+                });
+            });
         }).then(function (response) {
             return response.json().catch(function () { return {}; }).then(function (result) {
                 if (!response.ok) throw new Error(result.message || '제출에 실패했어요.');
