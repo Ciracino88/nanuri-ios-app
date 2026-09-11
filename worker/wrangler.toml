@@ -2,6 +2,12 @@ name = "nanuri-form"
 main = "src/index.js"
 compatibility_date = "2026-08-13"
 
+# 예약 실행 — R2 에 남은 고아 영수증(미리 올렸지만 접수까지 안 온 것)을 쓸어낸다.
+# 매일 18:00 UTC = 03:00 KST(트래픽 적은 시간). 참조된 영수증은 절대 안 지운다
+# (`src/index.js` 의 cleanupOrphanReceipts).
+[triggers]
+crons = ["0 18 * * *"]
+
 # 영수증 이미지 버킷.
 #
 # 예전에는 `nanuri-bill` 이라는 별도 워커가 이 버킷을 들고 있었고 여기서는 서비스
@@ -37,19 +43,23 @@ APNS_TEAM_ID = "23ULXV7A5W"
 # APNs 키를 만들면 나온다. (키 이름 "NanuriAdmin APNs", 2026-08-15 발급)
 APNS_KEY_ID = "L7P845D626"
 
-# 공개 폼이라 제출을 IP당 분당 5건으로 제한하려고 걸어둔 바인딩.
+# IP당 요청 횟수 제한을 세는 KV.
 #
-# ⚠️ 2026-08-15 현재 이 계정에서는 실제로 카운팅이 되지 않는다.
-#    바인딩은 런타임에 존재하고 .limit() 도 {success:true} 를 정상 반환하는데,
-#    limit=1/10s 로 낮추고 namespace_id 를 새로 발급해도 전부 통과한다.
-#    (설정은 문서와 일치. 원인 미상 — 플랜/계정 수준 문제로 추정)
-#    즉 지금 공개 폼에는 실질적인 남용 방지가 없다. 제한이 필요해지면
-#    Turnstile 을 붙이거나 접수 경로를 좁히는 쪽을 먼저 검토할 것.
-#    코드는 success 를 그대로 따르므로, 나중에 동작하기 시작하면 그때부터 걸린다.
-[[ratelimits]]
-name = "SUBMIT_RATE_LIMIT"
-namespace_id = "2001"
-simple = { limit = 5, period = 60 }
+# 예전에는 네이티브 `[[ratelimits]]` 바인딩을 썼는데 이 계정에서는 카운팅이 안 됐다
+# (limit=1/10s 로 낮춰도 전부 통과 — 플랜/계정 수준 문제로 추정). 그래서 KV 로 직접
+# 창(window)별 카운터를 센다 (`src/index.js` 의 withinRateLimit).
+#   /bill/receipt : IP당 분당 20 · 시간당 120   (R2 에 이미지를 쓰는 곳)
+#   /bill/submit  : IP당 분당 10
+# 상한을 넉넉히 둔 이유는 CGNAT·공용 와이파이로 여러 사람이 한 IP 로 보일 수 있어서다.
+#
+# ⚠️ id 는 `npx wrangler kv namespace create RATE_KV` 로 만들어 채운다.
+#    KV 무료 티어는 하루 쓰기 상한(1,000)이 있다 — 이 폼의 정상 트래픽에는 넘치지만,
+#    몇 시간짜리 지속 공격이 오면 카운터 쓰기가 막혀 fail-open 이 된다. 그런 일이
+#    실제로 생기면 Workers 유료($5)로 올려 네이티브 rate limit 을 쓰거나 Durable
+#    Object 로 옮기는 게 다음 수순이다. (평소 위협 모델에는 KV 로 충분하다)
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "a177060737ab49289c7cad549f9cf9b3"
 
 # 진짜 비밀만 시크릿으로 둔다. wrangler secret put 으로 등록한다.
 # (위 [vars] 에 있는 값들은 유출돼도 그 자체로는 아무것도 못 하는 식별자다)

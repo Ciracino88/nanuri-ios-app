@@ -168,24 +168,68 @@ async function verifyReceiptUrl(env, url, token) {
 // ---------------------------------------------------------------------------
 
 /**
- * 공개 URL이라 아무나 제출할 수 있다. 최소한 한 IP가 R2에 이미지를 무한히
- * 밀어넣지는 못하게 막는다. 정상 사용자는 걸릴 일이 없는 수준(분당 5건)이다.
- * 바인딩이 없으면(로컬 개발 등) 그냥 통과시킨다.
+ * 엔드포인트별 IP당 상한. `[창(초), 최대 건수]` 목록이고, **한 창이라도 넘으면
+ * 막는다.** R2에 이미지를 쓰는 `/bill/receipt` 는 넉넉히(분당 20·시간당 120), 그
+ * 다음 단계인 `/bill/submit` 은 더 낮게(분당 10) 잡았다.
+ *
+ * 값을 넉넉히 둔 이유: 정상 사용자를 절대 막지 않으려는 것이다. 교회 와이파이·
+ * 통신사 CGNAT 때문에 **여러 사람이 한 IP로 보일 수 있어서**, 상한이 낮으면 이벤트
+ * 직후 몰릴 때 애먼 사람이 막힌다. 피해 누적은 상한이 아니라 다른 층(R2 정리)이
+ * 잡으므로 여기서는 "초당 수천 건" 만 끊으면 된다.
  */
-async function withinRateLimit(env, request) {
-    if (!env.SUBMIT_RATE_LIMIT) {
-        // 조용히 통과시키면 제한이 안 걸리는 걸 알아채지 못한다.
-        console.warn('SUBMIT_RATE_LIMIT 바인딩 없음 — 제한을 건너뛴다');
+const RATE_LIMITS = {
+    receipt: [[60, 20], [3600, 120]],
+    submit: [[60, 10]],
+};
+
+/**
+ * 카운트의 기준이 되는 클라이언트 키. IPv4 는 주소 전체, **IPv6 는 앞 /64 프리픽스**다
+ * — 한 기기가 자기 /64 안에서 주소를 바꿔 가며 개별-IP 상한을 우회하는 걸 막는다.
+ */
+function clientKey(request) {
+    const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+    return ip.includes(':') ? ip.split(':').slice(0, 4).join(':') : ip;
+}
+
+/**
+ * IP당 요청 횟수 제한. `action` 이 어떤 상한을 쓸지 고른다(`receipt`·`submit`).
+ *
+ * Workers KV 로 창별 카운터를 센다. 예전에는 네이티브 `[[ratelimits]]` 바인딩을
+ * 썼는데 이 계정에서는 카운팅이 안 됐다(항상 통과). **막을 때는 KV 에 쓰지 않는다**
+ * — 상한에 도달한 IP 의 추가 요청은 읽기만 하고 거절해서, KV 쓰기가 공격량이 아니라
+ * "상한 수" 에만 비례하게 한다.
+ *
+ * 바인딩이 없거나(로컬 개발) KV 가 삐끗하면 **통과시킨다(fail-open)** — 값싼 공개
+ * 폼에서 저장소 한 번 흔들렸다고 정상 사용자를 막을 이유가 없다.
+ */
+async function withinRateLimit(env, request, action) {
+    const limits = RATE_LIMITS[action];
+    if (!env.RATE_KV || !limits) {
+        console.warn(`RATE_KV 없음 또는 미정의 action(${action}) — 제한을 건너뛴다`);
         return true;
     }
-    const key = request.headers.get('cf-connecting-ip') ?? 'unknown';
+    const who = clientKey(request);
+    const now = Date.now();
     try {
-        // 주의: 2026-08-15 현재 이 계정에서는 항상 success:true 가 돌아온다.
-        // 자세한 내용은 wrangler.toml 의 [[ratelimits]] 주석 참고.
-        const { success } = await env.SUBMIT_RATE_LIMIT.limit({ key });
-        return success;
+        const windows = limits.map(([windowSec, max]) => ({
+            key: `rl:${action}:${who}:${windowSec}:${Math.floor(now / (windowSec * 1000))}`,
+            windowSec,
+            max,
+        }));
+        const counts = await Promise.all(
+            windows.map((w) => env.RATE_KV.get(w.key).then((v) => Number(v) || 0)),
+        );
+        // 한 창이라도 상한에 닿으면 막는다. 이때는 쓰지 않는다.
+        if (windows.some((w, i) => counts[i] >= w.max)) return false;
+        // 다 통과 → 각 창 카운터를 올린다. 창이 지나면 저절로 사라지게 TTL 을 건다.
+        await Promise.all(
+            windows.map((w, i) =>
+                env.RATE_KV.put(w.key, String(counts[i] + 1), { expirationTtl: w.windowSec + 5 }),
+            ),
+        );
+        return true;
     } catch (error) {
-        console.error('rate limit 확인 실패', error);
+        console.error('rate limit 확인 실패 — 통과시킨다', error);
         return true;
     }
 }
@@ -195,7 +239,7 @@ async function withinRateLimit(env, request) {
 // ---------------------------------------------------------------------------
 
 async function handleSubmit(request, env, ctx) {
-    if (!(await withinRateLimit(env, request))) {
+    if (!(await withinRateLimit(env, request, 'submit'))) {
         return json({ message: '요청이 많아요. 잠시 후 다시 시도해 주세요.' }, 429);
     }
 
@@ -279,7 +323,7 @@ async function handleSubmit(request, env, ctx) {
  * 파일이 남는다 — 폼이 축소해서 올리므로 수백 KB짜리고, 접수 실패보다 낫다고 봤다.
  */
 async function handleReceiptUpload(request, env) {
-    if (!(await withinRateLimit(env, request))) {
+    if (!(await withinRateLimit(env, request, 'receipt'))) {
         return json({ message: '요청이 많아요. 잠시 후 다시 시도해 주세요.' }, 429);
     }
 
@@ -430,6 +474,102 @@ async function handleAppReceiptDelete(request, env) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// R2 고아 영수증 정리 (예약 실행)
+// ---------------------------------------------------------------------------
+//
+// 폼이 사진을 미리 `/bill/receipt` 로 올렸는데 접수까지 오지 않으면 R2 에 안 쓰는
+// 파일이 남는다. 폼이 사진 교체·창 닫기 때 `discard` 로 대부분 지우지만, 브라우저가
+// 그냥 죽으면 못 지운다. 그 고아를 주기적으로 쓸어낸다.
+//
+// ⚠️ **일괄 "오래된 것 삭제" 로 하면 진짜 영수증까지 지운다.** 미리 올린 것과 접수까지
+//    간 진짜 영수증이 같은 키 공간에 살기 때문이다. 그래서 **참조된 것은 절대 안
+//    지운다** — DB 에서 실제로 쓰이는 URL 을 다 모아 그 목록에 없는 것만 지운다.
+//    참조는 두 군데다: `bills.receipt_url`(공개 폼) 과 `finance_items.receipt_urls`
+//    (앱/재정). 둘 중 하나라도 못 읽으면 **아무것도 안 지운다**(fail-closed) — 목록이
+//    반쪽이면 멀쩡한 영수증을 고아로 오인하기 때문이다.
+
+const RECEIPT_PREFIX = 'receipts/';
+/** 막 올리고 아직 저장(제출/항목 저장) 전인 파일을 지우지 않도록 두는 유예 시간. */
+const ORPHAN_GRACE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * PostgREST 한 표를 **전부** 읽는다. 기본 상한(1000행)에서 잘리면 참조 목록이
+ * 반쪽이 되어 멀쩡한 영수증을 지우게 되므로, `Range` 로 페이지를 넘겨 끝까지 모은다.
+ * 한 페이지라도 실패하면 throw — 호출부가 정리를 중단한다.
+ */
+async function fetchAllRows(env, pathAndQuery) {
+    const pageSize = 1000;
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
+            headers: supabaseHeaders(env, {
+                'range-unit': 'items',
+                range: `${from}-${from + pageSize - 1}`,
+            }),
+        });
+        if (!res.ok) throw new Error(`${pathAndQuery} 조회 실패: ${res.status}`);
+        const batch = await res.json();
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+    }
+    return rows;
+}
+
+/**
+ * DB 가 실제로 참조하는 영수증 **키**(공개 URL 앞부분을 뗀 것)를 전부 모은다.
+ * 하나라도 못 읽으면 `null` — 호출부가 이걸 보고 정리를 통째로 건너뛴다.
+ */
+async function referencedReceiptKeys(env) {
+    const prefix = `${env.R2_PUBLIC_URL}/`;
+    const toKey = (u) =>
+        typeof u === 'string' && u.startsWith(prefix) ? u.slice(prefix.length) : null;
+    const keys = new Set();
+    try {
+        for (const row of await fetchAllRows(env, 'bills?select=receipt_url')) {
+            const k = toKey(row.receipt_url);
+            if (k) keys.add(k);
+        }
+        for (const row of await fetchAllRows(env, 'finance_items?select=receipt_urls')) {
+            for (const u of row.receipt_urls ?? []) {
+                const k = toKey(u);
+                if (k) keys.add(k);
+            }
+        }
+    } catch (error) {
+        console.error('참조 영수증 목록을 못 만들었다 — 정리를 건너뛴다', error);
+        return null;
+    }
+    return keys;
+}
+
+/**
+ * 참조되지 않고 유예 시간보다 오래된 영수증만 지운다. 참조 목록을 못 만들면
+ * 아무것도 안 지운다.
+ */
+async function cleanupOrphanReceipts(env) {
+    const referenced = await referencedReceiptKeys(env);
+    if (!referenced) return;
+
+    const cutoff = Date.now() - ORPHAN_GRACE_MS;
+    let cursor;
+    let scanned = 0;
+    let deleted = 0;
+    do {
+        const list = await env.RECEIPT_BUCKET.list({ prefix: RECEIPT_PREFIX, cursor });
+        for (const obj of list.objects) {
+            scanned += 1;
+            if (referenced.has(obj.key)) continue; // 장부·청구가 쓰는 것 — 절대 안 지운다
+            if (obj.uploaded.getTime() > cutoff) continue; // 막 올린 것 — 아직 저장 전일 수 있다
+            await env.RECEIPT_BUCKET.delete(obj.key);
+            deleted += 1;
+        }
+        cursor = list.truncated ? list.cursor : undefined;
+    } while (cursor);
+
+    console.log(`R2 고아 영수증 정리: ${scanned}개 중 ${deleted}개 삭제`);
+}
+
 export default {
     async fetch(request, env, ctx) {
         const { pathname } = new URL(request.url);
@@ -455,5 +595,11 @@ export default {
         }
 
         return new Response('Not Found', { status: 404 });
+    },
+
+    // 예약 실행(cron). R2 에 남은 고아 영수증을 쓸어낸다. wrangler.toml 의
+    // [triggers] 가 언제 도는지 정한다.
+    async scheduled(event, env, ctx) {
+        ctx.waitUntil(cleanupOrphanReceipts(env));
     },
 };
